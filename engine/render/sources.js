@@ -5,10 +5,20 @@
 import * as THREE from 'three';
 import { V3, lerp } from '../core/util.js';
 import { S } from '../core/state.js';
-import { BI, GAIN } from '../core/bands.js';
+import { BI, GAIN, TRANSMIT } from '../core/bands.js';
 import { QUAD_VS, QUAD_FS, RIB_VS, RIB_FS } from './shaders.js';
 
 export const EMS = [], RIBS = [], FIELDS = [];
+
+// Source origin: 'ground' (default) | 'high' | 'space' — pass it as the optional last constructor argument
+// or set `src.origin` later. In Ground detector mode, sources whose band can't cross the atmosphere from
+// that origin (bands.js TRANSMIT: far-UV, X-ray, gamma from 'high'/'space') are not drawn, add no meter
+// activity and leave a ghost marker (one per event) for the overlay.
+export const absorbed = (band, origin) => S.detector === 'ground' && origin !== 'ground' && !TRANSMIT[band][origin];
+function ghost(src, pos) {
+  const key = S.curEvent || src, g = S.ghosts.get(key);
+  if (g) g.bands.add(src.band); else S.ghosts.set(key, { pos: pos.clone(), bands: new Set([src.band]) });
+}
 const quadGeo = new THREE.PlaneGeometry(1, 1);
 
 // real = 1 picks the realistic IR look for moving warm bodies (animals, engines)
@@ -23,9 +33,10 @@ export function bandMat(band, color, ribbon, real) {
 
 // Point source (camera-facing glow drawn in its band's style)
 export class Em {
-  constructor(band, color, real) { this.band = band; this.m = new THREE.Mesh(quadGeo, bandMat(band, color, false, real)); this.m.frustumCulled = false; this.m.renderOrder = 5; S.scene.add(this.m); EMS.push(this); }
+  constructor(band, color, real, origin = 'ground') { this.band = band; this.origin = origin; this.m = new THREE.Mesh(quadGeo, bandMat(band, color, false, real)); this.m.frustumCulled = false; this.m.renderOrder = 5; S.scene.add(this.m); EMS.push(this); }
   set(pos, size, I) {
     if (!(I > .01)) return this;
+    if (absorbed(this.band, this.origin)) { ghost(this, pos); return this; }
     S.act[this.band] += I;
     const u = this.m.material.uniforms; this.m.position.copy(pos); u.uSize.value = size; u.uI.value = I * GAIN[this.band];
     this.m.visible = S.on[this.band]; return this;
@@ -34,8 +45,8 @@ export class Em {
 
 // Path source (camera-facing ribbon drawn in its band's style); fade > 0 makes it grow brighter toward the last point
 export class Rib {
-  constructor(band, color, maxN = 32, real = 0) {
-    this.band = band; this.max = maxN;
+  constructor(band, color, maxN = 32, real = 0, origin = 'ground') {
+    this.band = band; this.max = maxN; this.origin = origin;
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(maxN * 6), 3));
     g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(maxN * 4), 2));
@@ -45,6 +56,7 @@ export class Rib {
   }
   set(pts, w0, w1, I, fade = 0) {
     if (!(I > .01) || pts.length < 2) return this;
+    if (absorbed(this.band, this.origin)) { ghost(this, pts[fade > 0 ? Math.min(pts.length, this.max) - 1 : Math.min(pts.length, this.max) >> 1]); return this; }
     S.act[this.band] += I * .5;
     const n = Math.min(pts.length, this.max), pos = this.m.geometry.attributes.position, uv = this.m.geometry.attributes.uv;
     let total = 0; const cum = [0];
@@ -78,8 +90,8 @@ const FIELD_FS = QUAD_FS.replace('uniform int uBand; uniform float uI, uTime, uS
 if (FIELD_FS === QUAD_FS) throw new Error('EmField: QUAD_FS uniform line changed; update FIELD_FS');
 
 export class EmField {
-  constructor(band, n, color, real) {
-    this.band = band; this.n = n; this.dirty = false;
+  constructor(band, n, color, real, origin = 'ground') {
+    this.band = band; this.n = n; this.dirty = false; this.origin = origin;
     const g = new THREE.InstancedBufferGeometry();
     g.index = quadGeo.index; g.setAttribute('position', quadGeo.attributes.position); g.setAttribute('uv', quadGeo.attributes.uv);
     const attr = (name, size, arr) => { const a = new THREE.InstancedBufferAttribute(arr, size); a.setUsage(THREE.DynamicDrawUsage); g.setAttribute(name, a); return a; };
@@ -98,6 +110,7 @@ export class EmField {
   }
   set(i, pos, size, I) {
     if (!(I > .01)) return this;
+    if (absorbed(this.band, this.origin)) { ghost(this, pos); return this; }
     S.act[this.band] += I;
     this.aPos.setXYZ(i, pos.x, pos.y, pos.z); this.aSize.array[i] = size; this.aI.array[i] = I * GAIN[this.band];
     this.aPos.needsUpdate = this.aSize.needsUpdate = this.aI.needsUpdate = true;
@@ -110,4 +123,4 @@ export class EmField {
   }
 }
 
-export function hideAllSources() { EMS.forEach(e => e.m.visible = false); RIBS.forEach(r => r.m.visible = false); FIELDS.forEach(f => f.clear()); }
+export function hideAllSources() { S.ghosts.clear(); EMS.forEach(e => e.m.visible = false); RIBS.forEach(r => r.m.visible = false); FIELDS.forEach(f => f.clear()); }

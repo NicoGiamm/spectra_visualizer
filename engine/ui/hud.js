@@ -1,7 +1,19 @@
 // HUD: DOM controls, spectrum meters, event panel, and the overlay canvas (compass, labels, off-screen arrows).
 import { V3, DEG, clamp, lerp } from '../core/util.js';
 import { S } from '../core/state.js';
-import { BANDS, BAND, PRESETS } from '../core/bands.js';
+import { BANDS, BAND, PRESETS, TRANSMIT, ABSORB_AT } from '../core/bands.js';
+import { SPECTRUM, bandOf, describe } from '../core/spectrum.js';
+
+// Per event and band: the processes it lists (`freq`) and whether all of them are absorbed before the ground.
+const INFO = new WeakMap();
+function bandInfo(e) {
+  let m = INFO.get(e); if (m) return m;
+  const procs = (e.freq || []).map(k => SPECTRUM[k]).filter(Boolean);
+  m = Object.fromEntries(e.bands.map(b => { const ps = procs.filter(p => bandOf(p) === b); return [b, { procs: ps, absorbed: ps.length > 0 && ps.every(p => p.ground === false) }]; }));
+  INFO.set(e, m); return m;
+}
+const absorbedBands = e => S.detector === 'ground' ? e.bands.filter(b => bandInfo(e)[b].absorbed) : [];
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 
 export function buildDom(sc) {
   document.body.insertAdjacentHTML('afterbegin', `
@@ -15,6 +27,7 @@ export function buildDom(sc) {
   <input type="range" id="scrub" min="0" max="120" step="0.01" value="0">
   <span id="presets"></span>
   <button class="btn active" id="labels">Labels</button>
+  <button class="btn" id="detector" title="Ground: what reaches a detector on the ground (the air absorbs far-UV, X-rays and gamma rays from space). Orbit: what a satellite would see.">Detector: Ground</button>
 </div>
 <div id="events"><h3>Now happening</h3><div id="evlist"></div></div>
 <div id="hint">${sc.hint || 'Drag to look ahead and up · scroll to zoom · click a band or press 1–7 to filter · space = play/pause · lasts 2 minutes'}</div>
@@ -48,6 +61,9 @@ export function createHud({ onFilter }) {
   scrub.oninput = () => { S.t = +scrub.value / 2; };
   const setLabels = v => { S.labelsOn = v; labBtn.classList.toggle('active', v); };
   labBtn.onclick = () => setLabels(!S.labelsOn);
+  const detBtn = document.getElementById('detector');
+  const setDetector = v => { S.detector = v; detBtn.textContent = `Detector: ${v === 'orbit' ? 'Orbit' : 'Ground'}`; detBtn.classList.toggle('active', v === 'orbit'); lastEv = ''; };
+  detBtn.onclick = () => setDetector(S.detector === 'orbit' ? 'ground' : 'orbit');
   addEventListener('keydown', e => {
     if (e.code === 'Space') { e.preventDefault(); setPlay(!S.playing); }
     const k = +e.key; if (k >= 1 && k <= 7) toggle(BANDS[k - 1].id);
@@ -66,10 +82,25 @@ export function createHud({ onFilter }) {
     const hrs = 19.5 + S.t / 60 * 4;
     clock.textContent = `${Math.floor(hrs)}:${String(Math.floor((hrs % 1) * 60)).padStart(2, '0')}`;
     const key = active.map(e => e.name).join('|'); if (key === lastEv) return; lastEv = key;
-    evlist.innerHTML = active.map(e => `<div class="ev ${e.bands.some(b => S.on[b]) ? '' : 'dim'}"><b>${e.name}</b><small>${e.note}</small><div class="chips">${
-      e.bands.map(b => `<span class="chip" style="color:${BAND[b].color};opacity:${S.on[b] ? 1 : .35}">${BAND[b].name}</span>`).join('')}</div></div>`).join('');
+    evlist.innerHTML = active.map(evHtml).join('');
   }
-  return { sync, frame, setPlay, setLabels };
+  return { sync, frame, setPlay, setLabels, setDetector };
+}
+
+// One panel entry: name + tags, note, band chips (hover: processes with frequency / wavelength), absorption note.
+function evHtml(e) {
+  const info = bandInfo(e), abs = absorbedBands(e), all = abs.length && abs.length === e.bands.length;
+  const shown = e.bands.some(b => S.on[b] && !abs.includes(b));
+  const chips = e.bands.map(b => {
+    const ps = info[b].procs, a = abs.includes(b);
+    let title = ps.length ? ps.map(p => `${p.name} · ${describe(p)}`).join('\n') : BAND[b].name;
+    if (a) title += `\nAbsorbed before the ground: ${TRANSMIT[b].why}. Switch Detector to Orbit to see it.`;
+    return `<span class="chip${a ? ' abs' : ''}" title="${esc(title)}" style="color:${BAND[b].color};opacity:${S.on[b] && !a ? 1 : .35}">${BAND[b].name}</span>`;
+  }).join('');
+  const tags = (e.tags || []).map(t => `<span class="tag tag-${t}">${t}</span>`).join('');
+  const absNote = all ? `<small class="absnote">Nothing of this reaches the ground: switch Detector to Orbit.</small>`
+    : abs.length ? `<small class="absnote">From the ground: ${abs.map(b => BAND[b].name).join(', ')} absorbed high in the atmosphere.</small>` : '';
+  return `<div class="ev ${shown ? '' : 'dim'}"><b>${e.name}${tags}</b><small>${e.note}</small>${absNote}<div class="chips">${chips}</div></div>`;
 }
 
 // Overlay canvas
@@ -89,11 +120,13 @@ export function drawOverlay(active) {
     if (NAMES[a]) { octx.fillStyle = a === 0 ? '#ff8a8a' : '#e8eaf6'; octx.fillText(NAMES[a], x, cy); }
   }
   octx.fillStyle = '#b46bff'; octx.beginPath(); octx.moveTo(cx - 5, cy + 13); octx.lineTo(cx + 5, cy + 13); octx.lineTo(cx, cy + 8); octx.fill();
-  if (!S.labelsOn) return;
   const right = W > 760 ? W - 300 : W - 30, v = new V3();
+  drawGhosts(W, H, right, v);
+  if (!S.labelsOn) return;
   for (const e of active) {
     const p = e.where && e.where(); if (!p) continue;
-    if (!e.bands.some(b => S.on[b])) continue;
+    const abs = absorbedBands(e);
+    if (!e.bands.some(b => S.on[b] && !abs.includes(b))) continue;
     v.copy(p).project(camera);
     let sx = (v.x * .5 + .5) * W, sy = (-v.y * .5 + .5) * H; const behind = v.z > 1;
     const col = BAND[e.bands[0]].color;
@@ -110,4 +143,28 @@ export function drawOverlay(active) {
       octx.fillRect(lx - w / 2, ly - 10, w, 15); octx.fillStyle = '#e8eaf6'; octx.fillText(e.name, lx, ly + 1);
     }
   }
+}
+
+// Ground mode: sources absorbed by the atmosphere leave a faint dashed ring and "X-ray absorbed ~40 km"
+// at their position (one per event, grouped in render/sources.js). Off-screen ghosts are skipped.
+function drawGhosts(W, H, right, v) {
+  if (S.detector !== 'ground' || !S.ghosts.size) return;
+  octx.save(); octx.setLineDash([4, 4]); octx.lineWidth = 1.2; octx.font = '10px system-ui'; octx.textAlign = 'center';
+  let n = 0;
+  for (const g of S.ghosts.values()) {
+    const bands = [...g.bands].filter(b => S.on[b] && ABSORB_AT[b]); if (!bands.length) continue;
+    v.copy(g.pos).project(S.camera); if (v.z > 1) continue;
+    const sx = (v.x * .5 + .5) * W, sy = (-v.y * .5 + .5) * H;
+    if (sx < 20 || sx > right || sy < 90 || sy > H - 100) continue;
+    if (++n > 12) break;
+    const kms = bands.map(b => ABSORB_AT[b][0]), lo = Math.min(...kms), hi = Math.max(...kms);
+    octx.strokeStyle = BAND[bands[0]].color; octx.globalAlpha = .55;
+    octx.beginPath(); octx.arc(sx, sy, 15, 0, Math.PI * 2); octx.stroke();
+    if (S.labelsOn) {
+      const txt = `${bands.map(b => ABSORB_AT[b][1]).join(' + ')} absorbed ~${lo === hi ? lo : `${lo}–${hi}`} km`;
+      octx.globalAlpha = .75; octx.fillStyle = 'rgba(0,0,0,.45)'; const w = octx.measureText(txt).width + 8; octx.fillRect(sx - w / 2, sy - 33, w, 13);
+      octx.fillStyle = BAND[bands[0]].color; octx.fillText(txt, sx, sy - 23);
+    }
+  }
+  octx.restore();
 }

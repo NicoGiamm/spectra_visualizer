@@ -80,6 +80,7 @@ def shot(
     yaw: float | None = None,
     pitch: float | None = None,
     bands: str | None = None,
+    detector: str | None = None,
     labels: bool = True,
     size: str = "1400,850",
     budget: int = 20000,
@@ -100,6 +101,8 @@ def shot(
         Radians, −0.1…1.5.
     bands
         Comma list of bands to keep on, e.g. ir,micro.
+    detector
+        ground (default: the atmosphere absorbs far-UV/X-ray/gamma from space) or orbit.
     labels
         Draw event labels.
     size
@@ -115,11 +118,12 @@ def shot(
 
     dest = out or Path(f"shots/{scenario}-t{t if t is not None else 0:g}.png")
     raise SystemExit(take(scenario, dest, t=t, yaw=yaw, pitch=pitch, bands=bands, labels=labels,
-                          size=size, budget=budget, verbose=verbose))
+                          size=size, budget=budget, verbose=verbose, detector=detector))
 
 
 @app.command
-def timeline(*scenarios: str, step: float = 0.5, json_out: Annotated[bool, Parameter(name="--json")] = False):
+def timeline(*scenarios: str, step: float = 0.5, detector: str = "ground",
+             json_out: Annotated[bool, Parameter(name="--json")] = False):
     """Run scenarios headless and print an event gantt plus per-band activity over the 0–60 script.
 
     Parameters
@@ -128,6 +132,8 @@ def timeline(*scenarios: str, step: float = 0.5, json_out: Annotated[bool, Param
         Scenario ids (default: all).
     step
         Sampling step in script seconds.
+    detector
+        ground (default) or orbit; the physics check flags absorbed bands drawn in Ground mode.
     json_out
         Print the raw report as JSON instead.
     """
@@ -138,7 +144,7 @@ def timeline(*scenarios: str, step: float = 0.5, json_out: Annotated[bool, Param
     ids = list(scenarios) or [s.id for s in discover()]
     failed = False
     for sid in ids:
-        rep, console = fetch(sid, step)
+        rep, console = fetch(sid, step, detector=detector)
         if rep is None:
             print(f"{sid}: no report (see console output above)")
             failed = True

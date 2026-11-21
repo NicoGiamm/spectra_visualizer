@@ -17,7 +17,7 @@ run({
     sky.airliner(), sky.venus(), local.hut(), local.deer(), local.fireflies(), sky.cmb(), sky.milkyWay(), sky.meteorShower(),
     sky.pulsar(), local.bats(), sky.comet(), sky.satellitePass(), sky.starlink(), sky.blackHoleBinary(), sky.aurora(), sky.moonrise(),
     sky.airShowers(), sky.thunderstorm({ note: 'Over the southern peaks: lightning, radio "sferics" and terrestrial gamma-ray flashes.' }),
-    sky.fastRadioBurst(), sky.supernova(), sky.gammaRayBurst(), local.campfire(), sky.sunDogs(), sky.zodiacalScatter(),
+    sky.fastRadioBurst(), sky.supernova(), sky.gammaRayBurst(), local.campfire(), sky.sunDogs(), sky.crepuscularRays(), sky.purpleLight(), sky.zodiacalLight(),
     local.thermalUpdraft(), sky.noctilucentClouds(), sky.moonHalo(), local.fireWhirl(),
   ],
 });

@@ -65,11 +65,7 @@ export const SPECTRUM = {
   cherenkov:       { name: 'air-shower Cherenkov light', lam: 350e-9 },
   showerFluor:     { name: 'N₂ fluorescence from the shower', lam: 391e-9 },
   showerGamma:     { name: 'shower secondaries (gamma)', E: 1e9, ground: false },
-  showerXray:      { name: 'X-ray shaft (as drawn)', E: 3e4, stylised: true },
-  haloScintillation:{ name: '"zodiacal scatter" sparkles (as drawn)', lam: 550e-9, stylised: true },
-  haloScintUV:     { name: '"zodiacal scatter" UV (as drawn)', lam: 360e-9, stylised: true },
   warmAir:         { name: 'warm air column (as drawn)', lam: 10e-6, stylised: true },
-  haloIR:          { name: 'infrared halo ring (as drawn)', lam: 10e-6, stylised: true },
   // --- thermal emission (Wien peak) ---
   thermal290:      { name: 'thermal emission ~290 K (ground, water)', lam: 10e-6 },
   thermal310:      { name: 'thermal emission ~310 K (bodies)', lam: 9.3e-6 },
@@ -103,6 +99,14 @@ export const SPECTRUM = {
   carRadar:        { name: 'automotive radar 77 GHz', f: 77e9 },
 
   // ===== sky & engine additions (engine owner) =====
+  showerRadio:     { name: 'air-shower geosynchrotron radio pulse (30–80 MHz)', f: 55e6 },
+  crepuscular:     { name: 'crepuscular rays (sunlight between cloud shadows)', lam: 600e-9 },
+  purpleLight:     { name: 'purple light (red sunlight scattered by stratospheric aerosol)', lam: 430e-9 },
+  zodiacal:        { name: 'zodiacal light (sunlight scattered by interplanetary dust)', lam: 550e-9 },
+  n2p4278:         { name: 'N₂⁺ first negative band 427.8 nm (blue lower border)', lam: 427.8e-9 },
+  o7774:           { name: 'oxygen near-IR line 777.4 nm', lam: 777.4e-9 },
+  n2FirstPos:      { name: 'N₂ first positive bands (red / near-IR)', lam: 870e-9 },
+  auroralRadar:    { name: 'VHF radar backscatter off the auroral E-region', f: 50e6 },
 
   // ===== trail additions =====
 
