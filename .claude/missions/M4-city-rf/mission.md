@@ -40,7 +40,7 @@ T1–T5 implemented on main in a9adb2f before missions existed (draw calls 82/21
 | [M4/T3](tasks/T3-ambient-field-haze.md) | done | needs-verification | Ambient field haze |
 | [M4/T4](tasks/T4-true-radio-in-the-city.md) | done | needs-verification | True radio in the city |
 | [M4/T5](tasks/T5-more-visible-ir-life.md) | done | needs-verification | More visible/IR life |
-| [M4/T6](tasks/T6-tune.md) | in-progress |  | Tune |
+| [M4/T6](tasks/T6-tune.md) | done |  | Tune |
 | [M4/T7](tasks/T7-visible-noise.md) | done | gap | Visible view: RF haze blocks in the sky, overexposed windows and shop fronts |
 | [M4/T8](tasks/T8-instrument-legibility.md) | done | gap | Instrument view: microwave surface crackle buries the IR heat leaks |
 <!-- tasks:end -->
@@ -59,3 +59,4 @@ T1–T5 implemented on main in a9adb2f before missions existed (draw calls 82/21
 - 2026-11-21 · M4/T7 done
 - 2026-11-21 · decision: Microwave-only instrument view deliberately changed in T8 (finer, sparser crackle on an even Tb wash) instead of 'looks as before': the old large tiles hid every micro emitter. Brightness-temperature physics (cold sea, warm land/foam, city eMW) still reads. — main session, from the T8 brief; T8's 3rd Acceptance item amended accordingly, see its Notes
 - 2026-11-21 · M4/T8 done
+- 2026-11-21 · M4/T6 done
