@@ -1,9 +1,9 @@
 ---
 id: M4/T1
 title: Crowd of emitters
-status: backlog
+status: in-progress
 labels: [needs-verification]
-started:
+started: 2026-11-21
 completed:
 ---
 
