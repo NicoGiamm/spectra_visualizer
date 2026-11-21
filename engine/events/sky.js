@@ -327,7 +327,7 @@ export const zodiacalLight = o => event({ name: 'Zodiacal light', t0: 26, t1: 45
     this.mat = new THREE.ShaderMaterial({ uniforms: { uI: { value: 0 } }, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, side: THREE.DoubleSide,
       vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
       fragmentShader: `uniform float uI; varying vec2 vUv; void main(){ float x = abs(vUv.x), v = vUv.y;
-        float a = pow(max(1. - x, 0.), 1.8)*pow(max(1. - v, 0.), 1.4)*smoothstep(0., .12, v);   // pow(<0) is NaN on GPUs; bloom spreads one NaN pixel into a black block gl_FragColor = vec4(vec3(1., .93, .8)*a*uI, 1.); }` });
+        float a = pow(max(1. - x, 0.), 1.8)*pow(max(1. - v, 0.), 1.4)*smoothstep(0., .12, v);   /* max(): pow(<0) is NaN on GPUs; bloom spreads one NaN pixel into a black block */ gl_FragColor = vec4(vec3(1., .93, .8)*a*uI, 1.); }` });
     this.mesh = new THREE.Mesh(g, this.mat); this.mesh.frustumCulled = false; this.mesh.renderOrder = -4; this.mesh.visible = false; S.scene.add(this.mesh);
     this.top = dirAE(this.az - .35 * L * ca, -4 + .35 * L * sa);
   },
