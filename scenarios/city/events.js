@@ -30,7 +30,7 @@ export const windows = () => event({ name: 'Lit windows & heat island', t0: 0, t
 
 // Half of the avenue has been re-lamped with white LEDs (no infrared); the rest are old high-pressure sodium lamps
 // that strike pink-red, warm up to orange over several minutes and radiate strongly at 819 nm.
-export const streetLights = () => event({ name: 'Street lights', t0: 8, t1: 60, bands: ['vis', 'ir'], freq: ['na589', 'na819', 'ledWhite'], note: 'A mix of new white LED lamps (they switch on instantly, no infrared) and old sodium lamps (slow orange warm-up, strong near-infrared line at 819 nm).',
+export const streetLights = () => event({ name: 'Street lights', t0: 8, t1: 60, bands: ['vis', 'ir'], freq: ['na589', 'na819', 'ledWhite'], tags: ['time-compressed'], note: 'A mix of new white LED lamps (they switch on instantly, no infrared) and old high-pressure sodium lamps: they strike with a dim bluish-white glow and warm up to orange (minutes in reality, compressed here), with a strong near-infrared line at 819 nm.',
   init() { this.v = new EmField('vis', LAMPS.length); this.i = new EmField('ir', LAMPS.length); this.c = new THREE.Color(); },
   update() { const { t, T } = S; let sum = 0;
     LAMPS.forEach((l, k) => {
@@ -38,7 +38,7 @@ export const streetLights = () => event({ name: 'Street lights', t0: 8, t1: 60, 
       if (l.led) { const on = t > t0 ? 1 : 0; sum += on; this.v.color(k, '#eef3ff'); this.v.set(k, l.p, 2.1, on * 1.15); return; }
       const warm = sm(t0, t0 + 6, t), strike = t > t0 ? 1 : 0, fl = t < t0 + .8 ? .6 + .4 * Math.sin(T * 40 + k) : 1;
       sum += warm;
-      this.v.color(k, this.c.setRGB(1, .3 + .42 * warm, .2 + .15 * warm));    // pink-red strike -> orange
+      this.v.color(k, this.c.setRGB(.7 + .3 * warm, .75 - .03 * warm, 1 - .65 * warm));    // HPS: dim bluish-white strike -> orange (pink-red is LPS)
       this.v.set(k, l.p, 2.4, strike * fl * (.25 + .85 * warm)); this.i.set(k, l.p, 3.2, strike * warm * .3);
     });
     const n = sum / Math.max(1, LAMPS.length); LAMPS.poolMat.color.setScalar(.8 * n); },

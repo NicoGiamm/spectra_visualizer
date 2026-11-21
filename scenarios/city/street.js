@@ -14,14 +14,14 @@ import { FACE_X, PARK_Z, KERBS, BAR, SIGNS, LAMPS, PAINT } from './world.js';
 // ---------------------------------------------------------------- buses
 // One old diesel and two battery-electric buses on the outer lanes. The lesson is in IR: only the diesel carries a
 // hot exhaust stack; the electric ones show a faintly warm roof battery pack and nothing at the rear.
-export const buses = () => event({ name: 'Buses: diesel & electric', t0: 0, t1: 60, bands: ['vis', 'ir', 'micro'], freq: ['ledWhite', 'ledRed', 'ledAmber', 'incandescent', 'thermal700', 'batteryWarm', 'wifi24', 'lte'], note: 'City buses work the avenue. The old diesel has a hot exhaust stack at the rear of its roof (bright in IR); the battery-electric ones have no exhaust at all, only a faintly warm battery pack on the roof. All carry lit interiors, an amber LED destination sign and an onboard Wi-Fi/LTE router.',
+export const buses = () => event({ name: 'Buses: diesel & electric', t0: 0, t1: 60, bands: ['vis', 'ir', 'micro'], freq: ['ledWhite', 'ledRed', 'ledAmber', 'thermal700', 'batteryWarm', 'wifi24', 'lte'], note: 'City buses work the avenue. The old diesel has a hot exhaust stack at the rear of its roof (bright in IR); the battery-electric ones have no exhaust at all, only a faintly warm battery pack on the roof. All carry LED-lit interiors, an amber LED destination sign and an onboard Wi-Fi/LTE router.',
   init() {
     this.b = [{ x: -5.3, dir: 1, z0: .12, v: 4.5, diesel: true }, { x: 5.3, dir: -1, z0: .58, v: 4.2, diesel: false }, { x: -5.3, dir: 1, z0: .78, v: 4.8, diesel: false }];
     const n = this.b.length;
     const body = new THREE.BoxGeometry(2.55, 2.9, 12); body.translate(0, 1.75, 0);
     const band = new THREE.BoxGeometry(2.6, .95, 11); band.translate(0, 2.25, -.2);
     this.body = new THREE.InstancedMesh(body, new THREE.MeshStandardMaterial({ color: 0x2c3a44, roughness: .5, metalness: .3 }), n);
-    this.win = new THREE.InstancedMesh(band, new THREE.MeshBasicMaterial({ color: 0xd9cfae }), n);
+    this.win = new THREE.InstancedMesh(band, new THREE.MeshBasicMaterial({ color: 0xd4dce6 }), n);
     for (const m of [this.body, this.win]) { m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.frustumCulled = false; }
     S.scene.add(spectral(this.body, PAINT, { weight: 0 }), solid(this.win));
     this.G = new THREE.Object3D(); this.hidden = new THREE.Matrix4().makeScale(0, 0, 0);
@@ -80,7 +80,7 @@ export const swifts = () => event({ name: 'Swifts over the roofs', t0: 0, t1: 20
     }); },
   where: () => null });
 
-export const bats = () => event({ name: 'Bats at the park lamps', t0: 24, t1: 54, bands: ['ir'], freq: ['thermal310'], note: 'Pipistrelles hunt the moths that crowd the old sodium lamps of the park paths (the new LED lamps, with no UV, draw far fewer insects). Invisible against the night sky, obvious in IR.',
+export const bats = () => event({ name: 'Bats at the park lamps', t0: 24, t1: 54, bands: ['ir'], freq: ['thermal310'], note: 'Pipistrelles hunt the moths that crowd the old sodium lamps of the park paths. Invisible against the night sky, obvious in IR.',
   init() { this.b = Array.from({ length: 12 }, () => ({ k: R(), r: 1.5 + R() * 3, w: 2 + R() * 2.5, ph: R() * 6.28, h: R() * 3 })); this.f = new EmField('ir', this.b.length, null, 1);
     this.lamps = LAMPS.filter(l => !l.led && l.p.z < PARK_Z); },
   update() { const { t, T } = S, cam = S.camera.position, I = env(t, 24, 54, 2); if (I <= 0 || !this.lamps.length) return;
@@ -113,7 +113,7 @@ export const rooftopBar = () => event({ name: 'Rooftop bar', t0: 12, t1: 60, ban
 
 // ---------------------------------------------------------------- UV
 // A black-light insect trap at a takeaway on the north sidewalk and UV decor lights up at the bar.
-export const blackLight = () => event({ name: 'Black light & bug zapper', t0: 10, t1: 60, bands: ['uv', 'vis'], freq: ['blacklight365', 'hg405', 'arcLight', 'arcUV'], note: 'A takeaway hangs an insect trap over its door: a 365 nm black-light tube (UVA, the eye sees only the faint violet mercury line leaking through) and a grid that cracks with a blue-white arc every time a moth hits it. The rooftop bar uses black lights as decor.',
+export const blackLight = () => event({ name: 'Black light & bug zapper', t0: 10, t1: 60, bands: ['uv', 'vis'], freq: ['blacklight365', 'hg405', 'arcLight', 'airArcUV'], note: 'A takeaway hangs an insect trap over its door: a 365 nm black-light tube (UVA, the eye sees only the faint violet mercury line leaking through) and a steel grid that cracks with a blue-white spark in air every time a moth hits it (its UV is nitrogen\'s 337 nm band). The rooftop bar uses black lights as decor.',
   init() {
     const s = SIGNS.filter(q => q.p.x > 0 && q.p.z > 10 && q.p.z < 70).sort((a, b) => b.p.z - a.p.z)[0] || SIGNS[0];
     this.p = s.p.clone().setY(2.9); this.p.x -= .25;
@@ -130,8 +130,8 @@ export const blackLight = () => event({ name: 'Black light & bug zapper', t0: 10
 
 // ---------------------------------------------------------------- gamma
 // Granite kerbs (K-40, U and Th series) are the most radioactive stone in the street. Each blip is one photon a
-// detector at your feet would count; the rate is roughly what a handheld scintillator shows beside granite.
-export const stoneGamma = () => event({ name: 'Granite kerbs: natural gamma', t0: 0, t1: 60, bands: ['gamma'], freq: ['k40Gamma', 'tl208Gamma', 'bi214Gamma'], note: 'The granite kerbstones carry potassium-40 and traces of uranium and thorium; their gamma rays (609 keV to 2.6 MeV) reach a detector right through the air. Each blip along the kerb beside you is one counted photon — the street is quietly radioactive all night, a little more than the concrete and far more than the sea.',
+// detector at your feet would count; the blip rate is illustrative, not a measured count rate.
+export const stoneGamma = () => event({ name: 'Granite kerbs: natural gamma', t0: 0, t1: 60, bands: ['gamma'], freq: ['k40Gamma', 'tl208Gamma', 'bi214Gamma'], note: 'The granite kerbstones carry potassium-40 and traces of uranium and thorium; their gamma rays (609 keV to 2.6 MeV) reach a detector right through the air. Each blip along the kerb beside you stands for a counted photon (the rate is illustrative) — the street is quietly radioactive all night, a little more than the concrete and far more than the sea.',
   init() { this.f = new EmField('gamma', 24); },
   update() { const { t } = S, cam = S.camera.position; if (!inWin(this)) return;
     for (let k = 0; k < 24; k++) {
@@ -144,7 +144,7 @@ export const stoneGamma = () => event({ name: 'Granite kerbs: natural gamma', t0
   where: () => null });
 
 // ---------------------------------------------------------------- drone
-export const drone = () => event({ name: 'Delivery drone', t0: 24, t1: 58, bands: ['vis', 'ir', 'micro'], freq: ['navRed', 'navGreen', 'ledWhite', 'batteryWarm', 'droneLink', 'droneVideo'], note: 'A delivery drone crosses the park and follows the avenue at roof height: red/green position lights and a white anti-collision strobe, four warm motors and battery in IR, a 2.4 GHz control link and a 5.8 GHz video downlink in microwave.',
+export const drone = () => event({ name: 'Delivery drone', t0: 24, t1: 58, bands: ['vis', 'ir', 'micro'], tags: ['rare'], freq: ['navRed', 'navGreen', 'ledWhite', 'batteryWarm', 'droneLink', 'droneVideo'], note: 'A delivery drone crosses the park and follows the avenue at roof height: red/green position lights and a white anti-collision strobe, four warm motors and battery in IR, a 2.4 GHz control link and a 5.8 GHz video downlink in microwave. Rare: night-time delivery flights over a city are exceptional under the EASA drone rules.',
   init() { this.r = new Em('vis', '#ff2020'); this.g = new Em('vis', '#20ff60'); this.w = new Em('vis', '#ffffff'); this.h = new Em('ir', null, 1); this.c = new Em('micro'); this.v = new Em('micro', '#fff0a0'); this.p = null; },
   update() { const { t, T } = S; this.p = null; if (!inWin(this)) return;
     const u = (t - 24) / 34, I = env(t, 24, 58, 1.5), p = new V3(-2 + 3 * Math.sin(u * 5), 34 + 3 * Math.sin(T * .6), PARK_Z - 420 + u * 700);

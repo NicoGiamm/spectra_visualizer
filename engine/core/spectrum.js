@@ -161,6 +161,10 @@ export const SPECTRUM = {
   arcLight:        { name: 'electric arc in air: N₂ and metal lines, blue-white', lam: 450e-9 },
   // Cu I resonance line 324.75 nm (3d¹⁰4s ²S½ – 3d¹⁰4p ²P°3/2; NIST ASD), the strongest UV line of a copper arc
   arcUV:           { name: 'arc UV: Cu I resonance line 324.7 nm', lam: 324.7e-9 },
+  // N₂ second-positive system (C³Πu → B³Πg), 0–0 band head at 337.1 nm — the strongest UV emission of any spark in air
+  // (the nitrogen-laser line; Lofthus & Krupenie, J. Phys. Chem. Ref. Data 6, 113, 1977). Bug-zapper grids are steel
+  // or zinc-plated, not copper, so their spark's UV is the air's own, not arcUV's Cu I line
+  airArcUV:        { name: 'spark in air: N₂ second-positive band 337.1 nm', lam: 337.1e-9 },
   // LED drivers switch at 20 kHz–1 MHz; the fast edges' harmonics are conducted and radiated up into the HF/VHF range
   // (CISPR 15 sets limits for lighting from 9 kHz to 300 MHz); 30 MHz stands in for that harmonic comb. The visible
   // flicker of a cheap driver is the rectified mains ripple at 100 Hz, a different thing.
@@ -170,7 +174,12 @@ export const SPECTRUM = {
   ledAmber:        { name: 'amber LED indicator', lam: 590e-9 },
   ir850:           { name: '850 nm IR illuminator', lam: 850e-9 },
   lidar905:        { name: '905 nm LiDAR pulses', lam: 905e-9 },
-  steam:           { name: 'warm moist exhaust/steam (~320 K)', lam: 9e-6 },
+  // condensed vapour (steam from a leaking district-heating line, cooling-tower drift): liquid droplets are near-black
+  // bodies at 8–14 µm, so the plume shows in thermal IR — the warm, dry air around it does not (air is transparent there)
+  steam:           { name: 'condensed vapour plume: water droplets (~300–320 K)', lam: 9e-6 },
+  // the same droplets (µm–tens of µm, ≫ λ) scatter all visible wavelengths alike (Mie regime: Bohren & Huffman,
+  // "Absorption and Scattering of Light by Small Particles", 1983): a pale white plume in the lamplight
+  dropletScatter:  { name: 'lamplight scattered by condensed-vapour droplets (white)', lam: 550e-9 },
   // natural radioactivity of building stone (K-40 line; Tl-208 from the thorium chain; Bi-214 from the uranium/radon chain)
   k40Gamma:        { name: 'K-40 gamma line (1.46 MeV, granite & brick)', E: 1.461e6 },
   tl208Gamma:      { name: 'Tl-208 gamma line (2.61 MeV, thorium chain)', E: 2.614e6 },
