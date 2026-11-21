@@ -1,9 +1,9 @@
 ---
 id: M4/T4
 title: True radio in the city
-status: backlog
+status: in-progress
 labels: [needs-verification]
-started:
+started: 2026-11-21
 completed:
 ---
 
