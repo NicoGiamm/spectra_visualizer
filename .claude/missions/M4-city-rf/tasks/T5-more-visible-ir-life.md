@@ -1,10 +1,10 @@
 ---
 id: M4/T5
 title: More visible/IR life
-status: in-progress
+status: done
 labels: [needs-verification]
 started: 2026-11-21
-completed:
+completed: 2026-11-21
 ---
 
 # M4/T5 — More visible/IR life
@@ -40,4 +40,8 @@ files: scenarios/city/life.js, engine/core/spectrum.js
 
 ## Outcome
 
-<Written by `mission-tracker task <ref> --done --evidence <file>`: what changed, numbers, shots, what was not verified.>
+Verified the 8 street-life features on code and shots and applied the M4 audit fixes #1, #4, #6, #8 that belong to T5 (plus the street.js events from 5a36c6d, which no task covered). Mixed LED/sodium lamps (avenue ~55 % LED, park ~15 %), neon/LED signs, 850 nm camera rings (note: shows a faint red glow; 940 nm is the near-invisible kind), manhole steam (now visible + IR, "cold night" dropped), LiDAR robot, airport S-band radar, police lights + TETRA. HVAC plumes are now AC cooling-tower vapour plumes — droplets emit in LWIR and scatter lamplight, dry warm air does neither (M2 verdict) — 12±3 m high, bending in one westerly wind so they clear the south roofs. New SPECTRUM keys `dropletScatter` (Mie, 550 nm) and `airArcUV` (N₂ second positive 337.1 nm, now the bug zapper's UV); `steam` restricted to droplet plumes. Police bar blue/blue; bus interiors LED; HPS strike bluish-white → orange and street lights tagged `time-compressed`; drone `rare`; granite blip rate "illustrative"; bats' LED insect claim removed. Also fixed: the LiDAR robot started behind the viewer and was never on screen; it now comes from the park and passes at t≈44. No R() draws changed.
+
+Numbers: `spectra timeline` 0 warnings Orbit + Ground for all three scenarios; city draw calls 97/243/244 → 97/266/266 (+18 HVAC and +4 manhole visible ribbons, the robot now in view), under the ~400 budget; Rib sources 476 → 498. Shots exit 0: city -t 5/30/54, `--bands ir -t 30`, `--bands micro -t 30`, Ground -t 30, aimed HVAC (vis/ir/all, pale wisp over the south roofs, checked by the main session), steam vis/ir, cameras ir, police vis, robot ir/all, radar micro, lamp strike.
+
+Not verified: the bug-zapper UV shot was not inspected; the HPS strike colour and TETRA bursts are not clearly confirmed on screen; seaside/trail not shot (data-only spectrum change); the new keys were not reviewed by the physics-auditor (due before shipping M4). Found for T7: with Human eye (vis only) at night the street, sidewalks and facade walls render solid black under lit lamps.
