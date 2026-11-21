@@ -1,10 +1,10 @@
 ---
 id: M4/T1
 title: Crowd of emitters
-status: in-progress
+status: done
 labels: [needs-verification]
 started: 2026-11-21
-completed:
+completed: 2026-11-21
 ---
 
 # M4/T1 — Crowd of emitters
@@ -40,4 +40,8 @@ files: scenarios/city/rf.js
 
 ## Outcome
 
-<Written by `mission-tracker task <ref> --done --evidence <file>`: what changed, numbers, shots, what was not verified.>
+Verified the Phase 4.1 crowd against the code (a9adb2f/5e7b36b/5a36c6d, never reviewed before): 110 pedestrians with realistic-IR bodies (`EmField('ir', n, null, 1)`) and phones (LTE pings every 2.5–8 script-s plus slower Bluetooth bursts, one micro instance each), Wi-Fi access points in ~60 % of flats (45 % at 5 GHz, tinted pale yellow vs deep orange; data bursts only while the flat is lit), shop-front APs, the bus-shelter LED screen + LTE-M modem (`Em`, single sources), key fobs on the parked cars, 5 scooters (IR + LTE-M). Changes (b3435fe, scenarios/city/rf.js): parked cars no longer chirp TPMS — direct TPMS sleeps when parked (audit #2, logged decision; event renamed "Parked cars: key fobs", 433.92 MHz unlocks kept); the crowd is tagged `time-compressed` (audit #4); walkers loop along their sidewalk (z −30…250, 12 m fade at the ends) instead of drifting ~150 m past the canyon. No R() draws changed.
+
+Numbers: `spectra timeline` 0 warnings in Orbit and Ground for all three scenarios; city draw calls 97/246/244 before → 97/246/244 after; sources unchanged (237 Em, 476 Rib, 35 fields). Shots exit 0: city -t 5/30/54, `--bands micro,ir -t 30`, `--bands ir -t 30` (warm walkers on both sidewalks, window-frame heat leaks), plus two micro views.
+
+Not verified: the 2.4 vs 5 GHz colour difference and individual fob/phone bursts are checked in code only — the microwave surface crackle hides them in the micro views (T8). Moving-traffic TPMS (every 5–11 script-s) and fob presses are faster than real; `traffic` has no `time-compressed` tag (M2/T3 city audit group).
