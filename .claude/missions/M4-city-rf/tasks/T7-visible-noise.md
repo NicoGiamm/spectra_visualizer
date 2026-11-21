@@ -1,9 +1,9 @@
 ---
 id: M4/T7
 title: Visible view: RF haze blocks in the sky, overexposed windows and shop fronts
-status: backlog
+status: in-progress
 labels: [gap]
-started:
+started: 2026-11-21
 completed:
 ---
 
