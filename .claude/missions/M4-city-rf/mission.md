@@ -38,7 +38,7 @@ T1–T5 implemented on main in a9adb2f before missions existed (draw calls 82/21
 | [M4/T2](tasks/T2-multipath-bouncing.md) | done | needs-verification | Multipath bouncing |
 | [M4/T3](tasks/T3-ambient-field-haze.md) | done | needs-verification | Ambient field haze |
 | [M4/T4](tasks/T4-true-radio-in-the-city.md) | done | needs-verification | True radio in the city |
-| [M4/T5](tasks/T5-more-visible-ir-life.md) | backlog | needs-verification | More visible/IR life |
+| [M4/T5](tasks/T5-more-visible-ir-life.md) | in-progress | needs-verification | More visible/IR life |
 | [M4/T6](tasks/T6-tune.md) | backlog |  | Tune |
 | [M4/T7](tasks/T7-visible-noise.md) | backlog | gap | Visible view: RF haze blocks in the sky, overexposed windows and shop fronts |
 | [M4/T8](tasks/T8-instrument-legibility.md) | backlog | gap | Instrument view: microwave surface crackle buries the IR heat leaks |
