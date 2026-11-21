@@ -12,7 +12,7 @@ export const S = {
   TIME: { value: 0 },                 // shared uTime uniform
   scene: null, camera: null, renderer: null, PR: 1,
   groundAt: () => 0,                  // provided by the scenario's world
-  detector: 'ground',                 // 'ground' | 'orbit': whether the atmosphere absorbs (bands.js TRANSMIT)
+  detector: 'orbit',                  // 'orbit' (default) | 'ground': whether the atmosphere absorbs (bands.js TRANSMIT)
   ghosts: new Map(),                  // per frame: event -> { pos, bands: Set } for sources absorbed in Ground mode
   curEvent: null,                     // the event whose update() is running (ghost markers are grouped by it)
 };

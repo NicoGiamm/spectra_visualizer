@@ -122,7 +122,7 @@ def shot(
 
 
 @app.command
-def timeline(*scenarios: str, step: float = 0.5, detector: str = "ground",
+def timeline(*scenarios: str, step: float = 0.5, detector: str = "both",
              json_out: Annotated[bool, Parameter(name="--json")] = False):
     """Run scenarios headless and print an event gantt plus per-band activity over the 0–60 script.
 
@@ -133,24 +133,35 @@ def timeline(*scenarios: str, step: float = 0.5, detector: str = "ground",
     step
         Sampling step in script seconds.
     detector
-        ground (default) or orbit; the physics check flags absorbed bands drawn in Ground mode.
+        both (default): the full report in Orbit mode (the page default) plus the physics check re-run in Ground
+        mode, which flags absorbed bands drawn from the ground; or just ground / orbit.
     json_out
         Print the raw report as JSON instead.
     """
     import json
 
-    from .timeline import fetch, render
+    from .timeline import fetch, physics, render
 
     ids = list(scenarios) or [s.id for s in discover()]
     failed = False
     for sid in ids:
-        rep, console = fetch(sid, step, detector=detector)
+        rep, console = fetch(sid, step, detector="orbit" if detector == "both" else detector)
         if rep is None:
             print(f"{sid}: no report (see console output above)")
             failed = True
             continue
-        print(json.dumps(rep) if json_out else render(rep) + "\n")
         failed |= bool(console)
+        if detector != "both":
+            print(json.dumps(rep) if json_out else render(rep) + "\n")
+            continue
+        ground, gconsole = fetch(sid, step, detector="ground")
+        failed |= bool(gconsole) or ground is None
+        if json_out:
+            print(json.dumps({"orbit": rep, "ground": ground}))
+        else:
+            print(render(rep))
+            print("\n".join(physics(ground)) if ground else "ground-mode check: no report")
+            print()
     raise SystemExit(1 if failed else 0)
 
 

@@ -11,7 +11,7 @@
 //   }
 //
 // URL parameters (handy for screenshots): ?t=30 (script time 0–60) &yaw=0.3 &pitch=0.5
-// &paused &bands=ir,micro &labels=0 &detector=orbit (default ground: the atmosphere absorbs far-UV/X/gamma)
+// &paused &bands=ir,micro &labels=0 &detector=ground (default orbit; ground: the atmosphere absorbs far-UV/X/gamma)
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
@@ -80,7 +80,7 @@ function start(sc) {
   if (q.has('bands')) { const ids = q.get('bands').split(','); BANDS.forEach(b => S.on[b.id] = ids.includes(b.id)); }
   if (q.has('paused')) hud.setPlay(false);
   if (q.get('labels') === '0') hud.setLabels(false);
-  hud.setDetector(q.get('detector') === 'orbit' ? 'orbit' : 'ground');
+  hud.setDetector(q.get('detector') === 'ground' ? 'ground' : 'orbit');   // Orbit by default (user decision, plan Q1)
 
   // drag to look: a quarter sphere ahead (yaw ±1.35 rad, pitch −0.1…1.5)
   const gl = renderer.domElement; let drag = null;

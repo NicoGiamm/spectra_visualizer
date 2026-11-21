@@ -258,7 +258,10 @@ commit c9b3fb3 (with 2.1–2.3). It still needs its own verification against 3.1
 - **Q3 Surface overlay with Visible on**: faint overlay (~15 %) or none? Proposal: faint, with a HUD slider.
 
 Decisions so far:
-- **Q1 decided: Ground** by default (the plan's proposal), Orbit one click away (`S.detector`, HUD button, `?detector=`).
+- **Q1 decided (2026-11-21, user): Orbit** by default — cosmic X-ray/gamma/far-UV are drawn on load, Ground (absorbed
+  bands hidden behind ghost markers) is one click away (`S.detector`, HUD button, `?detector=ground`). This reverses
+  the earlier Ground default an agent had adopted from the plan's proposal without asking. `spectra timeline` now
+  reports in Orbit and re-runs the physics check in Ground mode (`--detector both`, the default).
 - **Q3 as implemented:** a faint overlay `OVERLAY = .12` (`render/surface.js`); there is no HUD slider yet.
 
 ## Progress notes
