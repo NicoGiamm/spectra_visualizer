@@ -5,9 +5,10 @@ import { S } from 'spectra/core/state.js';
 import { event } from 'spectra/core/events.js';
 import { deg, skyP } from 'spectra/core/geom.js';
 import { Em, Rib, EmField } from 'spectra/render/sources.js';
-import { solid, visOnly, topoMat } from 'spectra/render/instrument.js';
+import { solid, visOnly } from 'spectra/render/instrument.js';
+import { spectralGroup, addTx } from 'spectra/render/surface.js';
 import { softTex } from 'spectra/render/textures.js';
-import { trailX, heightAt, terrainMat, NEAR_ROCKS } from './world.js';
+import { trailX, heightAt, NEAR_ROCKS } from './world.js';
 
 const warmF = () => 1 - sm(0, 45, S.t);
 const CAMP_Z = -118, campPos = () => { const x = trailX(CAMP_Z) - 1.8; return new V3(x, heightAt(x, CAMP_Z), CAMP_Z); };
@@ -23,13 +24,14 @@ export const radioTower = () => event({ name: 'Radio / TV tower', t0: 0, t1: 60,
     for (let s = 0; s < 8; s++) for (let k = 0; k < 3; k++) { const f0 = s / 8, f1 = (s + 1) / 8; pts.push(leg(k).lerp(new V3(x, y + H, z), f0), leg((k + 1) % 3).lerp(new V3(x, y + H, z), f1)); }
     S.scene.add(solid(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0x0b0b10 }))));
     this.top = new V3(x, y + H, z); this.light = new Em('vis', '#ff2020'); this.rad = new Em('radio');
+    addTx('radio', () => ({ p: this.top, power: 1.4 }));   // FM paints the valley slopes
   },
   update() { this.light.set(this.top, 5, S.T % 1.5 < .5 ? 1.3 : .05); this.rad.set(this.top, 170, .8); }, where() { return this.top; } });
 
 export const warmRocks = () => event({ name: 'Warm rocks cooling', t0: 0, t1: 45, bands: ['ir'], freq: ['thermal290'], note: 'Rocks heated during the day give off infrared as they cool.',
   init() { this.e = new EmField('ir', NEAR_ROCKS.length); },
-  update() { const w = warmF(), on = S.on; topoMat.uniforms.uWarm.value = on.ir ? w : 0; S.act.ir += w * .4; terrainMat.emissive.setRGB(on.ir ? w * .05 : 0, on.ir ? w * .012 : 0, 0);
-    NEAR_ROCKS.forEach((r, i) => this.e.set(i, r.p, r.s * 1.8, w * .6)); },
+  update() { const w = warmF();   // the ground itself cools via its surface properties; these are the boulders that soaked up most sun
+    NEAR_ROCKS.forEach((r, i) => this.e.set(i, r.p, r.s * 1.6, w * .35)); },
   where: () => null });
 
 export const hut = () => event({ name: 'Mountain hut', t0: 8, t1: 34, bands: ['vis', 'ir', 'micro'], freq: ['incandescent', 'thermal700', 'wifi24'], note: 'Lit windows, heat leaking from the chimney, Wi-Fi router (2.4 GHz microwave).',
@@ -42,11 +44,12 @@ export const hut = () => event({ name: 'Mountain hut', t0: 8, t1: 34, bands: ['v
     const ch = new THREE.Mesh(new THREE.BoxGeometry(.6, 1.8, .6), wood); ch.position.set(1.6, 5, .9); G.add(ch);
     this.winMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
     [-1.4, 1.4].forEach(zz => { const w = new THREE.Mesh(new THREE.PlaneGeometry(.9, .75), this.winMat); w.position.set(-3.01, 1.9, zz); w.rotation.y = -Math.PI / 2; G.add(w); });
-    S.scene.add(solid(G));
+    S.scene.add(spectralGroup(G, 'wood', { weight: .05 }));
     this.light = new THREE.PointLight(0xffa050, 0, 30, 1.6); this.light.position.set(x - 4, y + 1.8, z); S.scene.add(this.light);
     this.wins = [-1.4, 1.4].map(zz => new V3(x - 3.1, y + 1.9, z + zz));
     this.chim = new V3(x + 1.6, y + 6, z + .9); this.center = new V3(x, y + 2, z); this.roof = new V3(x, y + 5, z);
     this.smoke = Array.from({ length: 9 }, () => { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: softTex(), transparent: true, depthWrite: false, opacity: 0 })); S.scene.add(visOnly(s)); return s; });
+    addTx('micro', () => ({ p: this.roof, power: .9 }));   // the hut's Wi-Fi lights up the nearby ground
     this.smokeIR = this.smoke.map(() => new Em('ir')); this.wv = this.wins.map(() => new Em('vis', '#ffa040')); this.ir = new Em('ir'); this.mi = new Em('micro');
   },
   update() {

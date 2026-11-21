@@ -2,6 +2,8 @@
 // uBand index follows BANDS order: 0 radio, 1 micro, 2 ir, 3 vis, 4 uv, 5 xray, 6 gamma.
 
 export const COMMON = `
+#ifndef SPECTRA_COMMON
+#define SPECTRA_COMMON
 float h21(vec2 p){ p = fract(p*vec2(123.34,456.21)); p += dot(p,p+45.32); return fract(p.x*p.y); }
 float n2(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f);
   return mix(mix(h21(i),h21(i+vec2(1,0)),f.x), mix(h21(i+vec2(0,1)),h21(i+vec2(1,1)),f.x), f.y); }
@@ -11,6 +13,7 @@ vec3 thermal(float x){
   vec3 c = mix(vec3(.12,0.,.3), vec3(.9,.08,.12), smoothstep(0.,.35,x));
   c = mix(c, vec3(1.,.62,0.), smoothstep(.35,.7,x));
   return mix(c, vec3(1.,1.,.85), smoothstep(.7,1.,x)); }
+#endif
 `;
 
 // Point source: camera-facing quad

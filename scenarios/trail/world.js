@@ -3,7 +3,9 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { V3, clamp, lerp, sm, R, noise2, fbm2, ridged2 } from 'spectra/core/util.js';
 import { S } from 'spectra/core/state.js';
-import { solid, topoMat } from 'spectra/render/instrument.js';
+import { spectral, PRESET, mixSurf } from 'spectra/render/surface.js';
+import { SUN_AZ, sunEl } from 'spectra/world/atmosphere.js';
+import { dirAE } from 'spectra/core/geom.js';
 import { heightfield } from 'spectra/world/heightfield.js';
 
 export const trailX = z => 6 * Math.sin(z * .02) + 3 * Math.sin(z * .053);
@@ -31,9 +33,20 @@ function terrain() {
     c = mix(c, C.dirt, sm(1.6, .7, Math.abs(x - trailX(z))) * (Math.hypot(x, z) < 200 ? 1 : 0));
     c = mix(c, C.rock, clamp(sm(.18, .4, slope) + sm(200, 420, y) * .7));
     return mix(c, C.snow, sm(360 + 90 * nz, 460 + 90 * nz, y) * (1 - sm(.5, .72, slope)));
+  }, surfAt(x, y, z, slope) {        // same classes as the colours: meadow -> dirt trail -> rock -> snow
+    const nz = fbm2(x * .03, z * .03, 3), L = (a, b, k) => mixSurf([[a, 1 - k], [b, k]]);
+    let s = L(PRESET.meadow, PRESET.forest, sm(.44, .6, fbm2(x * .008, z * .008, 3)) * .5);
+    s = L(s, PRESET.dirt, sm(1.6, .7, Math.abs(x - trailX(z))) * (Math.hypot(x, z) < 200 ? 1 : 0));
+    s = L(s, PRESET.rock, clamp(sm(.18, .4, slope) + sm(200, 420, y) * .7));
+    return L(s, PRESET.snow, sm(360 + 90 * nz, 460 + 90 * nz, y) * (1 - sm(.5, .72, slope)));
   } });
-  S.scene.add(solid(new THREE.Mesh(g, terrainMat), topoMat));
+  S.scene.add(spectral(new THREE.Mesh(g, terrainMat), 'attr', { lines: 'topo', mean: g.userData.surfMean, weight: 1.2,
+    uniforms: { uAlpen: ALPEN.amount, uSunDir: ALPEN.dir }, extraDecl: 'uniform float uAlpen; uniform vec3 uSunDir;',
+    // alpenglow: snow faces that still catch the grazing sun turn pink (high peaks see it after sunset down here)
+    visExtra: `float snowK = smoothstep(.45, .75, vSurfB.y)*smoothstep(250., 520., W.y);
+      gl_FragColor.rgb += uAlpen*snowK*max(dot(N, uSunDir), 0.)*vec3(1., .36, .52)*.55;` }));
 }
+export const ALPEN = { amount: { value: 0 }, dir: { value: new V3() } };
 
 function trees() {   // instanced pines
   const parts = [], cone = (r, h, y, s = 7) => { const g = new THREE.ConeGeometry(r, h, s, 2); g.translate(0, y, 0); return g; };
@@ -57,7 +70,7 @@ function trees() {   // instanced pines
   }
   const mesh = new THREE.InstancedMesh(treeGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .9 }), M.length);
   M.forEach((m, i) => { mesh.setMatrixAt(i, m); mesh.setColorAt(i, new THREE.Color().setScalar(.7 + R() * .6)); });
-  S.scene.add(solid(mesh));
+  S.scene.add(spectral(mesh, 'forest', { weight: .5 }));
 }
 
 function rocks() {
@@ -75,7 +88,7 @@ function rocks() {
   }
   const mesh = new THREE.InstancedMesh(g, new THREE.MeshStandardMaterial({ color: new THREE.Color(.11, .1, .095), roughness: .92, flatShading: true }), M.length);
   M.forEach((m, i) => { mesh.setMatrixAt(i, m); mesh.setColorAt(i, new THREE.Color().setScalar(.7 + R() * .6)); });
-  S.scene.add(solid(mesh));
+  S.scene.add(spectral(mesh, 'rock', { weight: .35 }));
 }
 
 function grass() {   // instanced blades swaying in the wind
@@ -100,7 +113,7 @@ function grass() {   // instanced blades swaying in the wind
     tmp.scale.setScalar(.4 + R() * .8); tmp.updateMatrix(); mesh.setMatrixAt(i, tmp.matrix);
     const dry = R(); mesh.setColorAt(i, c.setRGB(lerp(.07, .26, dry), lerp(.12, .2, dry), lerp(.03, .08, dry)));
   }
-  S.scene.add(solid(mesh));
+  S.scene.add(spectral(mesh, 'meadow', { weight: .4 }));
 }
 
 export function build() {
@@ -110,6 +123,10 @@ export function build() {
     walk(t, camera) {   // 42 m -> -40 m along the trail over the minute
       const z = 42 - t * 2.74, x = trailX(z), bob = Math.sin(t * 9) * .03;
       camera.position.set(x, heightAt(x, z) + 1.7 + bob, z);
+    },
+    update(t) {   // alpenglow: from the last direct sunlight until the high snow loses it
+      ALPEN.amount.value = sm(3, 7, t) * (1 - sm(12, 17, t));
+      ALPEN.dir.value.copy(dirAE(SUN_AZ, Math.max(sunEl(), 0) + 2));
     },
   };
 }

@@ -23,7 +23,8 @@ import { BANDS, METER_NORM } from './core/bands.js';
 import { SPECTRUM, bandOf, describe } from './core/spectrum.js';
 import { hideAllSources, EMS, RIBS, FIELDS } from './render/sources.js';
 import { applyVisMode } from './render/instrument.js';
-import { createAtmosphere } from './world/atmosphere.js';
+import { createAtmosphere, sunEl } from './world/atmosphere.js';
+import { updateSurfaces, uvSkylight } from './render/surface.js';
 import { buildDom, createHud, sizeOverlay, drawOverlay } from './ui/hud.js';
 
 export function run(sc) {
@@ -92,6 +93,7 @@ function start(sc) {
     world.walk(S.t, camera);
     camera.rotation.set(S.pitch, S.yaw, 0);
     atmo.update();
+    updateSurfaces(uvSkylight(sunEl()));
     world.update && world.update(S.t);
     EV.forEach((e, i) => {
       if (!drawn) { e.update && e.update(); return; }
@@ -113,6 +115,7 @@ function start(sc) {
     world.walk(S.t, camera);
     camera.rotation.set(S.pitch, S.yaw, 0);
     atmo.update();
+    updateSurfaces(uvSkylight(sunEl()));
     world.update && world.update(S.t);
     EV.forEach(e => e.update && e.update());
     composer.render();

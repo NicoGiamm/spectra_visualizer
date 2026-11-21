@@ -59,9 +59,10 @@ export function createHud({ onFilter }) {
   const fills = Object.fromEntries(BANDS.map(b => [b.id, document.querySelector(`#cell-${b.id} .fill`)]));
   const clock = document.getElementById('clock'), evlist = document.getElementById('evlist');
 
+  // meters use soft compression 1 - exp(-act/norm): busy bands approach the top but never pin
   function frame(active, norm) {
     scrub.value = S.t * 2;
-    BANDS.forEach(b => { meter[b.id] = lerp(meter[b.id], clamp(S.act[b.id] / norm[b.id]), .15); fills[b.id].style.height = (meter[b.id] * 100) + '%'; });
+    BANDS.forEach(b => { meter[b.id] = lerp(meter[b.id], 1 - Math.exp(-S.act[b.id] / norm[b.id]), .15); fills[b.id].style.height = (meter[b.id] * 100) + '%'; });
     const hrs = 19.5 + S.t / 60 * 4;
     clock.textContent = `${Math.floor(hrs)}:${String(Math.floor((hrs % 1) * 60)).padStart(2, '0')}`;
     const key = active.map(e => e.name).join('|'); if (key === lastEv) return; lastEv = key;
