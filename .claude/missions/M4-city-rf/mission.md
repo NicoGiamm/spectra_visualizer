@@ -48,3 +48,4 @@ T1–T5 implemented on main in a9adb2f before missions existed (draw calls 82/21
 
 - 2026-11-21 · migrated from `.claude/plans/improvement-plan.md` Phase 4 (archived at 6ea7dd6)
 - 2026-11-21 · started
+- 2026-11-21 · city step on main before this mission ran: 82e40cf multipath facade hits (T2), 519656e per-building Tcore (M1/T6), 5a36c6d complexity parity (city sky events, street.js life, granite gamma, black-light UV; 54 events), a48e444 meterNorm retuned in Orbit (T6 partial). Draw calls 97/246/244 Orbit, timeline 0 warnings Orbit+Ground. Not yet reviewed nor physics-audited.
