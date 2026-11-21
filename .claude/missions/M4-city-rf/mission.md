@@ -1,7 +1,7 @@
 ---
 id: M4
 title: The city comes alive — radio & microwave ecosystem
-status: planned
+status: active
 branch: mission/M4-city-rf
 created: 2026-11-21
 ---
@@ -45,3 +45,4 @@ T1–T5 implemented on main in a9adb2f before missions existed (draw calls 82/21
 ## Log
 
 - 2026-11-21 · migrated from `.claude/plans/improvement-plan.md` Phase 4 (archived at 6ea7dd6)
+- 2026-11-21 · started
