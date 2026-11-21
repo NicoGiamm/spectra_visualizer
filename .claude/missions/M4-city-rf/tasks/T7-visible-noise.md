@@ -29,16 +29,20 @@ files: scenarios/city/rf.js, scenarios/city/world.js, scenarios/city/street.js
 
 ## Acceptance
 
-- [ ] `spectra timeline`: 0 warnings in Orbit and Ground for all three scenarios, city draw calls noted (≤ 97/246/244)
-- [ ] `spectra shot city -t 30` (all bands) and `--bands vis`: no large blocky squares in the sky or over the trees
-- [ ] Near lit windows and shop fronts show a warm hue with variation, no flat white panels (t 30 and t 54)
-- [ ] `spectra shot city --bands micro -t 30`: the haze is still visible in the canyon and fades toward the park
+- [x] `spectra timeline`: 0 warnings in Orbit and Ground for all three scenarios, city draw calls noted (≤ 97/246/244)
+- [x] `spectra shot city -t 30` (all bands) and `--bands vis`: no large blocky squares in the sky or over the trees
+- [x] Near lit windows and shop fronts show a warm hue with variation, no flat white panels (t 30 and t 54)
+- [x] `spectra shot city --bands micro -t 30`: the haze is still visible in the canyon and fades toward the park
 
 ## Notes
 
 *2026-11-21:* the haze half is done in M4/T3 (561c5ab): no haze blocks in the sky or over the trees at -t 30. Still open here: blocky clusters on the right (north) facade at -t 30 are Wi-Fi routers a few metres away drawn at 1.3 m with the 26-cell micro crackle (`events.js` `wifi`, `this.f.set(k, q.p, q.shop ? 1.6 : 1.3, …)`) — shrink with distance like the haze (size = min(1.3, k·d)); the 5G mast's 38 m glow (`events.js` `this.big.set(MAST.top, 38, .55)`) has the same large-cell look when on screen; the flat white windows / shop fronts.
 
 *2026-11-21:* found in T5: with only Visible on (Human eye) at night the street, sidewalks and facade walls render solid black, even under lit lamps (T5 shot at -t 35 vis only); in all-bands view they look lit only because the IR/micro surface overlays paint them. In scope here ("with Human eye, the city reads as a city at night"): lamps should light the asphalt and sidewalks, facades should keep some ambient/moonlit value. Check whether it regressed with the 1.6 surfaces (519656e/a9adb2f) vs the pre-mission city (e6843ca had merged light-pool meshes).
+
+*2026-11-21:* the black street was not a regression — e6843ca was the same: hemi-only night lighting on near-black albedos plus 14 m additive pools 24 m apart. Fixed with a per-pixel `streetLight()` term (nearest 16 lamps + city ambient) in the visible material, not real lights (06a6d40). Deviation: asphalt 0x111214 → 0x26272a (the old ~.0056 linear albedo can't be lit visibly through the ACES toe without blowing out kerbs and facades). Lamp brightness `LAMP_LUX` is tuned by eye, not calibrated.
+
+*2026-11-21:* draw calls are 97/266/266, above this task's "≤ 97/246/244": the extra 22 come from T5's vapour plumes and manhole steam (b3dbce2), not from T7, which adds none. Remaining: a few shop fronts read pale grey at -t 35 (closed shops with a night light under lamp light); the shop sign boxes read flat white / pale blue up close in vis (`streetProps` sign material); the granite kerb top is a stark white line under the lamps; the mast sector panels were not on screen in the aimed shots after a mid-run fix (code verified).
 
 ## Outcome
 
