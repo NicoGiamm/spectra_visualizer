@@ -1,10 +1,10 @@
 ---
 id: M4/T3
 title: Ambient field haze
-status: in-progress
+status: done
 labels: [needs-verification]
 started: 2026-11-21
-completed:
+completed: 2026-11-21
 ---
 
 # M4/T3 — Ambient field haze
@@ -39,4 +39,8 @@ files: scenarios/city/rf.js
 
 ## Outcome
 
-<Written by `mission-tracker task <ref> --done --evidence <file>`: what changed, numbers, shots, what was not verified.>
+Verified and reworked the street-canyon RF haze (561c5ab, scenarios/city/rf.js `haze`). Density per patch follows the live Wi-Fi APs within 40 m of the patch (kept instead of the Goal's ~80 m around the viewer, see Notes), fading with depth 60–110 m. The large blocky orange squares in the sky and over the park trees at t 30 (T7) were the haze's 2.5–5.5 m patches (up to 24 m high, 10–21 cm crackle cells near the viewer) — proven by switching the haze off for one shot. They are now 360 patches of 0.9–2.0 m (4–8 cm cells), below 9 m (lowest street-front roof 12 m), drawn smaller and faded when close; a new `onCanyon()` line-of-sight check hides any patch whose view would end on the sky, a block gap or the open park end, and the last 20 m before the park fade out. Tagged `stylised` (it shows field density, not a visible thing). One instanced draw call, hash placement, no R() draws.
+
+Numbers: `spectra timeline` 0 warnings Orbit + Ground for all three scenarios; city draw calls 97/243/244 → 97/243/244; field instances 1536 → 1756; micro meter typical/peak 0.80/0.85 → 0.82/0.87. Shots exit 0: city -t 5/30/54, `--bands vis -t 30`, `--bands micro -t 10/30/50` (main session re-ran -t 30 all bands and micro -t 10 after the final comment edit: sky and trees clean at t 30; fine haze puffs on the facades at t 10; none in the park at t 50).
+
+Not verified / deviations: Ground-mode shots (timeline only); only the default view was shot; at `--bands micro -t 30` the haze is hard to see against the bright microwave facades (T8). The blocky clusters still on the right facade at t 30 are nearby Wi-Fi routers (events.js `wifi`), left to T7.

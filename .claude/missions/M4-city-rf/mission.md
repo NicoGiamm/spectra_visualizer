@@ -36,7 +36,7 @@ T1–T5 implemented on main in a9adb2f before missions existed (draw calls 82/21
 |---|---|---|---|
 | [M4/T1](tasks/T1-crowd-of-emitters.md) | done | needs-verification | Crowd of emitters |
 | [M4/T2](tasks/T2-multipath-bouncing.md) | done | needs-verification | Multipath bouncing |
-| [M4/T3](tasks/T3-ambient-field-haze.md) | in-progress | needs-verification | Ambient field haze |
+| [M4/T3](tasks/T3-ambient-field-haze.md) | done | needs-verification | Ambient field haze |
 | [M4/T4](tasks/T4-true-radio-in-the-city.md) | backlog | needs-verification | True radio in the city |
 | [M4/T5](tasks/T5-more-visible-ir-life.md) | backlog | needs-verification | More visible/IR life |
 | [M4/T6](tasks/T6-tune.md) | backlog |  | Tune |
@@ -52,3 +52,4 @@ T1–T5 implemented on main in a9adb2f before missions existed (draw calls 82/21
 - 2026-11-21 · decision: Parked cars: no TPMS chirps while parked (direct TPMS sensors are motion-triggered and sleep once the car stops); keep 433.92 MHz key-fob unlocks. Deviates from T1's Goal text, recorded in T1 Notes — physics-first convention, per the M4 audit (audit.md #2)
 - 2026-11-21 · M4/T1 done
 - 2026-11-21 · M4/T2 done
+- 2026-11-21 · M4/T3 done
