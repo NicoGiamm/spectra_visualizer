@@ -1,7 +1,7 @@
 ---
 id: M1
 title: Spectral surfaces — the landscape shows the spectrum
-status: planned
+status: active
 branch: mission/M1-spectral-surfaces
 created: 2026-11-21
 ---
@@ -45,3 +45,4 @@ T1–T5 done (trail and seaside verified). Open: T6, the city (per-building Tcor
 ## Log
 
 - 2026-11-21 · migrated from `.claude/plans/improvement-plan.md` Phase 1 (archived at 6ea7dd6)
+- 2026-11-22 · started
