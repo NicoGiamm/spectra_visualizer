@@ -62,7 +62,43 @@ def render(rep: dict) -> str:
         lines.append(f"{b:<{W}} {spark(vals, top)} {max(vals) / top:4.1f}×")
     n_active = per_second(rep["samples"], lambda s: len(s["active"]))
     lines.append(f"{'events active':<{W}} {spark(n_active, max(n_active) or 1)} max {int(max(n_active))}")
+    lines += physics(rep)
     full = [b for b, n in sat.items() if n > 20]
     if full:
         lines.append(f"\nmeters pinned at the top for >20 s: {', '.join(full)} (raise meterNorm / METER_NORM)")
     return "\n".join(lines)
+
+
+def physics(rep: dict) -> list[str]:
+    """Cross-check declared bands, listed processes (freq) and the bands actually drawn."""
+    out, warn = ["", "physics check (declared bands · processes · drawn):"], 0
+    for e in sorted(rep["events"], key=lambda e: e["t0"]):
+        decl, drawn = set(e["bands"]), set(e["drawn"])
+        fb = {f["band"] for f in e["freq"]}
+        notes = []
+        if e["unknownFreq"]:
+            notes.append(f"unknown process keys {e['unknownFreq']}")
+        if not e["freq"]:
+            notes.append("no processes listed")
+        if decl - fb and e["freq"]:
+            notes.append(f"declared without a process: {sorted(decl - fb)}")
+        if fb - decl:
+            notes.append(f"process band not declared: {sorted(fb - decl)}")
+        if drawn - decl:
+            notes.append(f"draws undeclared band: {sorted(drawn - decl)}")
+        absorbed = [f["key"] for f in e["freq"] if not f["ground"]]
+        styl = [f["key"] for f in e["freq"] if f["stylised"]]
+        info = []
+        if absorbed:
+            info.append(f"absorbed before the ground: {', '.join(absorbed)}")
+        if styl:
+            info.append(f"stylised: {', '.join(styl)}")
+        if e["tags"]:
+            info.append("tags: " + ", ".join(e["tags"]))
+        if notes:
+            warn += len(notes)
+            out.append(f"  ! {e['name']}: " + "; ".join(notes))
+        if info:
+            out.append(f"    {e['name']}: " + "; ".join(info))
+    out.append(f"  {warn} warning(s)")
+    return out

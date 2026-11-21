@@ -12,10 +12,10 @@ import { trailX, heightAt, terrainMat, NEAR_ROCKS } from './world.js';
 const warmF = () => 1 - sm(0, 45, S.t);
 const CAMP_Z = -118, campPos = () => { const x = trailX(CAMP_Z) - 1.8; return new V3(x, heightAt(x, CAMP_Z), CAMP_Z); };
 
-export const alpenglow = () => event({ name: 'Alpenglow', t0: 4, t1: 16, bands: ['vis'], note: 'Snowy peaks opposite the Sun turn pink in the last light, just above the ridge ahead.',
+export const alpenglow = () => event({ name: 'Alpenglow', t0: 4, t1: 16, bands: ['vis'], freq: ['sunlight'], note: 'Snowy peaks opposite the Sun turn pink in the last light, just above the ridge ahead.',
   update() { S.act.vis += .3 * (1 - sm(4, 16, S.t)); }, where: () => skyP(245, 5) });
 
-export const radioTower = () => event({ name: 'Radio / TV tower', t0: 0, t1: 60, bands: ['radio', 'vis'], note: 'FM & TV broadcast waves and a blinking red aviation light on the ridge.',
+export const radioTower = () => event({ name: 'Radio / TV tower', t0: 0, t1: 60, bands: ['radio', 'vis'], freq: ['fm', 'navRed'], note: 'FM & TV broadcast waves and a blinking red aviation light on the ridge.',
   init() {
     const a = 330 * DEG, x = Math.cos(a) * 1300, z = Math.sin(a) * 1300, y = heightAt(x, z), H = 70, pts = [];
     const leg = k => new V3(x + Math.cos(k * 2.09) * 5, y, z + Math.sin(k * 2.09) * 5);
@@ -26,13 +26,13 @@ export const radioTower = () => event({ name: 'Radio / TV tower', t0: 0, t1: 60,
   },
   update() { this.light.set(this.top, 5, S.T % 1.5 < .5 ? 1.3 : .05); this.rad.set(this.top, 170, .8); }, where() { return this.top; } });
 
-export const warmRocks = () => event({ name: 'Warm rocks cooling', t0: 0, t1: 45, bands: ['ir'], note: 'Rocks heated during the day give off infrared as they cool.',
+export const warmRocks = () => event({ name: 'Warm rocks cooling', t0: 0, t1: 45, bands: ['ir'], freq: ['thermal290'], note: 'Rocks heated during the day give off infrared as they cool.',
   init() { this.e = new EmField('ir', NEAR_ROCKS.length); },
   update() { const w = warmF(), on = S.on; topoMat.uniforms.uWarm.value = on.ir ? w : 0; S.act.ir += w * .4; terrainMat.emissive.setRGB(on.ir ? w * .05 : 0, on.ir ? w * .012 : 0, 0);
     NEAR_ROCKS.forEach((r, i) => this.e.set(i, r.p, r.s * 1.8, w * .6)); },
   where: () => null });
 
-export const hut = () => event({ name: 'Mountain hut', t0: 8, t1: 34, bands: ['vis', 'ir', 'micro'], note: 'Lit windows, heat leaking from the chimney, Wi-Fi router (2.4 GHz microwave).',
+export const hut = () => event({ name: 'Mountain hut', t0: 8, t1: 34, bands: ['vis', 'ir', 'micro'], freq: ['incandescent', 'thermal700', 'wifi24'], note: 'Lit windows, heat leaking from the chimney, Wi-Fi router (2.4 GHz microwave).',
   init() {
     const z = 6, x = trailX(z) + 16, y = heightAt(x, z), G = new THREE.Group(); G.position.set(x, y, z);
     const wood = new THREE.MeshStandardMaterial({ color: new THREE.Color(.09, .05, .03), roughness: .9 }), roof = new THREE.MeshStandardMaterial({ color: new THREE.Color(.04, .035, .035), roughness: .8 });
@@ -63,7 +63,7 @@ export const hut = () => event({ name: 'Mountain hut', t0: 8, t1: 34, bands: ['v
     });
   }, where() { return this.roof; } });
 
-export const deer = () => event({ name: 'Deer crossing', t0: 13, t1: 27, bands: ['ir'], note: 'Hard to see by eye at dusk, bright on a thermal camera.',
+export const deer = () => event({ name: 'Deer crossing', t0: 13, t1: 27, bands: ['ir'], freq: ['thermal310'], note: 'Hard to see by eye at dusk, bright on a thermal camera.',
   init() {
     const m = new THREE.MeshStandardMaterial({ color: new THREE.Color(.09, .06, .04), roughness: .9 }), G = new THREE.Group();
     const body = new THREE.Mesh(new THREE.CapsuleGeometry(.32, .9, 4, 8), m); body.rotation.z = Math.PI / 2; body.position.y = 1.05; G.add(body);
@@ -83,13 +83,13 @@ export const deer = () => event({ name: 'Deer crossing', t0: 13, t1: 27, bands: 
     this.p = new V3(x, y + 1.05, z); this.body.set([this.p.clone().addScaledVector(fw, -.72), this.p.clone().addScaledVector(fw, .55)], 1.5, 1.1, I * .55); this.headIR.set(this.p.clone().addScaledVector(fw, .9).add(new V3(0, .62, 0)), 1.1, I * .4);
   }, where() { return this.p; } });
 
-export const fireflies = () => event({ name: 'Fireflies', t0: 15, t1: 35, bands: ['vis'], note: 'Bioluminescence is "cold light": visible flashes with almost no infrared.',
+export const fireflies = () => event({ name: 'Fireflies', t0: 15, t1: 35, bands: ['vis'], freq: ['luciferin'], note: 'Bioluminescence is "cold light": visible flashes with almost no infrared.',
   init() { this.f = Array.from({ length: 120 }, () => { const z = -170 + R() * 210, x = trailX(z) + (R() - .5) * 26; return { b: new V3(x, heightAt(x, z) + .3 + R() * 2.2, z), s: .5 + R(), p: R() * 6, r: 1.5 + R() * 2 }; }); this.field = new EmField('vis', this.f.length, '#b8ff3a'); },
   update() { const { t, T } = S, I = env(t, 15, 35, 2); if (I <= 0) return;
     this.f.forEach((f, k) => { const b = Math.max(0, Math.sin(T * f.r + f.p)) ** 8; this.field.set(k, f.b.clone().add(new V3(Math.sin(T * .5 * f.s + f.p) * .8, Math.sin(T * 1.1 * f.s) * .3, Math.cos(T * .4 * f.s + f.p) * .8)), .14, I * b * 1.6); }); },
   where: () => null });
 
-export const bats = () => event({ name: 'Bats hunting', t0: 22, t1: 40, bands: ['ir'], note: 'Warm-blooded fliers: invisible against the dark sky, obvious in IR.',
+export const bats = () => event({ name: 'Bats hunting', t0: 22, t1: 40, bands: ['ir'], freq: ['thermal310'], note: 'Warm-blooded fliers: invisible against the dark sky, obvious in IR.',
   init() {
     const m = new THREE.MeshBasicMaterial({ color: 0x050507, side: THREE.DoubleSide }), wg = new THREE.BufferGeometry();
     wg.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, -.06, 0, 0, .06, -.24, 0, 0], 3));
@@ -102,7 +102,7 @@ export const bats = () => event({ name: 'Bats hunting', t0: 22, t1: 40, bands: [
       b.e.set(b.G.position, .28, I * .5); }); },
   where: () => null });
 
-export const campfire = () => event({ name: 'Campfire', t0: 40, t1: 60, bands: ['vis', 'ir'], note: 'Journey\'s end: flickering flame light and strong heat.',
+export const campfire = () => event({ name: 'Campfire', t0: 40, t1: 60, bands: ['vis', 'ir'], freq: ['flame', 'thermal1200'], note: 'Journey\'s end: flickering flame light and strong heat.',
   init() {
     const base = campPos(), G = new THREE.Group(); G.position.copy(base);
     const lm = new THREE.MeshStandardMaterial({ color: new THREE.Color(.05, .03, .02), roughness: .95 });
@@ -120,7 +120,7 @@ export const campfire = () => event({ name: 'Campfire', t0: 40, t1: 60, bands: [
     this.ir.set(this.base.clone().add(new V3(0, .5, 0)), 3.5, lit * f); },
   where() { return this.base.clone().add(new V3(0, 1, 0)); } });
 
-export const thermalUpdraft = () => event({ name: 'Thermal updraft', t0: 0, t1: 20, bands: ['ir'], note: 'A warm column of air peeling off the sunlit slope ahead — heat you only meet in infrared.',
+export const thermalUpdraft = () => event({ name: 'Thermal updraft', t0: 0, t1: 20, bands: ['ir'], freq: ['warmAir'], tags: ['stylised'], note: 'A warm column of air peeling off the sunlit slope ahead — heat you only meet in infrared.',
   init() { this.c = Array.from({ length: 4 }, () => new Rib('ir', null, 9)); },
   update() { const { t, T } = S, I = sm(0, 3, t) * (1 - sm(16, 20, t)) * warmF();
     for (let k = 0; k < 4; k++) { const az = 248 + k * 11 + Math.sin(T * .3 + k) * 3, pts = [];
@@ -128,7 +128,7 @@ export const thermalUpdraft = () => event({ name: 'Thermal updraft', t0: 0, t1: 
       this.c[k].set(pts, deg(.16), deg(.55),I * .1 * (.55 + .45 * Math.sin(T * 1.4 + k * 1.7)), 1); } },
   where: () => skyP(265, 22) });
 
-export const fireWhirl = () => event({ name: 'Fire whirl', t0: 46, t1: 60, bands: ['vis', 'ir'], note: 'A slow whirl of embers lifts off the campfire: bright flame sparks and a great deal of heat.',
+export const fireWhirl = () => event({ name: 'Fire whirl', t0: 46, t1: 60, bands: ['vis', 'ir'], freq: ['flame', 'thermal1200'], tags: ['stylised'], note: 'A slow whirl of embers lifts off the campfire: bright flame sparks and a great deal of heat.',
   init() { this.s = Array.from({ length: 10 }, () => new Em('vis', '#ffd27a')); this.h = Array.from({ length: 6 }, () => new Em('ir')); this.p = null; },
   update() { const { t, T } = S, I = sm(44, 48, t); if (I <= 0) return;
     const { x, y, z } = campPos(); this.p = new V3(x, y + 4, z);

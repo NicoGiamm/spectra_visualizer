@@ -10,20 +10,20 @@ import { SUN_AZ, sunEl } from 'spectra/world/atmosphere.js';
 import { coastZ, heightAt, sandMat, SAND_INSTR, SEA, STAND } from './world.js';
 
 // The last sliver of Sun flashes green as it drops under a sharp sea horizon (sunEl crosses 0 at t≈7.3).
-export const greenFlash = () => event({ name: 'Green flash', t0: 6.4, t1: 8.6, bands: ['vis'], note: 'Refraction splits the last sliver of the Sun over a clean sea horizon: a second of emerald.',
+export const greenFlash = () => event({ name: 'Green flash', t0: 6.4, t1: 8.6, bands: ['vis'], freq: ['greenFlash'], tags: ['rare'], note: 'Refraction splits the last sliver of the Sun over a clean sea horizon: a second of emerald.',
   init() { this.e = new Em('vis', '#5dff8a'); this.c = new Em('vis', '#b8ffd0'); },
   update() { const { t, T } = S, I = env(t, 6.6, 8.4, .5) * (.75 + .25 * Math.sin(T * 30)); this.p = skyP(SUN_AZ, Math.max(sunEl(), -.15) + .12);
     this.e.set(this.p, deg(1.1), I * 1.1); this.c.set(this.p, deg(.35), I * 1.4); },
   where() { return this.p; } });
 
-export const warmSand = () => event({ name: 'Warm sand cooling', t0: 0, t1: 45, bands: ['ir'], note: 'Sand soaked up the afternoon Sun and radiates it back as infrared; the sea, slower to change, stays cool.',
+export const warmSand = () => event({ name: 'Warm sand cooling', t0: 0, t1: 45, bands: ['ir'], freq: ['thermal290'], note: 'Sand soaked up the afternoon Sun and radiates it back as infrared; the sea, slower to change, stays cool.',
   init() { this.e = Array.from({ length: 14 }, () => { const x = (R() - .5) * 90, z = coastZ(x) + 6 + R() * 26; return { p: new V3(x, heightAt(x, z) + .1, z), s: 2.5 + R() * 3 }; }); this.f = new EmField('ir', this.e.length); },
   update() { const w = 1 - sm(0, 45, S.t), on = S.on; SAND_INSTR.uniforms.uWarm.value = on.ir ? w * .6 : 0; S.act.ir += w * .4; sandMat.emissive.setRGB(on.ir ? w * .05 : 0, on.ir ? w * .014 : 0, 0);
     this.e.forEach((q, k) => this.f.set(k, q.p, q.s, w * .35)); },
   where: () => null });
 
 // Gulls: warm bodies (realistic IR), dark silhouettes against the dusk.
-export const gulls = () => event({ name: 'Gulls heading home', t0: 0, t1: 20, bands: ['ir', 'vis'], note: 'Warm-blooded gliders: dim shapes by eye, crisp heat signatures in infrared.',
+export const gulls = () => event({ name: 'Gulls heading home', t0: 0, t1: 20, bands: ['ir', 'vis'], freq: ['thermal310', 'sunlight'], note: 'Warm-blooded gliders: dim shapes by eye, crisp heat signatures in infrared.',
   init() {
     const m = new THREE.MeshBasicMaterial({ color: 0x0a0a0e, side: THREE.DoubleSide }), wg = new THREE.BufferGeometry();
     wg.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, -.12, 0, 0, .12, -.7, .1, 0], 3));
@@ -38,7 +38,7 @@ export const gulls = () => event({ name: 'Gulls heading home', t0: 0, t1: 20, ba
       b.e.set(p, .9, I * .45); }); },
   where: () => null });
 
-export const lighthouse = () => event({ name: 'Lighthouse', t0: 9, t1: 60, bands: ['vis', 'radio'], note: 'A rotating beam sweeps the bay every few seconds; its radio beacon keeps broadcasting for ships.',
+export const lighthouse = () => event({ name: 'Lighthouse', t0: 9, t1: 60, bands: ['vis', 'radio'], freq: ['incandescent', 'radiobeacon'], note: 'A rotating beam sweeps the bay every few seconds; its radio beacon keeps broadcasting for ships.',
   init() {
     const x = 900, z = coastZ(x) + 55, y = heightAt(x, z), G = new THREE.Group(); G.position.set(x, y, z);
     const white = new THREE.MeshStandardMaterial({ color: 0xbfb8ae, roughness: .7 }), red = new THREE.MeshStandardMaterial({ color: 0x6a1410, roughness: .7 });
@@ -62,7 +62,7 @@ export const lighthouse = () => event({ name: 'Lighthouse', t0: 9, t1: 60, bands
   where() { return this.top; } });
 
 // A container ship crossing the horizon: nav lights, X-band radar sweep (microwave), AIS bursts (VHF radio), hot funnel.
-export const ship = () => event({ name: 'Container ship', t0: 4, t1: 52, bands: ['vis', 'micro', 'radio', 'ir'], note: 'Masthead and side lights, a rotating X-band radar, AIS position bursts on VHF and a hot exhaust funnel.',
+export const ship = () => event({ name: 'Container ship', t0: 4, t1: 52, bands: ['vis', 'micro', 'radio', 'ir'], freq: ['navRed', 'incandescent', 'xbandRadar', 'ais', 'thermal700'], note: 'Masthead and side lights, a rotating X-band radar, AIS position bursts on VHF and a hot exhaust funnel.',
   init() {
     const hull = new THREE.MeshStandardMaterial({ color: 0x15100f, roughness: .8 }), G = new THREE.Group();
     const h = new THREE.Mesh(new THREE.BoxGeometry(220, 14, 32), hull); h.position.y = 4; G.add(h);
@@ -85,7 +85,7 @@ export const ship = () => event({ name: 'Container ship', t0: 4, t1: 52, bands: 
     this.funnel.set([at(-95, 30), at(-100, 60), at(-108, 95)], 10, 26, I * .5); this.hot.set(at(-95, 31), 18, I * .45); },
   where() { return this.p; } });
 
-export const bioluminescence = () => event({ name: 'Bioluminescent surf', t0: 24, t1: 60, bands: ['vis'], note: 'Plankton flash blue wherever the breaking waves stir them: cold light, no heat.',
+export const bioluminescence = () => event({ name: 'Bioluminescent surf', t0: 24, t1: 60, bands: ['vis'], freq: ['dinoflagellate'], note: 'Plankton flash blue wherever the breaking waves stir them: cold light, no heat.',
   init() { this.e = Array.from({ length: 40 }, () => { const x = STAND.x + (R() - .5) * 140; return { x, off: 2 + R() * 20, ph: R() * 6, s: .5 + R() }; }); this.f = new EmField('vis', this.e.length, '#3fb4ff'); },
   update() { const { t, T } = S, I = sm(24, 32, t); SEA.mat.uniforms.uBio.value = S.on.vis ? I : 0; if (I <= 0) return; S.act.vis += I * .3;
     this.e.forEach((q, k) => { const z = coastZ(q.x) - q.off, b = Math.max(0, Math.sin(T * 1.4 + q.off * .32 + q.ph)) ** 12;

@@ -43,7 +43,7 @@ and a commit. Steps inside a phase are ordered; phases 3–6 can be reordered on
   instance attributes). API: `field.set(i, pos, size, I)`; activity accounting identical to `Em`. Same for ribbons if
   needed later (`RibBatch`). Migrate fireflies, Wi-Fi, street lights, car lights.
   *Done when* draw calls (log `renderer.info.render.calls` in `?dump`) drop ≥50 % in the city with identical screenshots.
-- [ ] **0.3 Spectral reference table.**
+- [x] **0.3 Spectral reference table.**
   `engine/core/spectrum.js`: named emitters/processes with frequency or wavelength, e.g.
   `wifi24: { f: 2.4e9 }`, `fm: { f: 1e8 }`, `ais: { f: 162e6 }`, `xbandRadar: { f: 9.4e9 }`, `carRadar: { f: 77e9 }`,
   `na589: { λ: 589e-9 }`, `o5577: { λ: 557.7e-9 }`, `o7774: { λ: 777.4e-9 }`… plus `bandOf(entry)` that derives
@@ -253,4 +253,14 @@ dashes, lamp poles/arms, light pools → 3 meshes; car bodies/cabins → 2 Insta
 Activity samples identical to the baseline (only the random lightning flicker differs).
 Draw calls: trail 101/218/158 → 80/136/158 · seaside 87/179/119 → 74/125/107 · **city 452/719/736 → 64/162/157**.
 Also dimmed the far-facade window average (was a flat beige wall at night).
+
+### 2026-11-21 · 0.3 done — Phase 0 complete
+`engine/core/spectrum.js`: ~90 processes (f / λ / E), `bandOf()` from the BANDS ranges, `describe()` for labels
+("2.4 GHz · 12.5 cm"), flags `ground: false` (absorbed by the atmosphere) and `stylised: true`. Every event lists
+`freq: [...]` (+ provisional `tags`). The dump now records the bands each event *actually draws*; `spectra timeline`
+prints a physics check (declared ↔ processes ↔ drawn). Fixed: Pulsar drew an undeclared visible glow; flames had no
+process. **0 warnings** in all scenarios.
+The check's info lines are the Phase 2 to-do list: 19 processes absorbed before the ground (meteor UV, pulsar /
+BH-binary / comet / supernova / GRB X-rays, lunar & shower gamma, auroral UV/X/AKR, NLC UV…) and 5 stylised ones
+(zodiacal scatter ×2, warm air, IR moon-halo ring, air-shower X-ray shaft).
 

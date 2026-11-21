@@ -8,6 +8,7 @@ First-person 3D scenes (three.js) that play a 2-minute sunset-to-night timelapse
 
 - `uv run spectra serve` — dev server (ES modules don't load over file://); also regenerates root `index.html`.
 - `uv run spectra build [ids…]` — `dist/<id>.html` single files (each module inlined as a `data:` URL in the import map) + `dist/index.html`; also regenerates root `index.html`. Root `index.html` and `dist/` are generated from `engine/ui/landing.html` — edit the template.
+- `uv run spectra timeline [ids…]` — headless `?dump`: event gantt, per-band activity vs meter tops, scene draw calls, and a physics check (declared bands ↔ `freq` processes ↔ bands actually drawn). Keep it at 0 warnings; compare draw calls before/after perf work.
 - `uv run spectra shot <id> -t 30 [--yaw .3 --pitch .5 --bands ir,micro] -o out.png` — headless render; prints grouped console messages (shader compile logs included) and exits 1 on any. **Run it after every change**; there is no lint or test suite.
 
 **Roadmap:** `.claude/plans/improvement-plan.md` is the multi-step plan (spectral surfaces, physical realism, aurora, city RF density). Work it step by step, tick the checkbox and add a progress note when a step is done.
@@ -17,6 +18,8 @@ Imports: engine modules import each other relatively; scenarios import the engin
 ## Conventions that matter
 
 - **Band effects live in GLSL, not JS** (`engine/render/shaders.js`). `bandMat(band, color, ribbon, real)`; `Em` (camera-facing glow quad) and `Rib` (camera-facing ribbon along world points) in `engine/render/sources.js`. `set()` adds to `S.act[band]` (meters) and hides the mesh when the band is filtered off. **New spectral sources use `Em`/`Rib`, never hand-drawn meshes.** The loop hides every source before updates, so an invisible source simply isn't `set()`.
+- **Crowds use `EmField(band, n, color, real)`** (one instanced draw call; `set(i, pos, size, I)`, `color(i, c)`), not hundreds of `Em`s. Merge static scenery (`mergeGeometries`) or instance it; watch draw calls in `spectra timeline`.
+- **Every event lists its physical processes** in `freq: [...]` — keys of `SPECTRUM` in `engine/core/spectrum.js` (f / λ / E; bands are derived, `ground: false` = absorbed by the atmosphere, `stylised: true` = not real as drawn). Add new processes there rather than guessing a band. Optional `tags: ['rare' | 'time-compressed' | 'stylised']`.
 - **`real = 1` picks the realistic IR style** (tight, low-contrast rising heat, no false-colour rings) for moving warm bodies: deer `Rib('ir', null, 4, 1)` + head `Em('ir', null, 1)`, bats, gulls, airliner/ship/car exhausts. Static hot sources keep the thermal palette.
 - **Events** are objects `{ name, t0, t1, bands, note, init(), update(), where() }` on the **0–60 script axis** (`S.t`; playback `t += dt * .5`, slider 0–120). Shared ones are factories in `engine/events/sky.js` taking overrides (`sky.thunderstorm({ note })`); when retiming a library event check what its `update()` hard-codes. Local ones live in the scenario's `events.js`. `update()` must reset sizes/intensities every frame. Read `t`/`T`/`on`/`camera` from `S` (`engine/core/state.js`).
 - **`where` must be a method, not an arrow**, when it reads `this` (ES modules: arrow `this` is undefined).

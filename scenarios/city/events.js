@@ -7,13 +7,13 @@ import { Em, Rib, EmField } from 'spectra/render/sources.js';
 import { solid } from 'spectra/render/instrument.js';
 import { BUILD, LAMPS, ROOFS, WINDOWS, PARK_Z, GROUND_INSTR } from './world.js';
 
-export const windows = () => event({ name: 'Lit windows & heat island', t0: 0, t1: 60, bands: ['vis', 'ir'], note: 'Windows light up one by one; on a thermal camera every building leaks the day\'s stored heat.',
+export const windows = () => event({ name: 'Lit windows & heat island', t0: 0, t1: 60, bands: ['vis', 'ir'], freq: ['incandescent', 'thermal290'], note: 'Windows light up one by one; on a thermal camera every building leaks the day\'s stored heat.',
   update() { const { t, on } = S, lit = .06 + .5 * sm(6, 24, t);
     BUILD.lit.value = on.vis ? lit : 0; BUILD.heat.value = on.ir ? 1 : 0; GROUND_INSTR.uniforms.uWarm.value = on.ir ? .18 : 0;
     S.act.vis += lit * .8; S.act.ir += .7; },
   where: () => null });
 
-export const streetLights = () => event({ name: 'Street lights', t0: 8, t1: 60, bands: ['vis', 'ir'], note: 'Sodium lamps flicker on at dusk: orange light with a strong near-infrared tail.',
+export const streetLights = () => event({ name: 'Street lights', t0: 8, t1: 60, bands: ['vis', 'ir'], freq: ['na589', 'na819'], note: 'Sodium lamps flicker on at dusk: orange light with a strong near-infrared tail.',
   init() { this.v = new EmField('vis', LAMPS.length, '#ffb45a'); this.i = new EmField('ir', LAMPS.length); },
   update() { const { t, T } = S; let sum = 0;
     LAMPS.forEach((l, k) => { const on = sm(9 + l.k * 4, 9.6 + l.k * 4, t), warm = on * (t < 9.6 + l.k * 4 ? .6 + .4 * Math.sin(T * 40 + k) : 1);   // a brief flicker while striking
@@ -22,7 +22,7 @@ export const streetLights = () => event({ name: 'Street lights', t0: 8, t1: 60, 
   where: () => null });
 
 // Mobile mast on a rooftop on the south side of the avenue, just before the park.
-export const cellTower = () => event({ name: '5G mast', t0: 0, t1: 60, bands: ['micro', 'vis'], note: 'Sector antennas on a rooftop beam microwave to every phone in the street; red light for aircraft.',
+export const cellTower = () => event({ name: '5G mast', t0: 0, t1: 60, bands: ['micro', 'vis'], freq: ['nr35', 'lte800', 'navRed'], note: 'Sector antennas on a rooftop beam microwave to every phone in the street; red light for aircraft.',
   init() {
     const cands = ROOFS.filter(r => r.side < 0 && r.p.z > PARK_Z + 8 && r.p.z < PARK_Z + 70);
     const r = cands.sort((a, b) => b.h - a.h)[0] || ROOFS[0], b = r.p, H = 12, pts = [];
@@ -38,13 +38,13 @@ export const cellTower = () => event({ name: '5G mast', t0: 0, t1: 60, bands: ['
     this.red.set(this.top, 2.2, T % 1.6 < .5 ? 1.3 : .05); },
   where() { return this.top; } });
 
-export const wifi = () => event({ name: 'Wi-Fi routers', t0: 0, t1: 60, bands: ['micro'], note: '2.4 and 5 GHz routers behind the windows, chattering in short bursts.',
+export const wifi = () => event({ name: 'Wi-Fi routers', t0: 0, t1: 60, bands: ['micro'], freq: ['wifi24', 'wifi5'], note: '2.4 and 5 GHz routers behind the windows, chattering in short bursts.',
   init() { this.e = WINDOWS.map(p => ({ p, r: 1.5 + R() * 3, ph: R() * 6 })); this.f = new EmField('micro', this.e.length); },
   update() { const { T } = S; this.e.forEach((q, k) => { const b = Math.max(0, Math.sin(T * q.r + q.ph)) ** 6; this.f.set(k, q.p, 2.2, .25 + b * .6); }); },
   where: () => null });
 
 // Cars on the avenue; it runs on through the park, so they appear and vanish far away.
-export const traffic = () => event({ name: 'Traffic', t0: 0, t1: 60, bands: ['vis', 'ir', 'micro'], note: 'Headlights and tail lights, hot engines and exhausts, and 77 GHz collision radar in every new car.',
+export const traffic = () => event({ name: 'Traffic', t0: 0, t1: 60, bands: ['vis', 'ir', 'micro'], freq: ['ledWhite', 'navRed', 'thermal700', 'carRadar'], note: 'Headlights and tail lights, hot engines and exhausts, and 77 GHz collision radar in every new car.',
   init() {
     const lanes = [[2.2, -1], [5.8, -1], [-2.2, 1], [-5.8, 1]];   // [x, direction along z]: westbound on the north (+x) side
     const geoB = new THREE.BoxGeometry(1.8, .75, 4.4), geoC = new THREE.BoxGeometry(1.6, .6, 2.3); geoB.translate(0, .62, 0); geoC.translate(0, 1.3, -.2);
@@ -78,7 +78,7 @@ export const traffic = () => event({ name: 'Traffic', t0: 0, t1: 60, bands: ['vi
   where: () => null });
 
 // Fireworks over the park at the end of the walk.
-export const fireworks = () => event({ name: 'Fireworks', t0: 50, t1: 60, bands: ['vis', 'ir'], note: 'Metal salts burn in bright colours; the shells and burning stars are hot in infrared too.',
+export const fireworks = () => event({ name: 'Fireworks', t0: 50, t1: 60, bands: ['vis', 'ir'], freq: ['strontium', 'thermal1200'], note: 'Metal salts burn in bright colours; the shells and burning stars are hot in infrared too.',
   init() { this.b = Array.from({ length: 8 }, (_, i) => {
     const c = new V3((R() - .5) * 240, 85 + R() * 70, PARK_Z - 230 - R() * 160), hue = R();
     return { t0: 50.2 + i * 1.15 + R() * .4, c, col: '#' + new THREE.Color().setHSL(hue, 1, .62).getHexString(),

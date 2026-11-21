@@ -5,7 +5,7 @@ import { event } from '../core/events.js';
 import { Em } from '../render/sources.js';
 import { ENV } from '../world/atmosphere.js';
 
-export const observer = o => event({ name: 'You', t0: 0, t1: 60, bands: ['vis', 'micro'], note: 'Your phone pings the network (microwave) every few seconds.', lamp: false,
+export const observer = o => event({ name: 'You', t0: 0, t1: 60, bands: ['vis', 'micro'], freq: ['lte', 'ledWhite'], note: 'Your phone pings the network (microwave) every few seconds.', lamp: false,
   init() { this.ph = new Em('micro'); },
   update() { const { t, on, camera } = S;
     if (this.lamp) { const lamp = sm(16, 19, t); ENV.headlamp.intensity = on.vis ? lamp * 60 : 0; S.act.vis += lamp * .4; }

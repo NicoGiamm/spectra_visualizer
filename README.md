@@ -21,6 +21,7 @@ uv run spectra serve            # http://127.0.0.1:8000 — landing page linking
 uv run spectra build            # dist/<scenario>.html: single self-contained files, open from disk
 uv run spectra shot city -t 54  # headless screenshot at script time 54, reports JS/shader errors
 uv run spectra list             # scenarios found under scenarios/
+uv run spectra timeline city    # event gantt, per-band activity, draw calls, physics check
 ```
 
 The source pages use ES modules, and browsers refuse to load those over `file://`. Either serve the repo (`spectra serve`) or open the bundled files in `dist/`.

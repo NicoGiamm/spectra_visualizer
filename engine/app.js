@@ -20,6 +20,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { clamp } from './core/util.js';
 import { S } from './core/state.js';
 import { BANDS, METER_NORM } from './core/bands.js';
+import { SPECTRUM, bandOf, describe } from './core/spectrum.js';
 import { hideAllSources, EMS, RIBS, FIELDS } from './render/sources.js';
 import { applyVisMode } from './render/instrument.js';
 import { createAtmosphere } from './world/atmosphere.js';
@@ -84,7 +85,7 @@ function start(sc) {
   hud.sync();
 
   // one simulation step at script time t (no render): what the frame loop does before composer.render()
-  function step(t) {
+  function step(t, drawn) {      // drawn: optional array of Sets, collects the bands each event actually emitted
     S.t = t; S.T = t * 2; S.TIME.value = S.T;
     BANDS.forEach(b => S.act[b.id] = 0);
     hideAllSources();
@@ -92,7 +93,11 @@ function start(sc) {
     camera.rotation.set(S.pitch, S.yaw, 0);
     atmo.update();
     world.update && world.update(S.t);
-    EV.forEach(e => e.update && e.update());
+    EV.forEach((e, i) => {
+      if (!drawn) { e.update && e.update(); return; }
+      const before = { ...S.act }; e.update && e.update();
+      BANDS.forEach(b => { if (S.act[b.id] - before[b.id] > 1e-6) drawn[i].add(b.id); });
+    });
   }
   if (q.has('dump')) dumpReport(sc, EV, step, norm, +(q.get('dstep') || .5));
   if (q.has('t')) S.t = clamp(+q.get('t'), 0, 60); else S.t = 0;
@@ -122,9 +127,9 @@ function start(sc) {
 // count draw calls at a few moments, and write the report as JSON into <script id="spectra-dump">
 // (read by `uv run spectra timeline`).
 function dumpReport(sc, EV, step, norm, dt) {
-  const { renderer, scene, camera } = S, samples = [];
+  const { renderer, scene, camera } = S, samples = [], drawn = EV.map(() => new Set());
   for (let t = 0; t <= 60 + 1e-6; t += dt) {
-    step(t);
+    step(t, drawn);
     samples.push({ t: +t.toFixed(3), act: Object.fromEntries(BANDS.map(b => [b.id, +S.act[b.id].toFixed(4)])),
       active: EV.flatMap((e, i) => (t >= e.t0 && t <= e.t1 ? [i] : [])) });
   }
@@ -137,7 +142,13 @@ function dumpReport(sc, EV, step, norm, dt) {
   });
   const report = {
     scenario: sc.title, step: dt, norm, draws, sources: { em: EMS.length, rib: RIBS.length, fields: FIELDS.length, fieldInstances: FIELDS.reduce((a, f) => a + f.n, 0) },
-    events: EV.map(e => ({ name: e.name, t0: e.t0, t1: e.t1, bands: e.bands, freq: e.freq || [], tags: e.tags || [] })),
+    events: EV.map((e, i) => {
+      const freq = e.freq || [], known = freq.filter(k => SPECTRUM[k]);
+      return { name: e.name, t0: e.t0, t1: e.t1, bands: e.bands, tags: e.tags || [], drawn: [...drawn[i]],
+        freq: known.map(k => ({ key: k, name: SPECTRUM[k].name, band: bandOf(SPECTRUM[k]), at: describe(SPECTRUM[k]),
+          ground: SPECTRUM[k].ground !== false, stylised: !!SPECTRUM[k].stylised })),
+        unknownFreq: freq.filter(k => !SPECTRUM[k]) };
+    }),
     samples,
   };
   const el = document.createElement('script'); el.type = 'application/json'; el.id = 'spectra-dump';
