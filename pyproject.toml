@@ -1,0 +1,19 @@
+[project]
+name = "spectra-visualizer"
+version = "0.2.0"
+description = "First-person 3D scenes with events emitting across the electromagnetic spectrum; Python tooling to serve, bundle and screenshot them."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "cyclopts>=4.25.3",
+]
+
+[project.scripts]
+spectra = "spectra_tools.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.9,<1"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "spectra_tools"
