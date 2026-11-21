@@ -12,7 +12,7 @@ import { solid } from 'spectra/render/instrument.js';
 import { bounce, along } from 'spectra/world/bounce.js';
 import { addTx, addHits } from 'spectra/render/surface.js';
 import { burst, inWin, litNow } from './events.js';
-import { SIDEWALK_X, FACE_X, PARK_Z, TRAM_Z, WINDOWS, PARKED, BUS, FM, MAST, PYLONS, POWER_Z, PYLON_H, FLATS, BOXES, SIGNS } from './world.js';
+import { SIDEWALK_X, FACE_X, PARK_Z, TRAM_Z, WINDOWS, PARKED, BUS, FM, MAST, PYLONS, POWER_Z, PYLON_H, FLATS, BOXES, SIGNS, ROOFS } from './world.js';
 
 // ---------------------------------------------------------------- 4.1 the crowd
 
@@ -127,21 +127,45 @@ export const multipath = () => event({ name: 'Multipath off the facades', t0: 6,
 
 // ---------------------------------------------------------------- 4.3 ambient haze
 
-export const haze = () => event({ name: 'Street-canyon RF haze', t0: 0, t1: 60, bands: ['micro'], freq: ['wifi24', 'wifi5', 'lte'], note: 'The canyon itself is a cloud of microwave: faint crackle patches fill the street between the facades, denser where more access points are live nearby. Walk into the park and it thins out — you feel yourself leaving the RF zone.',
+// 1 when the line of sight from the camera through p ends on the canyon itself (the street, or a street-front facade
+// below its roof), 0 when it escapes into the sky, a gap between blocks or out of the open park end. The haze is
+// faded by it so it is only ever seen against the canyon, never painted over the sky or the park trees.
+function onCanyon(cam, p) {
+  const v = p.clone().sub(cam), side = Math.sign(v.x) || 1;
+  const sG = v.y < 0 ? -cam.y / v.y : Infinity;                       // the ray reaches the ground
+  const sF = v.x ? (side * FACE_X - cam.x) / v.x : Infinity;          // ... a street-front facade plane
+  const sE = v.z < 0 ? (PARK_Z - cam.z) / v.z : Infinity;             // ... the open end at the park
+  if (sG < Math.min(sF, sE)) return 1;
+  if (sE < sF) return 0;
+  const y = cam.y + v.y * sF, z = cam.z + v.z * sF;
+  const roof = ROOFS.find(r => r.side === side && z >= r.z0 && z <= r.z1);
+  return roof ? sm(0, 2, roof.h - y) : 0;
+}
+
+export const haze = () => event({ name: 'Street-canyon RF haze', t0: 0, t1: 60, bands: ['micro'], freq: ['wifi24', 'wifi5', 'lte'], tags: ['stylised'], note: 'The canyon itself is a cloud of microwave: a fine crackle fills the street between the facades below the roofs, denser where more access points are live nearby. Walk into the park and it thins out — you feel yourself leaving the RF zone. Stylised: it maps the field density of the routers around you; the field itself is not a visible thing.',
   init() {
-    // fixed patches in the canyon volume (hash-placed, no R); each knows how many routers sit within 40 m
-    this.q = Array.from({ length: 140 }, (_, i) => {
-      const p = new V3((hash2(i, 1) - .5) * 2 * (FACE_X - 1.5), 2 + 22 * hash2(i, 2) ** 1.6, PARK_Z + 2 + hash2(i, 3) * 260);
-      return { p, s: 2.5 + 3 * hash2(i, 4), ph: hash2(i, 5) * 6.28, n: FLATS.filter(f => f.p.distanceTo(p) < 40) };
+    // fixed patches in the canyon volume (hash-placed, no R): small (the micro shader draws 26 cells across a quad,
+    // so a 1–2 m patch gives 4–8 cm cells, not the 10–21 cm blocks of the old 2.5–5.5 m ones), and below 9 m so the
+    // top stays under the lowest street-front roof (12 m, world.js buildings()); onCanyon() hides what the eye would
+    // see against the sky or the park.
+    // Each patch knows the routers within 40 m: the local field density, so the haze is densest mid-canyon and
+    // thins toward the open park end, where no APs stand.
+    this.q = Array.from({ length: 360 }, (_, i) => {
+      const s = .9 + 1.1 * hash2(i, 4);
+      const p = new V3((hash2(i, 1) - .5) * 2 * (FACE_X - 1.5), 1.2 + (8.4 - s / 2) * hash2(i, 2) ** 1.4, PARK_Z + 2 + hash2(i, 3) * 260);
+      return { p, s, ph: hash2(i, 5) * 6.28, n: FLATS.filter(f => f.p.distanceTo(p) < 40) };
     });
     this.f = new EmField('micro', this.q.length);
   },
   update() { const { t, T, camera } = S, cam = camera.position, lit = litNow(t);
     this.q.forEach((q, k) => {
-      const d = q.p.distanceTo(cam); if (d < 4 || d > 110) return;
+      const d = q.p.distanceTo(cam); if (d < 2.5 || d > 110) return;
       const live = q.n.reduce((a, f) => a + (f.shop || f.k < lit / .56 ? 1 : .35), 0);   // beacons from every AP, data from the busy ones
-      const I = sm(2, 25, live) * (1 - sm(60, 110, d)) * (.55 + .45 * Math.sin(T * 1.3 + q.ph)) * .09;
-      this.f.set(k, q.p, q.s, I);
+      // fade in from 2.5 to 7 m (no big near squares), out with depth from 60 to 110 m; and over the last 20 m before
+      // the park the canyon opens, so the patches there do not hang in front of the trees
+      let I = sm(2, 25, live) * sm(2.5, 7, d) * (1 - sm(60, 110, d)) * sm(PARK_Z + 2, PARK_Z + 22, q.p.z) * (.55 + .45 * Math.sin(T * 1.3 + q.ph)) * .14;
+      if (I > .01) I *= onCanyon(cam, q.p);
+      this.f.set(k, q.p, Math.min(q.s, d * .1), I);   // near patches shrink: a cell (1/26 of the quad) never exceeds ~0.2°
     }); },
   where: () => null });
 
