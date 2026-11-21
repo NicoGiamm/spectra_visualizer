@@ -15,8 +15,11 @@ run({
   hint: 'Drag to look ahead and up (a quarter sphere) · scroll to zoom · click a band or press 1–7 to filter · space = play/pause · the walk lasts 1½ minutes',
   atmosphere: { lightPollution: .7, cloudCover: [.55, .7] },
   fog: .00022,
-  // the crowd (phones, TPMS, haze) and the street life raise the near-field counts by an order of magnitude
-  meterNorm: { radio: 12, micro: 78, ir: 70, vis: 230, uv: 4.5, xray: 7.5, gamma: 21 },
+  // Retuned in Orbit (the default detector) so each bar's 90th percentile sits near 0.85: the city really has an
+  // order of magnitude more near emitters in micro (routers, phones, TPMS, haze), ir (bodies, exhausts, warm
+  // facades) and vis (windows, lamps, signs). Gamma: the granite-kerb blips are city-only and pinned the default
+  // 3.4 for 20 s. Radio, UV and X-ray keep the shared defaults (the city adds little there or it is sky-driven).
+  meterNorm: { micro: 45, ir: 48, vis: 140, gamma: 5 },
   build,
   events: () => [
     sky.sunset(), local.windows(), local.streetLights(), local.cellTower(), local.wifi(), local.traffic(),
