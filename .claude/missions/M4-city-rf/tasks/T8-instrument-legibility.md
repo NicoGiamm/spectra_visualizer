@@ -1,10 +1,10 @@
 ---
 id: M4/T8
 title: Instrument view: microwave surface crackle buries the IR heat leaks
-status: in-progress
+status: done
 labels: [gap]
 started: 2026-11-21
-completed:
+completed: 2026-11-21
 ---
 
 # M4/T8 — Instrument view: microwave surface crackle buries the IR heat leaks
@@ -41,4 +41,8 @@ files: engine/render/surface.js, scenarios/city/world.js
 
 ## Outcome
 
-<Written by `mission-tracker task <ref> --done --evidence <file>`: what changed, numbers, shots, what was not verified.>
+The microwave term of the shared surface chunk (c94c5ba, engine/render/surface.js `surfBands`, +10/−4) now crackles in cells of ~0.1–0.2° that scale with distance (power-of-two world sizes so they stay put, 3-D cells so walls get square cells) instead of fixed 0.4 m cells that grew to tens of pixels up close. Spark coverage ~4–10 % (was ~10–35 %), with the per-cell orange/yellow tint on the sparks only over an even amber brightness-temperature wash; the transmitter field is soft-saturated in the instrument view. With IR also on, the wash scales by .15 and the sparks by .5, so the thermal palette carries the surfaces; multipath hit flashes and all Em/Rib/EmField emitters keep full brightness. Visible overlay and meter accounting unchanged; no new uniforms, varyings, draw calls or pow().
+
+Numbers: `spectra timeline` 0 warnings Orbit + Ground for all three scenarios; draw calls unchanged (city 97/266/266, seaside 71/128/107, trail 82/149/162). Before/after shots at -t 30, all exit 0: city `--bands ir,micro` — window-frame heat leaks, cold glass and warm asphalt now read on both facades (scene luminance 92 → 67; checked by the main session); trail ir,micro — warm rocks visible (61 → 40); seaside nearly unchanged (sea uses its own shader); `--bands ir` alone unchanged within run-to-run noise; `--bands micro` alone deliberately finer (city 58 %, trail 37 % of pixels changed; logged decision, item 3 amended); city `--bands vis -t 30` pixel-identical; city all bands within noise; city `--bands micro -t 18 --yaw .2 --pitch .3` keeps both multipath hit flashes, now standing out with the Wi-Fi tints.
+
+Not verified: t 5 / t 54 and Ground-detector shots; a dedicated roof shot; a real GPU (SwiftShader only; no new NaN risk). Not changed (scenario-owned): the seaside `seaBands` foam-line micro crackle (large cells, no IR toning) and the trail's `trailTerrain` mast dashes.
