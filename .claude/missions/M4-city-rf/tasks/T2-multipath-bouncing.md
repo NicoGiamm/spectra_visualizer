@@ -1,9 +1,9 @@
 ---
 id: M4/T2
 title: Multipath bouncing
-status: backlog
+status: in-progress
 labels: [needs-verification]
-started:
+started: 2026-11-21
 completed:
 ---
 

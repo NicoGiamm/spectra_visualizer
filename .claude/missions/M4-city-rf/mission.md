@@ -35,7 +35,7 @@ T1–T5 implemented on main in a9adb2f before missions existed (draw calls 82/21
 | Task | Status | Labels | Title |
 |---|---|---|---|
 | [M4/T1](tasks/T1-crowd-of-emitters.md) | done | needs-verification | Crowd of emitters |
-| [M4/T2](tasks/T2-multipath-bouncing.md) | backlog | needs-verification | Multipath bouncing |
+| [M4/T2](tasks/T2-multipath-bouncing.md) | in-progress | needs-verification | Multipath bouncing |
 | [M4/T3](tasks/T3-ambient-field-haze.md) | backlog | needs-verification | Ambient field haze |
 | [M4/T4](tasks/T4-true-radio-in-the-city.md) | backlog | needs-verification | True radio in the city |
 | [M4/T5](tasks/T5-more-visible-ir-life.md) | backlog | needs-verification | More visible/IR life |
