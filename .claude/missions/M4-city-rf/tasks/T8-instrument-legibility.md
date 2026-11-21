@@ -33,3 +33,6 @@ files: engine/render/surface.js, scenarios/city/world.js
 - [ ] `--bands micro` alone and `--bands ir` alone look as before (city, trail, seaside at t 30)
 - [ ] Trail and seaside `--bands ir,micro` at t 30 inspected: no regression
 
+## Outcome
+
+<Written by `mission-tracker task <ref> --done --evidence <file>`: what changed, numbers, shots, what was not verified.>

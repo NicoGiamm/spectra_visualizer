@@ -34,3 +34,6 @@ files: scenarios/city/rf.js, scenarios/city/world.js, scenarios/city/street.js
 - [ ] Near lit windows and shop fronts show a warm hue with variation, no flat white panels (t 30 and t 54)
 - [ ] `spectra shot city --bands micro -t 30`: the haze is still visible in the canyon and fades toward the park
 
+## Outcome
+
+<Written by `mission-tracker task <ref> --done --evidence <file>`: what changed, numbers, shots, what was not verified.>
