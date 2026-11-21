@@ -28,10 +28,16 @@ files: engine/render/surface.js, scenarios/city/world.js
 
 ## Acceptance
 
-- [ ] `spectra timeline`: 0 warnings in Orbit and Ground for all three scenarios, draw calls unchanged
-- [ ] `spectra shot city -t 30 --bands ir,micro`: window-frame heat leaks and warm roofs are clearly visible
-- [ ] `--bands micro` alone and `--bands ir` alone look as before (city, trail, seaside at t 30)
-- [ ] Trail and seaside `--bands ir,micro` at t 30 inspected: no regression
+- [x] `spectra timeline`: 0 warnings in Orbit and Ground for all three scenarios, draw calls unchanged
+- [x] `spectra shot city -t 30 --bands ir,micro`: window-frame heat leaks and warm roofs are clearly visible
+- [x] `--bands ir` alone looks as before; `--bands micro` alone keeps its brightness-temperature physics readable (city, trail, seaside at t 30) — amended 2026-11-21, see Notes
+- [x] Trail and seaside `--bands ir,micro` at t 30 inspected: no regression
+
+## Notes
+
+*2026-11-21:* third Acceptance item amended (was "`--bands micro` alone and `--bands ir` alone look as before"): the brief asked for finer, sparser crackle in micro alone too, because the old large tiles hid every micro emitter; recorded as a decision in mission.md. IR alone is unchanged within run-to-run noise (pixel diff city 1.7 % vs 2.1 % between two identical runs); micro alone differs on purpose (city 58 %, trail 37 % of pixels), seaside micro barely (6.8 %: the sea uses the seaside's own `seaBands` shader).
+
+*2026-11-21:* not changed (scenario-owned): the seaside `seaBands` micro crackle (`cs = max(.4, dist*.012)`, ~0.7° cells) keeps a large foam-line checkerboard at the near shore and has no IR toning; the trail's `trailTerrain` mast coverage dashes are not IR-toned. Candidates for M5 / a trail gap.
 
 ## Outcome
 
