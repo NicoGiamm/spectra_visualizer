@@ -4,7 +4,7 @@
 // lawns cool fast, facades leak heat around their windows and the glass mirrors the cold sky in IR.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { V3, sm, R, noise2 } from 'spectra/core/util.js';
+import { V3, sm, R, noise2, hash2 } from 'spectra/core/util.js';
 import { S } from 'spectra/core/state.js';
 import { solid, visOnly } from 'spectra/render/instrument.js';
 import { spectral } from 'spectra/render/surface.js';
@@ -46,6 +46,7 @@ const MARK = P(34, 16, 30, .92, .88, .35, .3, .5);         // road paint on asph
 // so visible lit windows and IR heat leaks share one pattern without per-instance data.
 const WIN_GLSL = `
 uniform float uLit, uShop;
+flat varying float vTcore;     // interior heat of this building (°C above the wall), per instance
 // x = pane, y = frame/lintel ring, z = aa (-> 1 where windows shrink under a few pixels: use the average)
 vec3 winParts(vec3 wp, vec3 n, out vec2 cell){
   vec3 an = abs(n); cell = vec2(0.); if(an.y > .5 || wp.y < 3.2) return vec3(0.);
@@ -79,22 +80,26 @@ function buildingMaterial() {
   };
   return mat;
 }
-// instrument view, IR only: frames and lintels leak the interior heat, panes mirror the cold sky at grazing angles,
-// roofs stay warm over the heated top floors
+// instrument view, IR only. Each building has its own interior heat Tcore (per instance: heated flats, a closed
+// office block, …). Glass is opaque at 8–14 µm, so panes show their own (slightly warmed) temperature mixed with
+// the cold sky they mirror at grazing angles; the frames and lintels are thermal bridges that leak Tcore; the
+// walls leak a little of it; roofs over heated top floors stay warm (the HVAC exhausts are their own event).
 const WIN_IR = `
 if(uSOnI > 0.){
   vec2 cell; vec3 wp = winParts(W, N, cell);
-  float Tw = uSurfA.y + (uSurfA.x - uSurfA.y)*exp(-uSurfT*uSurfA.z), heat = h21(cell*.37 + 5.);
+  float Tw = uSurfA.y + (uSurfA.x - uSurfA.y)*exp(-uSurfT*uSurfA.z), heat = h21(cell*.37 + 5.), Tc = vTcore;
   float cv = clamp(dot(normalize(cameraPosition - W), N), 0., 1.), eg = .84*(1. - .85*pow(1. - cv, 3.));
   float xw = clamp((uSurfA.w*Tw + (1. - uSurfA.w)*(-35.) + 4.)/44., 0., 1.);
-  float xp = clamp((eg*(Tw + 2. + 5.*heat) + (1. - eg)*(-35.) + 4.)/44., 0., 1.);
-  float xr = clamp((Tw + 4. + 8.*heat + 4.)/44., 0., 1.);
-  float xf = clamp((Tw + 5. + 4.)/44., 0., 1.);
-  vec3 cw = thermal(xw)*(.04 + .5*xw*xw), cp = thermal(xp)*(.04 + .5*xp*xp), cr = thermal(xr)*(.04 + .5*xr*xr), cf = thermal(xf)*(.04 + .5*xf*xf);
-  vec3 d = mix(wp.x*(cp - cw) + wp.y*(cr - cw), .3*(cr - cw), wp.z);
-  d += step(.5, N.y)*step(2., W.y)*(cf - cw);
+  float xl = clamp((uSurfA.w*(Tw + .25*Tc) + (1. - uSurfA.w)*(-35.) + 4.)/44., 0., 1.);
+  float xp = clamp((eg*(Tw + .4*Tc*(.6 + .8*heat)) + (1. - eg)*(-35.) + 4.)/44., 0., 1.);
+  float xr = clamp((Tw + Tc*(.7 + .6*heat) + 2. + 4.)/44., 0., 1.);
+  float xf = clamp((Tw + 3. + .6*Tc + 4.)/44., 0., 1.);
+  vec3 cw = thermal(xw)*(.04 + .5*xw*xw), cl = thermal(xl)*(.04 + .5*xl*xl), cp = thermal(xp)*(.04 + .5*xp*xp), cr = thermal(xr)*(.04 + .5*xr*xr), cf = thermal(xf)*(.04 + .5*xf*xf);
+  vec3 d = (cl - cw) + mix(wp.x*(cp - cl) + wp.y*(cr - cl), .3*(cr - cl), wp.z);
+  d += step(.5, N.y)*step(2., W.y)*(cf - cl);
   c = max(c + uSOnI*d, 0.);
 }`;
+const TCORE_VS = { vertDecl: 'attribute float aTcore; flat varying float vTcore;\n', vertMain: 'vTcore = aTcore;' };
 
 function ground() {
   const add = (w, d, x, z, color, y, preset, opts) => {
@@ -140,9 +145,13 @@ function buildings() {
     const tall = R() < .12, h = tall ? 90 + R() * 160 : 20 + R() * 55, w = tall ? 25 + R() * 25 : 30 + R() * 60;
     put(x, z, w, w * (.6 + R() * .8), h, .07 + R() * .06);
   }
+  // Tcore per building (hash, not R: the seeded layout stays unchanged): most are heated flats (4–10 °C above the
+  // wall at night), about one in five is an office block whose heating is set back after hours (0–2 °C)
+  const tc = Float32Array.from({ length: M.length }, (_, i) => hash2(i, 77) < .2 ? 2 * hash2(i, 78) : 4 + 6 * hash2(i, 79));
+  box.setAttribute('aTcore', new THREE.InstancedBufferAttribute(tc, 1));
   const mesh = new THREE.InstancedMesh(box, buildingMaterial(), M.length);
   M.forEach((m, i) => { mesh.setMatrixAt(i, m); mesh.setColorAt(i, C[i]); });
-  S.scene.add(spectral(mesh, 'facade', { weight: .8, extraDecl: WIN_GLSL, instrExtra: WIN_IR, uniforms: { uLit: BUILD.lit, uShop: BUILD.shop } }));
+  S.scene.add(spectral(mesh, 'facade', { weight: .8, extraDecl: WIN_GLSL, instrExtra: WIN_IR, uniforms: { uLit: BUILD.lit, uShop: BUILD.shop }, ...TCORE_VS }));
   return front;
 }
 

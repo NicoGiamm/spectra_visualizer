@@ -24,7 +24,7 @@ export const signs = () => event({ name: 'Neon & LED shop signs', t0: 9, t1: 60,
   where: () => null });
 
 // A band lesson: the 850 nm illuminator ring in front of every security camera is dead to the eye.
-export const cams = () => event({ name: 'Security cameras: 850 nm rings', t0: 12, t1: 60, bands: ['ir'], freq: ['ir850'], note: 'Security cameras swivel over the sidewalks and open a ring of 850 nm IR — invisible by day and by eye, but a thermal camera sees each cone flare the moment a passer-by breaks it.',
+export const cams = () => event({ name: 'Security cameras: 850 nm rings', t0: 12, t1: 60, bands: ['ir'], freq: ['ir850'], note: 'Security cameras over the sidewalks switch on a ring of 850 nm near-infrared LEDs after dusk — invisible to the eye (and to an 8–14 µm thermal camera), but bright to the cameras themselves and to any night-vision sensor.',
   init() { this.f = new EmField('ir', CAMS.length); },
   update() { const { t, T } = S, on = sm(12, 17, t);
     CAMS.forEach((q, k) => {

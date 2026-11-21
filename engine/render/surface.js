@@ -138,12 +138,13 @@ let variant = 0;
 const toVec4 = a => new THREE.Vector4(...a);
 
 // instrument (Visible off) material: dark base + structure lines + full surface bands
-function instrumentMaterial(props, { lines = 'none', cell = 25, extraDecl = '', instrExtra = '', uniforms = {} } = {}) {
+// vertDecl / vertMain: optional vertex-shader hooks (e.g. a per-instance attribute passed on as a flat varying)
+function instrumentMaterial(props, { lines = 'none', cell = 25, extraDecl = '', instrExtra = '', uniforms = {}, vertDecl = '', vertMain = '' } = {}) {
   const attr = props === 'attr';
   return new THREE.ShaderMaterial({
     defines: attr ? { SURF_ATTR: '' } : {},
     uniforms: { ...SURF_U, ...uniforms, ...(attr ? {} : { uSurfA: { value: toVec4(props.A) }, uSurfB: { value: toVec4(props.B) }, uSurfC: { value: toVec4(props.C) } }) },
-    vertexShader: SURF_VERT_DECL + `void main(){ ${SURF_VERT_MAIN}
+    vertexShader: SURF_VERT_DECL + vertDecl + `void main(){ ${SURF_VERT_MAIN} ${vertMain}
       gl_Position = projectionMatrix * viewMatrix * vec4(vSurfW, 1.); }`,
     fragmentShader: SURF_FRAG_DECL + extraDecl + `
 
@@ -159,14 +160,14 @@ function instrumentMaterial(props, { lines = 'none', cell = 25, extraDecl = '', 
   });
 }
 
-function patchVisible(mat, props, { extraDecl = '', visExtra = '', uniforms = {} } = {}) {
+function patchVisible(mat, props, { extraDecl = '', visExtra = '', uniforms = {}, vertDecl = '', vertMain = '' } = {}) {
   const attr = props === 'attr', prev = mat.onBeforeCompile, prevKey = mat.customProgramCacheKey(), id = ++variant;
   const own = attr ? {} : { uSurfA: { value: toVec4(props.A) }, uSurfB: { value: toVec4(props.B) }, uSurfC: { value: toVec4(props.C) } };
   mat.onBeforeCompile = (sh, r) => {
     prev.call(mat, sh, r);
     Object.assign(sh.uniforms, SURF_U, uniforms, own);
     if (attr) sh.defines = { ...(sh.defines || {}), SURF_ATTR: '' };
-    sh.vertexShader = SURF_VERT_DECL + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n' + SURF_VERT_MAIN);
+    sh.vertexShader = SURF_VERT_DECL + vertDecl + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n' + SURF_VERT_MAIN + vertMain);
     sh.fragmentShader = SURF_FRAG_DECL + extraDecl + '\n' + sh.fragmentShader.replace('#include <opaque_fragment>',
       `#include <opaque_fragment>\n{ vec3 N = normalize(vSurfN), W = vSurfW; gl_FragColor.rgb += uOverlay*surfBands(W, N, 1.); ${visExtra} }`);
   };
@@ -179,6 +180,7 @@ const SURFACES = [];
 
 // Make a mesh spectral. props: PRESET entry / {A,B,C} / 'attr' (geometry has aSurfA/B/C; pass opts.mean for meters).
 // opts: lines ('none'|'topo'|'grid'), cell, weight (meter share), visExtra/instrExtra/extraDecl/uniforms (GLSL hooks),
+//       vertDecl/vertMain (vertex hooks, both materials),
 //       custom: true when the visible material is a ShaderMaterial that already calls surfBands().
 export function spectral(mesh, props, opts = {}) {
   if (typeof props === 'string' && props !== 'attr') props = PRESET[props];
