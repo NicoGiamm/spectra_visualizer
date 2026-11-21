@@ -34,6 +34,10 @@ files: scenarios/city/rf.js, scenarios/city/world.js, scenarios/city/street.js
 - [ ] Near lit windows and shop fronts show a warm hue with variation, no flat white panels (t 30 and t 54)
 - [ ] `spectra shot city --bands micro -t 30`: the haze is still visible in the canyon and fades toward the park
 
+## Notes
+
+*2026-11-21:* the haze half is done in M4/T3 (561c5ab): no haze blocks in the sky or over the trees at -t 30. Still open here: blocky clusters on the right (north) facade at -t 30 are Wi-Fi routers a few metres away drawn at 1.3 m with the 26-cell micro crackle (`events.js` `wifi`, `this.f.set(k, q.p, q.shop ? 1.6 : 1.3, …)`) — shrink with distance like the haze (size = min(1.3, k·d)); the 5G mast's 38 m glow (`events.js` `this.big.set(MAST.top, 38, .55)`) has the same large-cell look when on screen; the flat white windows / shop fronts.
+
 ## Outcome
 
 <Written by `mission-tracker task <ref> --done --evidence <file>`: what changed, numbers, shots, what was not verified.>
