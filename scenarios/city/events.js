@@ -47,7 +47,7 @@ export const streetLights = () => event({ name: 'Street lights', t0: 8, t1: 60, 
 export const cellTower = () => event({ name: '5G mast', t0: 0, t1: 60, bands: ['micro', 'vis'], freq: ['nr35', 'lte800', 'navRed'], note: 'Sector antennas on a rooftop beam microwave to every phone in the street; red light for aircraft.',
   init() {
     this.big = new Em('micro'); this.pe = MAST.panels.map(() => new Em('micro')); this.red = new Em('vis', '#ff2020');
-    addTx('micro', () => ({ p: MAST.panels[0], power: 1.4 }));      // paints the facades below in the microwave surface term
+    addTx('micro', () => ({ p: MAST.panels[0], power: .6 }));      // paints the facades below in the microwave surface term
   },
   update() { const { T } = S;
     this.big.set(MAST.top, 38, .55); this.pe.forEach((e, k) => e.set(MAST.panels[k], 5, .5 + .5 * Math.max(0, Math.sin(T * 3 + k * 2.1))));
@@ -68,7 +68,7 @@ export const wifi = () => event({ name: 'Wi-Fi routers', t0: 0, t1: 60, bands: [
       const home = q.shop ? sm(0, 2, t) : (q.k < lit / .56 ? 1 : 0);
       const b = Math.max(0, Math.sin(t * 2 * q.r + q.ph)) ** 8 * home, d = q.p.distanceTo(cam);
       this.f.set(k, q.p, q.shop ? 1.6 : 1.3, .12 + b * .55);
-      if (b > .3 && d < 45) near.push({ p: q.p, power: .45 * b, d });
+      if (b > .3 && d < 45) near.push({ p: q.p, power: .25 * b, d });
     });
     near.sort((a, b) => a.d - b.d); this.near = near.slice(0, 3); },
   where: () => null });

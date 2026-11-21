@@ -9,7 +9,8 @@
 //   IR     thermal palette of the radiated temperature e·T + (1−e)·T_sky(−35 °C): wet/glossy surfaces at grazing
 //          angles mirror the cold sky.
 //   Micro  brightness temperature Tb = eMW·T + (1−eMW)·50 K: calm water reads cold, land warm; plus illumination
-//          from microwave transmitters (routers, masts) registered with addTx('micro', …).
+//          from microwave transmitters (routers, masts) registered with addTx('micro', …), and short local
+//          flashes where a ray hits a surface (multipath reflections) registered with addHits('micro', …).
 //   Radio  illumination from radio transmitters (addTx('radio', …)): 1/r², Lambert, moving dashes.
 //   UV     uvAlb × the remaining UV skylight (fades with the Sun): snow and sand glow at dusk, grass doesn't.
 //   Gamma  sparse scintillation speckle ∝ activity: granite sparkles, the sea is almost silent.
@@ -22,12 +23,13 @@ import { COMMON } from './shaders.js';
 import { solid } from './instrument.js';
 
 export const OVERLAY = { value: .12 };
-const MAX_TX = 8;
+const MAX_TX = 8, MAX_HIT = 12;
 const vec4s = () => Array.from({ length: MAX_TX }, () => new THREE.Vector4());
 export const SURF_U = {
   uSOnR: { value: 0 }, uSOnM: { value: 0 }, uSOnI: { value: 0 }, uSOnU: { value: 0 }, uSOnG: { value: 0 },
   uOverlay: OVERLAY, uSurfT: { value: 0 }, uUVsky: { value: 0 }, uSurfTime: S.TIME,
   uTxR: { value: vec4s() }, uTxM: { value: vec4s() },
+  uHitM: { value: Array.from({ length: MAX_HIT }, () => new THREE.Vector4()) },
 };
 
 // ---------------------------------------------------------------- presets (documented reference values)
@@ -78,7 +80,14 @@ varying vec4 vSurfA; varying vec4 vSurfB; varying vec4 vSurfC;
 uniform vec4 uSurfA, uSurfB, uSurfC;
 #endif
 uniform float uSOnR, uSOnM, uSOnI, uSOnU, uSOnG, uOverlay, uSurfT, uUVsky, uSurfTime;
-uniform vec4 uTxR[${MAX_TX}], uTxM[${MAX_TX}];
+uniform vec4 uTxR[${MAX_TX}], uTxM[${MAX_TX}], uHitM[${MAX_HIT}];
+// ray hit flashes: a spot (~2 m) on the hit face, brighter in the middle
+float hitField(vec3 W){
+  float f = 0.;
+  for(int i = 0; i < ${MAX_HIT}; i++){ if(uHitM[i].w <= 0.) continue;
+    vec3 d = W - uHitM[i].xyz; f += uHitM[i].w*exp(-dot(d, d)/4.); }
+  return f;
+}
 float txField(vec4 tx[${MAX_TX}], vec3 W, vec3 N, float range, float dashes){
   float f = 0.;
   for(int i = 0; i < ${MAX_TX}; i++){ if(tx[i].w <= 0.) continue;
@@ -107,8 +116,8 @@ vec3 surfBands(vec3 W, vec3 N, float inVis){   // inVis = 1 for the faint overla
     float Tb = B.x*(T + 273.) + (1. - B.x)*50., x = clamp((Tb - 120.)/180., 0., 1.);
     vec2 g = floor(W.xz*2.5 + W.y*1.3); float sp = step(.9 - .25*x, h21(g + floor(uSurfTime*10.)))*near;   // crackle only up close
     vec3 c = mix(vec3(1.,.42,0.), vec3(1.,.85,.2), h21(g*1.7));
-    float tx = txField(uTxM, W, N, 22., 0.);
-    col += uSOnM*c*(x*x*.12 + sp*x*.3 + tx*(.35 + .9*sp));
+    float tx = txField(uTxM, W, N, 22., 0.), hit = hitField(W);
+    col += uSOnM*c*(x*x*.12 + sp*x*.3 + tx*(.35 + .9*sp)) + uSOnM*vec3(1.,.93,.75)*hit*1.4;
   }
   if(uSOnR > 0.){                                                     // RADIO
     col += uSOnR*vec3(1.,.31,.85)*B.w*txField(uTxR, W, N, 700., 9.)*1.1;
@@ -194,6 +203,9 @@ export const surfaceUniforms = props => ({ ...SURF_U, uSurfA: { value: toVec4(pr
 const TX = { radio: [], micro: [] };
 // fn() -> { p: Vector3, power } or null; strongest MAX_TX per band are uploaded each frame
 export const addTx = (band, fn) => TX[band].push(fn);
+// ray hits (multipath): fn() -> [{ p: Vector3 on the surface, power }]; the strongest MAX_HIT flash each frame
+const HITS = { micro: [] };
+export const addHits = (band, fn) => HITS[band].push(fn);
 
 const tempAt = (A, t) => A[1] + (A[0] - A[1]) * Math.exp(-t * A[2]);
 export function updateSurfaces(uvSky) {
@@ -208,6 +220,9 @@ export function updateSurfaces(uvSky) {
     arr.forEach((v, i) => { const x = live[i]; if (x) v.set(x.p.x, x.p.y, x.p.z, x.power); else v.set(0, 0, 0, 0); });
     txPow[band] = live.reduce((a, x) => a + x.power, 0);
   }
+  const hits = HITS.micro.flatMap(f => f() || []).filter(x => x.power > .01).sort((a, b) => b.power - a.power).slice(0, MAX_HIT);
+  u.uHitM.value.forEach((v, i) => { const x = hits[i]; if (x) v.set(x.p.x, x.p.y, x.p.z, x.power); else v.set(0, 0, 0, 0); });
+  S.act.micro += hits.reduce((a, x) => a + x.power, 0) * .1;   // a few small spots: a small meter share
   // meter activity: weighted band response of every registered surface (same formulas as the shader, no geometry)
   for (const { p, w } of SURFACES) {
     if (!p) continue;
