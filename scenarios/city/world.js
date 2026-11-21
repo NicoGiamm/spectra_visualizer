@@ -4,7 +4,7 @@
 // lawns cool fast, facades leak heat around their windows and the glass mirrors the cold sky in IR.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { V3, sm, R, noise2, hash2 } from 'spectra/core/util.js';
+import { V3, sm, R, noise2, hash2, PLAY } from 'spectra/core/util.js';
 import { S } from 'spectra/core/state.js';
 import { solid, visOnly } from 'spectra/render/instrument.js';
 import { spectral } from 'spectra/render/surface.js';
@@ -13,6 +13,9 @@ import { softTex } from 'spectra/render/textures.js';
 
 export const ROAD = 8, WALK = 4.5;                 // half-width of the carriageway, sidewalk width
 export const PARK_Z = -15;                         // the canyon ends here; park to the west
+// walk: script time at which the viewer reaches the park edge, z there (the old script-time walk's value, so the park
+// stretch is unchanged), and the real seconds it takes to get there (the canyon is walked at an even real pace)
+const WALK_TC = 41.3, WALK_ZC = 80 - 2.3 * WALK_TC + .75 * (WALK_TC - 41), WALK_RC = PLAY.real(WALK_TC);
 export const FACE_X = ROAD + WALK + 1;             // street-front facades stand at x = ±FACE_X
 export const SIDEWALK_X = ROAD + WALK * .55;       // where the viewer walks (north side, +x)
 export const TRAM_Z = PARK_Z - 7;                  // tram line on the cross street at the park edge
@@ -387,10 +390,12 @@ export function build() {
     new THREE.MeshStandardMaterial({ color: 0x1b1c1e, roughness: .5, metalness: .5 })), METAL, { weight: .02 }));
   return {
     groundAt: () => 0,
-    // 80 m -> -15 m down the street canyon at an unhurried pace (t < 41), then slower into the park (-45 m at t = 60)
+    // 80 m -> -15 m down the street canyon at an even pace in *real* time (~1.8 m/s: the opening is fast-forwarded,
+    // see PLAY, and a script-time pace ran the first 46 m at 4-4.6 m/s), reaching the park edge at the same script
+    // moment as before (t ~41.3); then slower into the park (-45 m at t = 60), as before
     walk(t, camera) {
-      const z = 80 - 2.3 * t + .75 * Math.max(0, t - 41), bob = Math.sin(t * 9.5) * .03;
-      camera.position.set(SIDEWALK_X, 1.7 + bob, z);
+      const z = t < WALK_TC ? 80 + (WALK_ZC - 80) * PLAY.real(t) / WALK_RC : WALK_ZC - 1.55 * (t - WALK_TC);
+      camera.position.set(SIDEWALK_X, 1.7 + Math.sin(PLAY.real(t) * 4.75) * .03, z);   // head bob at a steady step rate
     },
   };
 }
