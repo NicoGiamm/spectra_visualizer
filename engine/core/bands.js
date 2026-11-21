@@ -24,7 +24,10 @@ export const GAIN = { radio: 1.9, micro: 2.0, ir: 1.6, vis: 1, uv: 1.9, xray: 2.
 
 // Meter normalisation (activity that fills a bar). Scenarios may override via `meterNorm`.
 // Radio and gamma are high because the radio cones and branching air showers carry many sources.
-export const METER_NORM = { radio: 5.5, micro: 1.6, ir: 2.1, vis: 3.6, uv: 2.1, xray: 1.7, gamma: 3.4 };
+// micro/ir/vis were retuned once the surfaces joined the meters (plan 1.3): ~ the 90th percentile of the trail's
+// activity (the busiest of trail/seaside) lands just below 0.9 in hud.js's 1 - exp(-act/norm), so the bars
+// only touch the top at peaks. Check with `uv run spectra timeline` ("meters above 0.9 for >20 s").
+export const METER_NORM = { radio: 5.5, micro: 4.2, ir: 10, vis: 18, uv: 2.1, xray: 1.7, gamma: 3.4 };
 
 // Atmospheric transmission to an observer on the ground, per band and per source origin:
 //   'ground' — reaches a ground detector (near sources, and tropospheric emission such as Cherenkov light),

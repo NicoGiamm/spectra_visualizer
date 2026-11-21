@@ -2,7 +2,7 @@
 //   heightAt(x, z)            -> metres
 //   colorAt(x, y, z, slope)   -> [r, g, b]  (slope = 1 - normal.y)
 //   surfAt(x, y, z, slope)    -> optional {A, B, C} surface properties (see render/surface.js) -> aSurfA/B/C attributes;
-//                                g.userData.surfMean holds their mean within `meanRadius` (for the meters)
+//                                g.userData.surfMean holds their area-weighted mean within `meanRadius` (for the meters)
 import * as THREE from 'three';
 
 export function heightfield({ heightAt, colorAt, surfAt, N = 330, SIZE = 6500, power = 2.3, meanRadius = 400 }) {
@@ -27,10 +27,12 @@ export function heightfield({ heightAt, colorAt, surfAt, N = 330, SIZE = 6500, p
   if (surfAt) {
     const n = pos.length / 3, arr = { A: new Float32Array(n * 4), B: new Float32Array(n * 4), C: new Float32Array(n * 4) };
     const mean = { A: [0, 0, 0, 0], B: [0, 0, 0, 0], C: [0, 0, 0, 0] }; let m = 0;
+    // the grid is warped (dense near the origin), so each vertex is weighted by the ground area it stands for
+    const span = i => (map(Math.min(i + 1, N) / N * 2 - 1) - map(Math.max(i - 1, 0) / N * 2 - 1)) / 2;
     for (let v = 0; v < n; v++) {
       const x = pos[v * 3], y = pos[v * 3 + 1], z = pos[v * 3 + 2], p = surfAt(x, y, z, 1 - nor[v * 3 + 1]);
       for (const k of 'ABC') arr[k].set(p[k], v * 4);
-      if (Math.hypot(x, z) < meanRadius) { m++; for (const k of 'ABC') for (let i = 0; i < 4; i++) mean[k][i] += p[k][i]; }
+      if (Math.hypot(x, z) < meanRadius) { const a = span(v % (N + 1)) * span(Math.floor(v / (N + 1))); m += a; for (const k of 'ABC') for (let i = 0; i < 4; i++) mean[k][i] += p[k][i] * a; }
     }
     for (const k of 'ABC') { g.setAttribute('aSurf' + k, new THREE.BufferAttribute(arr[k], 4)); for (let i = 0; i < 4; i++) mean[k][i] /= m || 1; }
     g.userData.surfMean = mean;
