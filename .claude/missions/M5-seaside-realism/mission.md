@@ -38,6 +38,7 @@ T3 done; T1 partly done (the radio interferometer lacks real interference); T2, 
 | [M5/T2](tasks/T2-maritime-life.md) | backlog |  | Maritime life: |
 | [M5/T3](tasks/T3-coast-details.md) | done |  | Coast details: |
 | [M5/T4](tasks/T4-lighthouse-ship-polish.md) | backlog |  | Lighthouse & ship polish: |
+| [M5/T5](tasks/T5-unused-keys.md) | backlog | gap | Unused seaside SPECTRUM keys: wire up or delete (aisAtoN, vhf16, sbandRadar, racon, radarClutter, navWhiteLED, navYellow, deckLight, lloydFringe) |
 <!-- tasks:end -->
 
 ## Log
