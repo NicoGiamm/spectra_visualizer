@@ -10,6 +10,8 @@ First-person 3D scenes (three.js) that play a 2-minute sunset-to-night timelapse
 - `uv run spectra build [ids…]` — `dist/<id>.html` single files (each module inlined as a `data:` URL in the import map) + `dist/index.html`; also regenerates root `index.html`. Root `index.html` and `dist/` are generated from `engine/ui/landing.html` — edit the template.
 - `uv run spectra shot <id> -t 30 [--yaw .3 --pitch .5 --bands ir,micro] -o out.png` — headless render; prints grouped console messages (shader compile logs included) and exits 1 on any. **Run it after every change**; there is no lint or test suite.
 
+**Roadmap:** `.claude/plans/improvement-plan.md` is the multi-step plan (spectral surfaces, physical realism, aurora, city RF density). Work it step by step, tick the checkbox and add a progress note when a step is done.
+
 Imports: engine modules import each other relatively; scenarios import the engine as `spectra/...` (import map in each `index.html`) and their own files relatively. The bundler regex only recognises `import`/`export … from` at the start of a line — keep imports static and on their own lines.
 
 ## Conventions that matter
