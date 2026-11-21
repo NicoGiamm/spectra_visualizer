@@ -107,6 +107,7 @@ export const SPECTRUM = {
   o7774:           { name: 'oxygen near-IR line 777.4 nm', lam: 777.4e-9 },
   n2FirstPos:      { name: 'N₂ first positive bands (red / near-IR)', lam: 870e-9 },
   auroralRadar:    { name: 'VHF radar backscatter off the auroral E-region', f: 50e6 },
+  bluetooth:       { name: 'Bluetooth LE advertising burst', f: 2.44e9 },
 
   // ===== trail additions =====
   tvUHF:           { name: 'TV broadcast (UHF, DVB-T)', f: 600e6 },

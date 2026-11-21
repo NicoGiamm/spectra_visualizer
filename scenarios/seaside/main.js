@@ -12,7 +12,7 @@ run({
   build,
   events: () => [
     sky.sunset(), local.greenFlash(), sky.sunDogs(), sky.crepuscularRays(), local.warmSand(), local.gulls(),
-    observer({ name: 'You', note: 'Standing on the sand; your phone pings the network (microwave) every few seconds.' }),
+    observer({ name: 'You', note: 'Standing on the sand; your phone pings the network (microwave) every few seconds and sends short Bluetooth bursts (2.4 GHz, also microwave).' }),
     sky.airliner(), sky.venus(), local.lighthouse(), local.ship(), sky.cmb(), sky.milkyWay(), sky.meteorShower(),
     sky.pulsar(), sky.comet(), sky.satellitePass(), sky.starlink(), sky.blackHoleBinary(), sky.aurora(), sky.moonrise(),
     sky.airShowers(), sky.thunderstorm({ note: 'Far out over the sea: lightning, radio "sferics" and terrestrial gamma-ray flashes.' }),
