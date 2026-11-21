@@ -1,32 +1,37 @@
 // Events that belong to the mountain trail (sky events come from the engine library).
 import * as THREE from 'three';
-import { V3, DEG, lerp, sm, env, R } from 'spectra/core/util.js';
+import { V3, DEG, lerp, sm, env, R, fbm2 } from 'spectra/core/util.js';
 import { S } from 'spectra/core/state.js';
 import { event } from 'spectra/core/events.js';
-import { deg, skyP } from 'spectra/core/geom.js';
+import { deg, skyP, dirAE } from 'spectra/core/geom.js';
 import { Em, Rib, EmField } from 'spectra/render/sources.js';
 import { solid, visOnly } from 'spectra/render/instrument.js';
-import { spectralGroup, addTx } from 'spectra/render/surface.js';
+import { spectralGroup, addTx, SURF_U } from 'spectra/render/surface.js';
+import { COMMON } from 'spectra/render/shaders.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { softTex } from 'spectra/render/textures.js';
-import { trailX, heightAt, NEAR_ROCKS } from './world.js';
+import { trailX, heightAt, NEAR_ROCKS, TRAIL_U, STREAM, SPOTS } from './world.js';
+import { moonlit } from 'spectra/world/atmosphere.js';
 
 const warmF = () => 1 - sm(0, 45, S.t);
 const CAMP_Z = -118, campPos = () => { const x = trailX(CAMP_Z) - 1.8; return new V3(x, heightAt(x, CAMP_Z), CAMP_Z); };
 
-export const alpenglow = () => event({ name: 'Alpenglow', t0: 4, t1: 16, bands: ['vis'], freq: ['sunlight'], note: 'Snowy peaks opposite the Sun turn pink in the last light, just above the ridge ahead.',
-  update() { S.act.vis += .3 * (1 - sm(4, 16, S.t)); }, where: () => skyP(245, 5) });
+export const alpenglow = () => event({ name: 'Alpenglow', t0: 4, t1: 16, bands: ['vis'], freq: ['sunlight'], note: 'The high snow faces of the side peaks (look left) still catch the grazing sunlight after the valley is in shade and turn pink; the glow climbs off the summits as the Sun sinks.',
+  update() { S.act.vis += .3 * sm(3, 7, S.t) * (1 - sm(12, 17, S.t)); }, where() { return SPOTS.alpen || skyP(215, 6); } });
 
-export const radioTower = () => event({ name: 'Radio / TV tower', t0: 0, t1: 60, bands: ['radio', 'vis'], freq: ['fm', 'navRed'], note: 'FM & TV broadcast waves and a blinking red aviation light on the ridge.',
+export const radioTower = () => event({ name: 'Radio / TV tower', t0: 0, t1: 60, bands: ['radio', 'micro', 'vis'], freq: ['fm', 'tvUHF', 'navRed'], note: 'FM radio (100 MHz, radio band) and digital TV (UHF ~600 MHz, already microwave) from the ridge: both light up the slopes facing the mast. Red aviation light on top.',
   init() {
     const a = 330 * DEG, x = Math.cos(a) * 1300, z = Math.sin(a) * 1300, y = heightAt(x, z), H = 70, pts = [];
     const leg = k => new V3(x + Math.cos(k * 2.09) * 5, y, z + Math.sin(k * 2.09) * 5);
     for (let k = 0; k < 3; k++) { pts.push(leg(k), new V3(x, y + H, z)); }
     for (let s = 0; s < 8; s++) for (let k = 0; k < 3; k++) { const f0 = s / 8, f1 = (s + 1) / 8; pts.push(leg(k).lerp(new V3(x, y + H, z), f0), leg((k + 1) % 3).lerp(new V3(x, y + H, z), f1)); }
     S.scene.add(solid(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0x0b0b10 }))));
-    this.top = new V3(x, y + H, z); this.light = new Em('vis', '#ff2020'); this.rad = new Em('radio');
+    this.top = new V3(x, y + H, z); this.uhf = new V3(x, y + H * .82, z); this.light = new Em('vis', '#ff2020'); this.rad = new Em('radio'); this.mw = new Em('micro');
     addTx('radio', () => ({ p: this.top, power: 1.4 }));   // FM paints the valley slopes
   },
-  update() { this.light.set(this.top, 5, S.T % 1.5 < .5 ? 1.3 : .05); this.rad.set(this.top, 170, .8); }, where() { return this.top; } });
+  update() { this.light.set(this.top, 5, S.T % 1.5 < .5 ? 1.3 : .05); this.rad.set(this.top, 170, .8); this.mw.set(this.uhf, 60, .55);
+    TRAIL_U.uMTx.value[1].set(this.uhf.x, this.uhf.y, this.uhf.z, S.on.micro ? .5 : 0); S.act.micro += .15; },   // TV UHF coverage on the terrain
+  where() { return this.top; } });
 
 export const warmRocks = () => event({ name: 'Warm rocks cooling', t0: 0, t1: 45, bands: ['ir'], freq: ['thermal290'], note: 'Rocks heated during the day give off infrared as they cool.',
   init() { this.e = new EmField('ir', NEAR_ROCKS.length); },
@@ -105,7 +110,7 @@ export const bats = () => event({ name: 'Bats hunting', t0: 22, t1: 40, bands: [
       b.e.set(b.G.position, .28, I * .5); }); },
   where: () => null });
 
-export const campfire = () => event({ name: 'Campfire', t0: 40, t1: 60, bands: ['vis', 'ir'], freq: ['flame', 'thermal1200'], note: 'Journey\'s end: flickering flame light and strong heat.',
+export const campfire = () => event({ name: 'Campfire', t0: 40, t1: 60, bands: ['vis', 'ir'], freq: ['flame', 'thermal1200', 'groundHeat'], note: 'Journey\'s end: flickering flame light and strong heat; on a thermal camera the ground around the pit warms up over the next minutes.',
   init() {
     const base = campPos(), G = new THREE.Group(); G.position.copy(base);
     const lm = new THREE.MeshStandardMaterial({ color: new THREE.Color(.05, .03, .02), roughness: .95 });
@@ -120,23 +125,172 @@ export const campfire = () => event({ name: 'Campfire', t0: 40, t1: 60, bands: [
     this.light.intensity = S.on.vis ? lit * 30 * f : 0;
     this.fl.forEach((q, i) => q.e.set(this.base.clone().add(new V3(Math.sin(T * 9 + i) * .05, .35 + i * .18, 0)), q.s * f * (.9 + .2 * Math.random()), lit * 1.3));
     this.emb.forEach((e, k) => { const a = (T * .7 + k / 8) % 1; e.set(this.base.clone().add(new V3(Math.sin(k * 3 + T) * .4 * a, .4 + a * 3, Math.cos(k * 2 + T) * .3 * a)), .05, lit * (1 - a) * 1.5); });
-    this.ir.set(this.base.clone().add(new V3(0, .5, 0)), 3.5, lit * f); },
+    this.ir.set(this.base.clone().add(new V3(0, .5, 0)), 3.5, lit * f);
+    const heat = sm(38, 50, t); TRAIL_U.uCamp.value.set(this.base.x, this.base.y, this.base.z, heat); S.act.ir += heat * .25; },   // the ground around the pit warms up
   where() { return this.base.clone().add(new V3(0, 1, 0)); } });
 
-export const thermalUpdraft = () => event({ name: 'Thermal updraft', t0: 0, t1: 20, bands: ['ir'], freq: ['warmAir'], tags: ['stylised'], note: 'A warm column of air peeling off the sunlit slope ahead — heat you only meet in infrared.',
-  init() { this.c = Array.from({ length: 4 }, () => new Rib('ir', null, 9)); },
-  update() { const { t, T } = S, I = sm(0, 3, t) * (1 - sm(16, 20, t)) * warmF();
-    for (let k = 0; k < 4; k++) { const az = 248 + k * 11 + Math.sin(T * .3 + k) * 3, pts = [];
-      for (let j = 0; j < 9; j++) { const e = 3 + j * 2.6 + Math.sin(T * .8 + j * .7 + k) * 1.5; pts.push(skyP(az + Math.sin(j * .8 + T * .3 + k) * 2.2, e)); }
-      this.c[k].set(pts, deg(.16), deg(.55),I * .1 * (.55 + .45 * Math.sin(T * 1.4 + k * 1.7)), 1); } },
-  where: () => skyP(265, 22) });
 
-export const fireWhirl = () => event({ name: 'Fire whirl', t0: 46, t1: 60, bands: ['vis', 'ir'], freq: ['flame', 'thermal1200'], tags: ['stylised'], note: 'A slow whirl of embers lifts off the campfire: bright flame sparks and a great deal of heat.',
-  init() { this.s = Array.from({ length: 10 }, () => new Em('vis', '#ffd27a')); this.h = Array.from({ length: 6 }, () => new Em('ir')); this.p = null; },
-  update() { const { t, T } = S, I = sm(44, 48, t); if (I <= 0) return;
-    const { x, y, z } = campPos(); this.p = new V3(x, y + 4, z);
-    this.s.forEach((e, k) => { const a = T * 1.1 + k / 10 * 6.283, rise = 1.2 + ((T * .55 + k / 10) % 1) * 7;
-      e.set(new V3(x + Math.cos(a) * (1.6 + rise * .16), y + rise, z + Math.sin(a) * (1.6 + rise * .16)), .22, I * (.9 - rise * .07)); });
-    this.h.forEach((e, k) => { const a = T * .7 + k / 6 * 6.283, rise = 1 + ((T * .4 + k / 6) % 1) * 9;
-      e.set(new V3(x + Math.cos(a) * (2 + rise * .2), y + rise, z + Math.sin(a) * (2 + rise * .2)), 3 + rise * .2, I * .6); }); },
+// ------------------------------------------------------------------ audit replacements (plan 2.3) and Phase 6
+
+export const sunWarmedSlope = () => event({ name: 'Sun-warmed slope', t0: 0, t1: 18, bands: ['ir'], freq: ['sunWarmSlope'], note: 'The slopes ahead-left faced the afternoon sun: on a thermal camera they start warmer than the flat meadow and fade to its temperature as they radiate the heat away. (A thermal camera sees surfaces — air is transparent at 8–14 µm.)',
+  update() { S.act.ir += .5 * TRAIL_U.uSlopeK.value; }, where() { return SPOTS.warmSlope; } });
+
+// Valley fog: upright soft banks (cylindrical billboards, one draw call) lying in the hollows ahead.
+const FOG_VS = `attribute vec3 aC; attribute vec4 aS; varying vec2 vQ; varying float vSeed; uniform float uGrow;
+void main(){ vQ = position.xy; vSeed = aS.z;
+  vec3 toC = cameraPosition - aC; toC.y = 0.; vec3 r = normalize(vec3(toC.z, 0., -toC.x));
+  vec3 W = aC + r*position.x*aS.x*.5 + vec3(0., (position.y*.5 + .5)*aS.y*uGrow - aS.y*.35, 0.);
+  gl_Position = projectionMatrix*viewMatrix*vec4(W, 1.); }`;
+const FOG_SHAPE = `float fogA(){ float n = fbm(vec2(vQ.x*2.2 + vSeed*13. + uTime*.012, vQ.y*1.2 + vSeed*5.));
+  float top = .05 + .55*n, y = vQ.y;
+  return smoothstep(1., .45, abs(vQ.x))*smoothstep(top + .1, top - .5, y)*smoothstep(-1., -.75, y)*(.45 + .55*n)*uAmt; }`;
+export const valleyFog = () => event({ name: 'Valley fog', t0: 30, t1: 60, bands: ['vis', 'ir'], freq: ['fogScatter', 'fogTop'], note: 'Cold air drains into the hollows ahead and its moisture condenses into fog banks. They glow silver once the Moon is up; on a thermal camera they read cold, hiding the warmer ground beneath.',
+  init() {
+    const banks = [], c0 = new V3(trailX(-40), 0, -40);
+    for (let i = 0; i < 600 && banks.length < 22; i++) {
+      const az = 215 + R() * 110, r = 380 + R() ** 1.3 * 1700, x = c0.x + Math.cos(az * DEG) * r, z = c0.z + Math.sin(az * DEG) * r, h = heightAt(x, z), rad = r * .12;
+      let ring = 0; for (let k = 0; k < 8; k++) ring += heightAt(x + Math.cos(k * .785) * rad, z + Math.sin(k * .785) * rad) / 8;
+      const depth = ring - h; if (depth < Math.max(4, r * .008)) continue;
+      if (banks.some(b => Math.hypot(b.x - x, b.z - z) < r * .15)) continue;
+      banks.push({ x, z, y: h + depth * .45, w: r * (.22 + R() * .18), hh: Math.min(depth * 1.3, 18 + r * .01) + 6, s: R() });
+    }
+    const quad = [[-1, -1], [1, -1], [1, 1], [-1, 1]], pos = [], aC = [], aS = [], idx = [];
+    banks.forEach((b, i) => { quad.forEach(([qx, qy]) => { pos.push(qx, qy, 0); aC.push(b.x, b.y, b.z); aS.push(b.w, b.hh, b.s, 0); }); const a = i * 4; idx.push(a, a + 1, a + 2, a, a + 2, a + 3); });
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('aC', new THREE.Float32BufferAttribute(aC, 3)); g.setAttribute('aS', new THREE.Float32BufferAttribute(aS, 4)); g.setIndex(idx);
+    this.u = { uAmt: { value: 0 }, uGrow: { value: .5 }, uCol: { value: new THREE.Color() }, uTime: S.TIME };
+    const common = { vertexShader: FOG_VS, transparent: true, depthWrite: false };
+    const vis = new THREE.ShaderMaterial({ ...common, uniforms: this.u, fragmentShader: COMMON + `uniform float uAmt, uTime; uniform vec3 uCol; varying vec2 vQ; varying float vSeed; ${FOG_SHAPE}
+      void main(){ float a = fogA(); gl_FragColor = vec4(uCol*(.8 + .35*(vQ.y*.5 + .5)), a*.8); }` });
+    // instrument view: in IR the fog top is cold (≈ air at the fog layer) and opaque enough to hide the warmer ground
+    const ir = new THREE.ShaderMaterial({ ...common, uniforms: { ...this.u, uSOnI: SURF_U.uSOnI }, fragmentShader: COMMON + `uniform float uAmt, uTime, uSOnI; varying vec2 vQ; varying float vSeed; ${FOG_SHAPE}
+      void main(){ if(uSOnI < .5) discard; float a = fogA(); gl_FragColor = vec4(thermal(.06 + .05*(vQ.y*.5 + .5))*.22, a*.92); }` });
+    this.mesh = new THREE.Mesh(g, vis); this.mesh.frustumCulled = false; this.mesh.renderOrder = 4; S.scene.add(solid(this.mesh, ir));
+    const near = banks.reduce((a, b) => (Math.hypot(b.x - c0.x, b.z - c0.z) < Math.hypot(a.x - c0.x, a.z - c0.z) ? b : a), banks[0]);
+    this.p = near ? new V3(near.x, near.y + 4, near.z) : null;
+  },
+  update() { const { t } = S, a = sm(29, 40, t), ml = moonlit();
+    this.mesh.visible = a > .01; if (!this.mesh.visible) return;
+    this.u.uAmt.value = a; this.u.uGrow.value = .45 + .55 * sm(29, 46, t);
+    this.u.uCol.value.setRGB(.05 + .3 * ml, .056 + .33 * ml, .075 + .38 * ml);
+    S.act.vis += a * (.15 + .5 * ml); S.act.ir += a * .08; },
   where() { return this.p; } });
+
+export const sparkDraft = () => event({ name: 'Spark draft & smoke plume', t0: 42, t1: 60, bands: ['vis', 'ir'], freq: ['sparkGlow', 'plumeHeat'], note: 'The fire\'s updraft lifts glowing sparks a few metres before they cool and go dark. In infrared the smoke and hot gas are bright just above the flames and fade as they rise and mix with the cold night air.',
+  init() {
+    this.sp = Array.from({ length: 40 }, () => ({ s: R(), v: .7 + R() * .6, w: R() * 6.28 }));
+    this.spark = new EmField('vis', this.sp.length, '#ffb347');
+    this.sp.forEach((q, i) => this.spark.color(i, new THREE.Color().setHSL(.07 + q.s * .06, 1, .55 + q.s * .1)));
+    this.heat = new EmField('ir', 10);
+    this.smoke = Array.from({ length: 10 }, () => { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: softTex(), transparent: true, depthWrite: false, opacity: 0 })); S.scene.add(visOnly(s)); return s; });
+    this.p = null;
+  },
+  update() { const { t, T } = S, I = sm(41, 44, t), base = campPos(), ml = moonlit();
+    this.smoke.forEach(s => s.visible = false); if (I <= 0) { this.p = null; return; }
+    this.p = base.clone().add(new V3(.6, 4.5, 0));
+    const drift = (h, k) => new V3(h * .18 + Math.sin(T * .9 + k) * .08 * h, h, Math.cos(T * .7 + k * 1.3) * .06 * h);
+    this.sp.forEach((q, k) => { const ph = (T * .32 * q.v + q.s) % 1, h = .5 + ph ** .8 * 6.5;
+      const p = base.clone().add(drift(h, q.w)).add(new V3(Math.sin(T * 3 * q.v + q.w) * .25 * ph, 0, Math.cos(T * 2.6 * q.v + q.w) * .25 * ph));
+      this.spark.set(k, p, .09, I * (1 - ph) ** 1.6 * (.7 + .3 * Math.sin(T * 30 * q.v + q.w)) * 1.4); });
+    const sc = .03 + .1 * ml;
+    for (let j = 0; j < 10; j++) { const age = (T * .16 + j / 10) % 1, h = .8 + age * 9, p = base.clone().add(drift(h, j * .7));
+      this.heat.set(j, p, .9 + age * 3.2, I * .85 * Math.exp(-age * 4.5));             // warm near the fire, gone within a few metres
+      const s = this.smoke[j]; s.visible = S.on.vis; s.position.copy(p); s.scale.setScalar(.9 + age * 5);
+      const glow = Math.exp(-age * 7);                                                 // firelit underside
+      s.material.color.setRGB(sc + .55 * glow, sc + .24 * glow, sc * 1.1 + .08 * glow); s.material.opacity = I * .4 * (1 - age) * sm(0, .08, age); }
+    S.act.vis += I * .1; },
+  where() { return this.p; } });
+
+export const mountainStream = () => event({ name: 'Mountain stream', t0: 0, t1: 39, bands: ['ir', 'micro', 'vis'], freq: ['thermal290', 'waterCold', 'sunlight'], note: 'Snow-melt water crossing the meadow ahead: a cold line on the thermal camera (it is ~6 °C and mirrors the cold sky), and dark in microwave, where water emits only about half as much as the land around it.',
+  init() { this.p = STREAM.pts.reduce((a, q) => (Math.abs(q.x - trailX(q.z) - 7) < Math.abs(a.x - trailX(a.z) - 7) ? q : a)).clone().add(new V3(0, 1, 0)); },
+  update() { const k = 1 - sm(36, 39, S.t); S.act.ir += .06 * k; S.act.micro += .04 * k; S.act.vis += .03 * k; },
+  where() { return this.p; } });
+
+export const farHikers = () => event({ name: 'Headlamps on the switchbacks', t0: 23, t1: 60, bands: ['vis'], freq: ['headlamp'], note: 'A party coming down late from the summit: their LED headlamps zigzag down the switchbacks on the far slope.',
+  init() {
+    const c0 = new V3(trailX(-40), 0, -40), A = new V3(Math.cos(326 * DEG) * 1450, 0, Math.sin(326 * DEG) * 1450).add(c0), B = new V3(Math.cos(335 * DEG) * 2250, 0, Math.sin(335 * DEG) * 2250).add(c0);
+    const ax = B.clone().sub(A), side = new V3(-ax.z, 0, ax.x).normalize(), legs = 9, path = [];
+    for (let k = 0; k <= legs; k++) path.push(A.clone().lerp(B, k / legs).addScaledVector(side, (k % 2 ? 1 : -1) * 110));
+    this.path = []; for (let k = 0; k < legs; k++) for (let s = 0; s < 12; s++) { const p = path[k].clone().lerp(path[k + 1], s / 12); p.y = heightAt(p.x, p.z) + 2; this.path.push(p); }
+    this.cum = [0]; for (let i = 1; i < this.path.length; i++) this.cum.push(this.cum[i - 1] + this.path[i].distanceTo(this.path[i - 1]));
+    this.h = Array.from({ length: 5 }, (_, i) => ({ o: .12 + i * .045 + R() * .02, b: R() * 6 }));
+    this.field = new EmField('vis', 5, '#fff2d6'); this.p = null;
+  },
+  at(d) { const L = this.cum.at(-1); d = Math.max(0, Math.min(L, d)); let i = 1; while (i < this.cum.length - 1 && this.cum[i] < d) i++;
+    return this.path[i - 1].clone().lerp(this.path[i], (d - this.cum[i - 1]) / (this.cum[i] - this.cum[i - 1] || 1)); },
+  update() { const { t, T } = S, I = env(t, 23, 60, 3); if (I <= 0) { this.p = null; return; }
+    const L = this.cum.at(-1), prog = (t - 23) / 37;                                       // descending: from the top end of the path
+    this.h.forEach((h, i) => { const p = this.at(L * (1 - h.o - prog * .62));
+      this.field.set(i, p, 9, I * .5 * (.75 + .25 * Math.sin(T * 1.7 + h.b))); if (i === 2) this.p = p; }); },
+  where() { return this.p; } });
+
+export const cows = () => event({ name: 'Cows on the alp', t0: 3, t1: 42, bands: ['ir'], freq: ['cowBody'], note: 'A herd grazing on the meadow, bells clanking: dark lumps by eye at dusk, unmistakable warm bodies (~39 °C) on a thermal camera.',
+  init() {
+    const parts = [], box = (w, h, d, x, y, z) => { const g = new THREE.BoxGeometry(w, h, d); g.translate(x, y, z); return g; };
+    parts.push(box(1.7, .78, .68, 0, 1.05, 0), box(.5, .4, .34, 1.08, 1.12, 0), box(.2, .16, .26, 1.32, 1.02, 0));
+    [[.62, .24], [.62, -.24], [-.62, .24], [-.62, -.24]].forEach(([x, z]) => parts.push(box(.15, .74, .15, x, .37, z)));
+    parts.push(box(.06, .5, .06, -.88, .85, 0));   // tail
+    const geo = mergeGeometries(parts.map(g => g.toNonIndexed()));
+    this.c = []; for (let i = 0; i < 400 && this.c.length < 8; i++) {
+      const z = -12 - R() * 95, side = R() < .5 ? -1 : 1, x = trailX(z) + side * (9 + R() * 30);
+      if (Math.abs(z - STREAM.z) < 14 || this.c.some(c => Math.hypot(c.x - x, c.z - z) < 5)) continue;
+      this.c.push({ x, z, y: heightAt(x, z), a: R() * 6.28, s: .9 + R() * .2, ph: R() * 6 });
+    }
+    this.mesh = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ color: new THREE.Color(.05, .038, .03), roughness: .95 }), this.c.length);
+    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); S.scene.add(solid(this.mesh));
+    this.ir = new EmField('ir', this.c.length * 3, null, 1); this.tmp = new THREE.Object3D(); this.p = null;
+  },
+  update() { const { t, T } = S, I = env(t, 3, 42, 2);
+    this.mesh.visible = I > 0; if (I <= 0) { this.p = null; return; }
+    let best = 1e9; const cam = S.camera.position;
+    this.c.forEach((c, i) => { const a = c.a + .35 * Math.sin(T * .05 + c.ph), fw = new V3(Math.cos(a), 0, -Math.sin(a));
+      const x = c.x + Math.sin(T * .03 + c.ph) * 1.5, z = c.z + Math.cos(T * .025 + c.ph) * 1.5, y = heightAt(x, z);
+      this.tmp.position.set(x, y, z); this.tmp.rotation.set(0, a, 0); this.tmp.scale.setScalar(c.s); this.tmp.updateMatrix(); this.mesh.setMatrixAt(i, this.tmp.matrix);
+      const b = new V3(x, y + 1.05 * c.s, z);
+      this.ir.set(i * 3, b.clone().addScaledVector(fw, -.42 * c.s), 1.35 * c.s, I * .5); this.ir.set(i * 3 + 1, b.clone().addScaledVector(fw, .38 * c.s), 1.25 * c.s, I * .5);
+      this.ir.set(i * 3 + 2, b.clone().addScaledVector(fw, 1.12 * c.s).add(new V3(0, .08, 0)), .6 * c.s, I * .42);
+      const d = b.distanceTo(cam); if (z < cam.z - 6 && d < best) { best = d; this.p = b.clone().add(new V3(0, 1, 0)); } });
+    this.mesh.instanceMatrix.needsUpdate = true; },
+  where() { return this.p; } });
+
+export const cellMast = () => event({ name: 'Cell mast on the ridge', t0: 0, t1: 60, bands: ['micro'], freq: ['lte800', 'nr35'], note: 'A mobile-phone mast on the ridge (LTE 800 MHz, 5G 3.5 GHz — both microwave). Its sector antennas cover the whole valley, painting the slopes that face it.',
+  init() {
+    const c0 = new V3(trailX(-40), 0, -40); let best = null, bs = -1e9;
+    for (let az = 288; az <= 316; az += 2) for (let r = 480; r <= 900; r += 30) {
+      const x = c0.x + Math.cos(az * DEG) * r, z = c0.z + Math.sin(az * DEG) * r, h = heightAt(x, z);
+      let ring = 0; for (let k = 0; k < 6; k++) ring += heightAt(x + Math.cos(k * 1.047) * 40, z + Math.sin(k * 1.047) * 40) / 6;
+      if (h - ring > bs) { bs = h - ring; best = new V3(x, h, z); }
+    }
+    const H = 32, b = best, pts = [], top = new V3(b.x, b.y + H, b.z);
+    for (let k = 0; k < 3; k++) { const a = k * 2.094, o = new V3(Math.cos(a) * 1.4, 0, Math.sin(a) * 1.4); pts.push(b.clone().add(o), top.clone().add(o.clone().multiplyScalar(.4)));
+      const p0 = top.clone().add(new V3(Math.cos(a) * 2.2, -1, Math.sin(a) * 2.2)); pts.push(p0, p0.clone().add(new V3(0, -2.6, 0))); }
+    S.scene.add(solid(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0x0b0b10 }))));
+    this.top = top.clone().add(new V3(0, -2.2, 0)); this.e = new Em('micro');
+  },
+  update() { const { T } = S, f = .75 + .25 * Math.sin(T * 3.1) * Math.sin(T * 1.3);
+    this.e.set(this.top, 28, .55 * f); TRAIL_U.uMTx.value[0].set(this.top.x, this.top.y, this.top.z, .9); S.act.micro += .2; },
+  where() { return this.top; } });
+
+export const weatherStation = () => event({ name: 'Weather-station radio link', t0: 0, t1: 60, bands: ['radio'], freq: ['wxTelemetry'], note: 'An automatic weather station on the knoll ahead sends its readings in short VHF bursts to the transmitter mast on the ridge.',
+  init() {
+    const z = -150, x = trailX(z) + 24, y = heightAt(x, z), b = new V3(x, y, z), top = b.clone().add(new V3(0, 3.2, 0)), pts = [];
+    for (let k = 0; k < 3; k++) { const a = k * 2.094 + .3; pts.push(b.clone().add(new V3(Math.cos(a) * .7, 0, Math.sin(a) * .7)), top); }
+    pts.push(top.clone().add(new V3(-.5, 0, 0)), top.clone().add(new V3(.5, 0, 0)), top.clone().add(new V3(0, 0, -.5)), top.clone().add(new V3(0, 0, .5)), top, top.clone().add(new V3(0, 1.6, 0)));
+    S.scene.add(solid(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0x0b0b10 }))));
+    const boxM = new THREE.Mesh(new THREE.BoxGeometry(.45, .55, .3), new THREE.MeshStandardMaterial({ color: 0x3a3c40, roughness: .7 })); boxM.position.copy(b).add(new V3(0, 1.4, 0)); S.scene.add(solid(boxM));
+    this.top = top.clone().add(new V3(0, 1.6, 0));
+    const a = 330 * DEG, tx = Math.cos(a) * 1300, tz = Math.sin(a) * 1300; this.dst = new V3(tx, heightAt(tx, tz) + 60, tz);
+    this.e = new Em('radio'); this.link = new Rib('radio', null, 24);
+  },
+  update() { const { t } = S, ph = (t % 3.5) / 3.5; if (ph > .22) return;
+    const I = Math.sin(ph / .22 * Math.PI);
+    this.e.set(this.top, 7, I * .9);
+    const pts = Array.from({ length: 24 }, (_, i) => { const k = i / 23, p = this.top.clone().lerp(this.dst, k); p.y += Math.sin(k * Math.PI) * 60; return p; });
+    this.link.set(pts, 3, 9, I * .6); },
+  where() { return this.top; } });
+
+export const gnss = () => event({ name: 'GPS & Galileo satellites', t0: 0, t1: 60, bands: ['micro'], freq: ['gpsL1', 'galileoE5'], note: 'Navigation satellites 20 000 km up broadcast continuously in the L band (1.2–1.6 GHz, microwave): faint, steady points that barely move over a few hours — the signal your phone uses to place you on the trail.',
+  init() { this.s = Array.from({ length: 9 }, () => ({ az: 208 + R() * 128, el: 14 + R() * 58, d: (R() - .5) * .12 })); this.f = new EmField('micro', this.s.length, '#ffd27a'); },
+  update() { const { t } = S;
+    this.s.forEach((s, i) => this.f.set(i, skyP(s.az + t * s.d, s.el + t * s.d * .5), deg(.7), .2)); },
+  where() { const s = this.s[3]; return skyP(s.az + S.t * s.d, s.el + S.t * s.d * .5); } });

@@ -83,7 +83,7 @@ and a commit. Steps inside a phase are ordered; phases 3–6 can be reordered on
 - [ ] **1.3 Activity from surfaces.**
   Meters get a per-band surface contribution (precomputed area-weighted mean of the band term, recomputed every
   ~0.5 s) so the bars reflect the landscape, not only point sources. Retune `METER_NORM`.
-- [ ] **1.4 Apply to the trail.** Terrain vertex attributes from the existing colour classes (grass, dry, rock,
+- [x] **1.4 Apply to the trail.** Terrain vertex attributes from the existing colour classes (grass, dry, rock,
   snow, dirt); trees (`eIR .97`, slight warmth), rocks (slow cooling replaces the 22 hand-placed `NEAR_ROCKS` Ems
   → keep a few Ems only for the hottest boulders), hut walls (`Tcore`). **Alpenglow becomes real**: tint snow faces
   that see the sun (`dot(normal, sunDir) > 0` at `sunEl` 0…−3°) pink in visible light — today it draws nothing.
@@ -108,7 +108,7 @@ and a commit. Steps inside a phase are ordered; phases 3–6 can be reordered on
 - [ ] **2.2 Panel shows the physics.** Event chips show the process and frequency/wavelength on hover
   (`Wi-Fi 2.4 GHz · 12.5 cm`), plus a tag: `common` / `rare` / `time-compressed` / `stylised`. Script-time
   compression (e.g. air showers last µs, not seconds) is labelled.
-- [ ] **2.3 Event audit — apply the verdicts below.** One commit per group (sky library, trail, seaside, city).
+- [~] **2.3 Event audit — apply the verdicts below.** One commit per group (sky library, trail, seaside, city). *Trail group applied (see 2026-11-21 note).*
 
 ### Audit of existing events
 
@@ -205,12 +205,12 @@ and a commit. Steps inside a phase are ordered; phases 3–6 can be reordered on
 
 ## Phase 6 — Trail realism
 
-- [ ] **6.1 Mountain surfaces** (on 1.4): snow UV glow at dusk, granite gamma, meadows cooling fast, forest
+- [x] **6.1 Mountain surfaces** (on 1.4): snow UV glow at dusk, granite gamma, meadows cooling fast, forest
   staying warmer (canopy), stream as a cold line in IR and dark in microwave.
-- [ ] **6.2 Alpine life:** distant hikers' headlamps on far switchbacks after dark, cows with warm bodies
+- [x] **6.2 Alpine life:** distant hikers' headlamps on far switchbacks after dark, cows with warm bodies
   (realistic IR) on the meadow, a cell mast on the ridge (micro, paints the valley), a weather-station radio link,
   GPS/Galileo satellites (L-band microwave) as faint steady sources, valley fog (replaces thermal updraft).
-- [ ] **6.3 Replace fire whirl** with spark draft & smoke plume; campfire IR ground heating around the pit.
+- [x] **6.3 Replace fire whirl** with spark draft & smoke plume; campfire IR ground heating around the pit.
 
 ## Phase 7 — Polish & docs
 
@@ -263,4 +263,28 @@ process. **0 warnings** in all scenarios.
 The check's info lines are the Phase 2 to-do list: 19 processes absorbed before the ground (meteor UV, pulsar /
 BH-binary / comet / supernova / GRB X-rays, lunar & shower gamma, auroral UV/X/AKR, NLC UV…) and 5 stylised ones
 (zodiacal scatter ×2, warm air, IR moon-halo ring, air-shower X-ray shaft).
+
+### 2026-11-21 · 1.4 + 2.3 (trail group) + 6.1–6.3 done — Trail realism
+`world.js`: terrain `surfAt` maps the colour classes to surface presets (meadow→dirt→rock→snow, `PRESET.*` in
+`engine/render/surface.js`, per-vertex `aSurfA/B/C`); trees/rocks/hut/grass registered with `spectral()`; the
+stream strip is new (`STREAM`, water preset — cold sky mirror in IR, eMW .45 dark in micro, mirrors the sky
+keyframes `SKY_REFL` in visible). Terrain-only physics in `TRAIL_U`/`TERRAIN_DECL`: sun-warmed slope faces
+(`uAft`, decay `uSlopeK = exp(-t/9)`), campfire ground heating (`uCamp`), and a long-range microwave coverage
+field `uMTx[2]` (cell mast + TV UHF) with radial dashes. **Alpenglow is real**: `visExtra` tints snow faces
+that see the grazing sun pink (`uAlpen` × `dot(N, uSunDir)`), label points at the lit side peak (`SPOTS.alpen`).
+`events.js`: audit replacements — `thermalUpdraft` → `sunWarmedSlope` + `valleyFog` (cold fog banks in hollows,
+silver when moonlit, cold opaque cap in IR), `fireWhirl` → `sparkDraft` (updraft sparks + smoke plume cooling
+with height); campfire gained ground heating (`groundHeat`, `uCamp` + meter share); radio/TV tower now carries
+TV-UHF **micro** + FM **radio** painting the slopes (`addTx('radio')`, `uMTx[1]`); warm rocks keep a few
+`EmField` Ems only for the hottest boulders. Phase 6 events: `mountainStream`, `farHikers` (headlamp switchback
+zigzag), `cows` (InstancedMesh herd + realistic-IR `EmField` bodies), `cellMast` (LTE/5G, paints the valley),
+`weatherStation` (VHF bursts + arced radio link to the ridge mast), `gnss` (GPS L1 / Galileo E5, faint steady
+L-band points). New spectrum.js processes: tvUHF, sunWarmSlope, fogScatter/Top, sparkGlow, plumeHeat, groundHeat,
+waterCold, headlamp, cowBody, gpsL1, galileoE5, wxTelemetry.
+Verified: `spectra timeline trail` — **0 physics warnings**; draw calls 86/152/162 at t=5/30/55 (baseline 80/136/158 —
+the +6…+16 are the new meshes/labels; fields and instancing keep it in the ballpark); sources 232 Em + 406 Rib + 9 fields.
+Shots `trail_t5/30/54` + instrument `-t 30 --bands ir,micro` all exit 0; alpenglow label, stream, cows, fog, plume
+and satellite points read correctly. Meters still pinned at the top in every band (known 0.1 bug — re-normalisation
+is step 1.3; the new micro sources raise the micro peak, retune there).
+Follow-ups: seaside/city audit groups; 1.3 meter accounting + soft compression.
 

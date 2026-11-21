@@ -105,6 +105,19 @@ export const SPECTRUM = {
   // ===== sky & engine additions (engine owner) =====
 
   // ===== trail additions =====
+  tvUHF:           { name: 'TV broadcast (UHF, DVB-T)', f: 600e6 },
+  sunWarmSlope:    { name: 'sun-warmed slope cooling (~300 K)', lam: 9.7e-6 },
+  fogScatter:      { name: 'twilight/moonlight scattered by fog droplets', lam: 550e-9 },
+  fogTop:          { name: 'cold fog top hiding the warmer ground (~280 K)', lam: 10.3e-6 },
+  sparkGlow:       { name: 'incandescent sparks (~1000–1300 K)', lam: 650e-9 },
+  plumeHeat:       { name: 'hot gas & soot above the fire, cooling as it rises', lam: 4.5e-6 },
+  groundHeat:      { name: 'ground heated by the fire pit (~330 K)', lam: 8.8e-6 },
+  waterCold:       { name: 'stream water: cold sky reflected (IR) and low emissivity (microwave)', f: 37e9 },
+  headlamp:        { name: 'LED headlamp', lam: 550e-9 },
+  cowBody:         { name: 'cow body heat (~312 K)', lam: 9.3e-6 },
+  gpsL1:           { name: 'GPS L1 / Galileo E1 navigation signal', f: 1575.42e6 },
+  galileoE5:       { name: 'Galileo E5 / GPS L5 navigation signal', f: 1191.795e6 },
+  wxTelemetry:     { name: 'weather-station telemetry link (VHF)', f: 169.4e6 },
 
   // ===== seaside additions =====
 
