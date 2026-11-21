@@ -118,6 +118,36 @@ def shot(
                           size=size, budget=budget, verbose=verbose))
 
 
+@app.command
+def timeline(*scenarios: str, step: float = 0.5, json_out: Annotated[bool, Parameter(name="--json")] = False):
+    """Run scenarios headless and print an event gantt plus per-band activity over the 0–60 script.
+
+    Parameters
+    ----------
+    scenarios
+        Scenario ids (default: all).
+    step
+        Sampling step in script seconds.
+    json_out
+        Print the raw report as JSON instead.
+    """
+    import json
+
+    from .timeline import fetch, render
+
+    ids = list(scenarios) or [s.id for s in discover()]
+    failed = False
+    for sid in ids:
+        rep, console = fetch(sid, step)
+        if rep is None:
+            print(f"{sid}: no report (see console output above)")
+            failed = True
+            continue
+        print(json.dumps(rep) if json_out else render(rep) + "\n")
+        failed |= bool(console)
+    raise SystemExit(1 if failed else 0)
+
+
 def main():
     app()
 

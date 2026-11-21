@@ -20,7 +20,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { clamp } from './core/util.js';
 import { S } from './core/state.js';
 import { BANDS, METER_NORM } from './core/bands.js';
-import { hideAllSources } from './render/sources.js';
+import { hideAllSources, EMS, RIBS, FIELDS } from './render/sources.js';
 import { applyVisMode } from './render/instrument.js';
 import { createAtmosphere } from './world/atmosphere.js';
 import { buildDom, createHud, sizeOverlay, drawOverlay } from './ui/hud.js';
@@ -82,6 +82,20 @@ function start(sc) {
 
   sizeOverlay();
   hud.sync();
+
+  // one simulation step at script time t (no render): what the frame loop does before composer.render()
+  function step(t) {
+    S.t = t; S.T = t * 2; S.TIME.value = S.T;
+    BANDS.forEach(b => S.act[b.id] = 0);
+    hideAllSources();
+    world.walk(S.t, camera);
+    camera.rotation.set(S.pitch, S.yaw, 0);
+    atmo.update();
+    world.update && world.update(S.t);
+    EV.forEach(e => e.update && e.update());
+  }
+  if (q.has('dump')) dumpReport(sc, EV, step, norm, +(q.get('dstep') || .5));
+  if (q.has('t')) S.t = clamp(+q.get('t'), 0, 60); else S.t = 0;
   document.getElementById('loading').remove();
 
   let last = performance.now();
@@ -102,4 +116,30 @@ function start(sc) {
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
+}
+
+// ?dump: step the whole 0–60 script without drawing, sample per-band activity and the active events,
+// count draw calls at a few moments, and write the report as JSON into <script id="spectra-dump">
+// (read by `uv run spectra timeline`).
+function dumpReport(sc, EV, step, norm, dt) {
+  const { renderer, scene, camera } = S, samples = [];
+  for (let t = 0; t <= 60 + 1e-6; t += dt) {
+    step(t);
+    samples.push({ t: +t.toFixed(3), act: Object.fromEntries(BANDS.map(b => [b.id, +S.act[b.id].toFixed(4)])),
+      active: EV.flatMap((e, i) => (t >= e.t0 && t <= e.t1 ? [i] : [])) });
+  }
+  const draws = [5, 30, 55].map(t => {
+    step(t);
+    renderer.info.autoReset = false; renderer.info.reset();
+    renderer.render(scene, camera);
+    const r = { t, calls: renderer.info.render.calls, triangles: renderer.info.render.triangles };
+    renderer.info.autoReset = true; return r;
+  });
+  const report = {
+    scenario: sc.title, step: dt, norm, draws, sources: { em: EMS.length, rib: RIBS.length, fields: FIELDS.length, fieldInstances: FIELDS.reduce((a, f) => a + f.n, 0) },
+    events: EV.map(e => ({ name: e.name, t0: e.t0, t1: e.t1, bands: e.bands, freq: e.freq || [], tags: e.tags || [] })),
+    samples,
+  };
+  const el = document.createElement('script'); el.type = 'application/json'; el.id = 'spectra-dump';
+  el.textContent = JSON.stringify(report); document.body.appendChild(el);
 }

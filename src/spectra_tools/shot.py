@@ -1,8 +1,8 @@
-"""Headless screenshots with the Playwright-cached chrome-headless-shell (software WebGL).
+"""Headless Chrome runs with the Playwright-cached chrome-headless-shell (software WebGL).
 
 Slow, but it compiles every shader and reports JS errors, which is the main point.
 The scenario is bundled first, so the page loads over file:// with URL parameters
-(?t=…&yaw=…&pitch=…&bands=…&paused) instead of patched copies.
+(?t=…&yaw=…&pitch=…&bands=…&paused&dump) instead of patched copies.
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+from dataclasses import dataclass
 from glob import glob
 from pathlib import Path
 from urllib.parse import urlencode
@@ -53,37 +54,52 @@ def console_messages(lines: list[str]) -> dict[str, int]:
     return msgs
 
 
-def shot(name: str, out: Path, t: float | None = None, yaw: float | None = None, pitch: float | None = None,
-         bands: str | None = None, labels: bool = True, size: str = "1400,850", budget: int = 20000,
-         verbose: bool = False) -> int:
+@dataclass
+class Run:
+    stdout: str
+    stderr: str
+    console: dict[str, int]
+
+
+def run_headless(name: str, params: dict, *, screenshot: Path | None = None, dump_dom: bool = False,
+                 size: str = "1400,850", budget: int = 20000) -> Run:
+    """Bundle scenario `name`, open it in headless Chrome with URL `params`; optionally screenshot or dump the DOM."""
     sc = get(name)
-    params = {"paused": "1"}
-    if t is not None:
-        params["t"] = t
-    if yaw is not None:
-        params["yaw"] = yaw
-    if pitch is not None:
-        params["pitch"] = pitch
-    if bands:
-        params["bands"] = bands
-    if not labels:
-        params["labels"] = "0"
     with tempfile.TemporaryDirectory() as tmp:
         page = Path(tmp) / f"{sc.id}.html"
         page.write_text(bundle(sc), encoding="utf-8")
         url = page.as_uri() + "?" + urlencode(params)
-        out = out.resolve()
-        out.parent.mkdir(parents=True, exist_ok=True)
         cmd = [find_chrome(), "--no-sandbox", "--use-angle=swiftshader", "--enable-unsafe-swiftshader",
                "--ignore-gpu-blocklist", "--enable-logging=stderr", "--v=0", f"--window-size={size}",
-               f"--virtual-time-budget={budget}", f"--screenshot={out}", url]
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
-    lines = proc.stderr.splitlines()
+               f"--virtual-time-budget={budget}"]
+        if screenshot:
+            screenshot.parent.mkdir(parents=True, exist_ok=True)
+            cmd.append(f"--screenshot={screenshot}")
+        if dump_dom:
+            cmd.append("--dump-dom")
+        proc = subprocess.run(cmd + [url], capture_output=True, text=True, timeout=900)
+    return Run(proc.stdout, proc.stderr, console_messages(proc.stderr.splitlines()))
+
+
+def print_console(run: Run, verbose: bool = False) -> None:
     if verbose:
-        print("\n".join(lines))
-    errors = console_messages(lines)
-    for msg, n in errors.items():
+        print(run.stderr)
+    for msg, n in run.console.items():
         print(msg if n == 1 else f"{msg}\n  (repeated {n}×)")
+
+
+def shot(name: str, out: Path, t: float | None = None, yaw: float | None = None, pitch: float | None = None,
+         bands: str | None = None, labels: bool = True, size: str = "1400,850", budget: int = 20000,
+         verbose: bool = False) -> int:
+    params: dict = {"paused": "1"}
+    for k, v in (("t", t), ("yaw", yaw), ("pitch", pitch), ("bands", bands)):
+        if v is not None:
+            params[k] = v
+    if not labels:
+        params["labels"] = "0"
+    out = out.resolve()
+    run = run_headless(name, params, screenshot=out, size=size, budget=budget)
+    print_console(run, verbose)
     if out.exists():
         print(f"wrote {out}")
-    return 1 if errors or not out.exists() else 0
+    return 1 if run.console or not out.exists() else 0

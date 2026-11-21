@@ -8,7 +8,7 @@ import { S } from '../core/state.js';
 import { BI, GAIN } from '../core/bands.js';
 import { QUAD_VS, QUAD_FS, RIB_VS, RIB_FS } from './shaders.js';
 
-export const EMS = [], RIBS = [];
+export const EMS = [], RIBS = [], FIELDS = [];
 const quadGeo = new THREE.PlaneGeometry(1, 1);
 
 // real = 1 picks the realistic IR look for moving warm bodies (animals, engines)
