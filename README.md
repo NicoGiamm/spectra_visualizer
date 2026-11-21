@@ -142,4 +142,4 @@ emitters so band filtering and the meters work everywhere.
 
 ## License
 
-Not yet specified.
+[MIT](LICENSE) © 2026 NicoGiamm. three.js, loaded from a CDN at runtime, is MIT-licensed too.
