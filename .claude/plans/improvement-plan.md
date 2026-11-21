@@ -53,7 +53,7 @@ and a commit. Steps inside a phase are ordered; phases 3–6 can be reordered on
 
 ## Phase 1 — Spectral surfaces (the landscape shows the spectrum)
 
-- [ ] **1.1 Surface property model.**
+- [x] **1.1 Surface property model.**
   Per material (or per vertex/instance via attributes): `T0` surface temp at t=0 (°C), `tau` thermal inertia
   (script-s), `Tcore` (interior heat for buildings), `eIR` (8–14 µm emissivity), `eMW` (microwave emissivity),
   `uvAlb` (UV albedo), `gamma` (terrestrial activity, relative), `rRadio` (radio reflectivity).
@@ -64,7 +64,12 @@ and a commit. Steps inside a phase are ordered; phases 3–6 can be reordered on
   granite/rock `eIR .9, gamma 1.0, tau long`; fresh snow `eIR .99, uvAlb .85`; grass/forest `eIR .97, uvAlb .02,
   tau medium`; asphalt `eIR .95, tau medium, T0 high`; concrete/brick `gamma .5`; glass windows `eIR .85 but reflect
   the cold sky at grazing angles`.
-- [ ] **1.2 Surface band shader chunk.**
+  *Checked 2026-11-21:* `engine/render/surface.js` packs the properties as `A = [T0, Teq, 1/tau, eIR]`,
+  `B = [eMW, uvAlb, gamma, rRadio]`, `C = [gloss]` with documented `PRESET`s matching the reference values above.
+  Two deviations from the text: each material cools toward its own night equilibrium `Teq` instead of a shared
+  `Tair(t)` curve in `atmosphere.js` (only the seaside has a local `airTemp`), and there is no `Tcore` field (the
+  `facade` preset's high `Teq` stands in; per-building interior heat is left for 1.6).
+- [x] **1.2 Surface band shader chunk.**
   `engine/render/surface.js`: a GLSL chunk + `spectral(material, props)` that patches `MeshStandardMaterial`s
   (onBeforeCompile) and is included by custom shaders (sea, buildings). Per active band it adds:
   - **IR**: `thermal()` palette of `eIR·T` (radiance-ish), with grazing-angle emissivity drop (water/glass reflect
@@ -80,17 +85,30 @@ and a commit. Steps inside a phase are ordered; phases 3–6 can be reordered on
   Visibility rule: full strength in instrument view (Visible off); **15–20 %** overlay when Visible is on
   (tunable `SURFACE_OVERLAY`, maybe a HUD slider). Replaces `topoMat`/`gridMat` thermal hacks; contour/grid
   lines stay as a faint structural cue.
-- [ ] **1.3 Activity from surfaces.**
+  *Checked 2026-11-21:* `surfBands()` in `surface.js` has the IR (grazing-angle emissivity drop via gloss), microwave
+  Tb + transmitter field, radio (≤8 transmitters, Lambert, distance falloff, dashes, `rRadio`), UV, gamma speckle
+  terms and no X-ray term; `spectral()` patches `MeshStandardMaterial`s via `onBeforeCompile`, the seaside sea
+  shader calls `surfBands()` itself. Overlay is `OVERLAY = .12` (not 15–20 %), no HUD slider. Trail and seaside no
+  longer use `topoMat`/`gridMat`; the city still uses `gridMat` (1.6).
+- [x] **1.3 Activity from surfaces.**
   Meters get a per-band surface contribution (precomputed area-weighted mean of the band term, recomputed every
   ~0.5 s) so the bars reflect the landscape, not only point sources. Retune `METER_NORM`.
+  *Checked 2026-11-21:* `updateSurfaces()` adds each registered surface's band response (per-surface `weight`,
+  precomputed property means, no geometry, so it runs every frame rather than every 0.5 s); `hud.js` uses
+  `1 - exp(-act/norm)`. Done in this pass: the terrain mean (`heightfield.js` `surfMean`) is now area-weighted, and
+  `METER_NORM` micro/ir/vis retuned (see progress note).
 - [x] **1.4 Apply to the trail.** Terrain vertex attributes from the existing colour classes (grass, dry, rock,
   snow, dirt); trees (`eIR .97`, slight warmth), rocks (slow cooling replaces the 22 hand-placed `NEAR_ROCKS` Ems
   → keep a few Ems only for the hottest boulders), hut walls (`Tcore`). **Alpenglow becomes real**: tint snow faces
   that see the sun (`dot(normal, sunDir) > 0` at `sunEl` 0…−3°) pink in visible light — today it draws nothing.
+  *2026-11-21:* warm rocks now keep `EmField` Ems only for the 5 largest boulders (was all 22). The hut walls use
+  the `wood` preset (no `Tcore`, see 1.1).
 - [x] **1.5 Apply to the seaside.** Sea shader includes the chunk: IR shows the **thermal crossover** — at t=0 the
   sand is hotter than the sea, by t≈20–25 the sand has cooled below the sea, which stays warm (≈18 °C) all night;
-  microwave shows the sea cold with brighter foam lines; UV shows a faint sand/foam glow until ~t=12; gamma: sand
-  > rock > sea. Promontory rock gets granite properties.
+  microwave shows the sea cold with brighter foam lines; UV shows a faint sand/foam glow until ~t=12; gamma: rock
+  (granite) > sand > sea. Promontory rock gets granite properties.
+  *Corrected 2026-11-21:* the text used to say "sand > rock > sea", but 1.1's reference values make granite the most
+  active (gamma 1.0 vs dry sand .6 from heavy minerals) and the code follows 1.1.
 - [ ] **1.6 Apply to the city.** Asphalt (warm, slow), sidewalks, park lawn (cools fast, dew), building facades
   (`Tcore` per instance → heat leaks around windows, warm roofs with HVAC), glass (reflects cold sky in IR).
   Removes the hard-coded `BUILD.heat` look in favour of the shared chunk.
@@ -110,6 +128,7 @@ and a commit. Steps inside a phase are ordered; phases 3–6 can be reordered on
   compression (e.g. air showers last µs, not seconds) is labelled.
 - [~] **2.3 Event audit — apply the verdicts below.** One commit per group (sky library, trail, seaside, city).
   Groups: sky library [x] · trail [x] · seaside [ ] · city [ ].
+  (Trail group's last open verdict — "phone also does Bluetooth bursts" — done 2026-11-21 in the shared observer.)
 
 ### Audit of existing events
 
@@ -152,6 +171,9 @@ and a commit. Steps inside a phase are ordered; phases 3–6 can be reordered on
 
 ## Phase 3 — Aurora rework (gradual and physical)
 
+*Note 2026-11-21:* the aurora rework (substorm phases, NW arc, near-IR and VHF-radar bands) was implemented early in
+commit c9b3fb3 (with 2.1–2.3). It still needs its own verification against 3.1–3.3, which stay unticked until then.
+
 - [ ] **3.1 Substorm phases on the script axis** (replace the 3-s `env` fade):
   *growth* (t≈26–33): a faint, homogeneous green arc low on the horizon fades in over ~6 s, almost no rays;
   *breakup* (≈33–38): brightening, rays appear, folds speed up, the curtain climbs, red tops (630 nm) appear;
@@ -193,9 +215,12 @@ and a commit. Steps inside a phase are ordered; phases 3–6 can be reordered on
 
 ## Phase 5 — Seaside realism
 
-- [x] **5.1 Sea in every band** (built on 1.5): IR thermal crossover; microwave cold sea + warm foam; radio
+- [~] **5.1 Sea in every band** (built on 1.5): IR thermal crossover; microwave cold sea + warm foam; radio
   **sea-interferometer** effect — sky radio sources (pulsar, Milky Way centre, the Sun at the start) get a mirrored
   copy on the sea surface that interferes as they move (historical cliff radio astronomy); UV glitter fades early.
+  *Status 2026-11-21:* the radio "sea interferometer" draws mirror images of the radio sources plus moving radio
+  dashes, but no real interference — nothing depends on the source elevation or the wavelength (Lloyd's-mirror
+  fringes would). To be finished later; the other bands are in place.
 - [ ] **5.2 Maritime life:** marine VHF ch. 16 chatter (radio), fishing boats with deck lights appearing offshore after
   dark, navigation **buoys** with real light characteristics (red/green, IALA), an **offshore wind farm** with
   synchronised red aviation lights and radar clutter, a beach bonfire with people (IR bodies, phones).
@@ -231,6 +256,10 @@ and a commit. Steps inside a phase are ordered; phases 3–6 can be reordered on
   tagged as such, or add a **"Typical night"** mode that only plays `common` events? Proposal: keep the show,
   add the mode later.
 - **Q3 Surface overlay with Visible on**: faint overlay (~15 %) or none? Proposal: faint, with a HUD slider.
+
+Decisions so far:
+- **Q1 decided: Ground** by default (the plan's proposal), Orbit one click away (`S.detector`, HUD button, `?detector=`).
+- **Q3 as implemented:** a faint overlay `OVERLAY = .12` (`render/surface.js`); there is no HUD slider yet.
 
 ## Progress notes
 
@@ -337,3 +366,27 @@ Follow-ups: `ENVSEA.fire` hook stays unwired (5.2 bonfire); meters still pinned 
   city t 5/30/40/54. Screenshots in `shots/`.
 - The aurora substorm rework (growth/breakup/recovery, NW horizon, near-IR + VHF radar bands, UV/X-ray `'high'`)
   landed ahead of schedule in this diff — Phase 3 steps still need their own verification/tick.
+
+### 2026-11-21 · review fixes (seeded R order, warm rocks, Bluetooth, meters 1.3, plan corrections)
+- **Seeded R order:** `scenarios/trail/main.js` lists the pre-existing events in their e6843ca order again
+  (`crepuscularRays` in the old `zodiacalScatter` slot, same 18 `R()` draws; removed `thermalUpdraft`/`fireWhirl`
+  drew none) and appends the new ones (`cellMast`, `weatherStation`, `mountainStream`, `gnss`, `cows`,
+  `sunWarmedSlope`, `farHikers`, `sparkDraft`, `purpleLight`, `zodiacalLight`, `valleyFog`). Seaside gets the same
+  layout (`purpleLight`, `zodiacalLight`, `seaMist` appended; they draw no `R()`, so its values were already
+  unchanged). Checked with a temporary `R()` call counter in throw-away copies of e6843ca and the fixed tree: every
+  pre-existing event starts at the same stream index with the same draw count in both scenes (before the fix the
+  air showers drew different values — 272 vs 273 ribbons).
+- **1.4 warm rocks:** Ems only for the 5 largest `NEAR_ROCKS` (by size, no `R()`); trail IR field instances 274 → 257.
+- **2.3 trail / Hiker:** `bluetooth` process (2.44 GHz) in `spectrum.js` (engine section), listed in the observer's
+  `freq`; a second micro `Em` blips twice about every 1.5 script-s at ~⅓ of the LTE ping. Trail/seaside notes
+  mention it (city note untouched for the pending city work). The phone sits below the default view, so the
+  blip is not visible in the standard screenshots.
+- **1.3 meters:** area-weighted terrain `surfMean`; `METER_NORM` micro 1.6 → 4.2, ir 2.1 → 10, vis 3.6 → 18
+  (city overrides these three, unchanged). `spectra timeline` before: trail "meters above 0.9 for >20 s: micro
+  (60 s), ir (60 s), vis (45 s)", seaside "vis (48 s)"; after: no such line for trail or seaside (Ground and
+  Orbit); typical/peak fill trail micro .73/.94, ir .83/.88, vis .83/.98, seaside micro .28/1.00, ir .28/.66,
+  vis .52/.89. City still reports micro/ir/vis (60 s) — left for the city retune.
+- Plan: 1.1–1.3 ticked after reading the code (deviations noted under each step), 1.5 gamma order corrected, 5.1 →
+  `[~]`, Phase 3 note, Q1/Q3 recorded.
+- Verified after every change: `spectra timeline` 0 warnings in all three scenarios; `spectra shot` exit 0 for
+  trail t 5/30/54, seaside t 30, city t 30 and trail t 30 `--bands ir,micro`.
