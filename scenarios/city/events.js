@@ -1,70 +1,101 @@
-// Events that belong to the city (sky events come from the engine library).
+// Events that belong to the city (sky events come from the engine library). The radio/microwave
+// ecosystem lives in rf.js, the smaller visible/IR street life in life.js.
 import * as THREE from 'three';
-import { V3, lerp, sm, env, R } from 'spectra/core/util.js';
+import { V3, sm, R, hash2 } from 'spectra/core/util.js';
 import { S } from 'spectra/core/state.js';
 import { event } from 'spectra/core/events.js';
 import { Em, Rib, EmField } from 'spectra/render/sources.js';
 import { solid } from 'spectra/render/instrument.js';
-import { BUILD, LAMPS, ROOFS, WINDOWS, PARK_Z, GROUND_INSTR } from './world.js';
+import { addTx } from 'spectra/render/surface.js';
+import { BUILD, LAMPS, FLATS, PARK_Z, MAST } from './world.js';
 
-export const windows = () => event({ name: 'Lit windows & heat island', t0: 0, t1: 60, bands: ['vis', 'ir'], freq: ['incandescent', 'thermal290'], note: 'Windows light up one by one; on a thermal camera every building leaks the day\'s stored heat.',
-  update() { const { t, on } = S, lit = .06 + .5 * sm(6, 24, t);
-    BUILD.lit.value = on.vis ? lit : 0; BUILD.heat.value = on.ir ? 1 : 0; GROUND_INSTR.uniforms.uWarm.value = on.ir ? .18 : 0;
-    S.act.vis += lit * .8; S.act.ir += .7; },
+// Microwave fields are drawn in one fixed orange crackle; multiply it by the per-instance colour so channels can
+// be told apart (white = unchanged). Patched locally so the engine shader stays untouched.
+export function tintMicro(field) {
+  const m = field.m.material, src = 'col = mix(vec3(1.,.42,0.), vec3(1.,.85,.2), h21(g*1.7))*m*1.6';
+  if (m.fragmentShader.includes(src)) { m.fragmentShader = m.fragmentShader.replace(src, src.replace('*m*1.6', '*m*1.6*uColor')); m.needsUpdate = true; }
+  return field;
+}
+export const pulse = (x, w) => Math.max(0, 1 - Math.abs(x) / w);   // triangular blip
+// deterministic burst schedule: 1 while t is within `len` after a tick of period `per` (phase ph)
+export const burst = (t, per, ph, len) => { const u = ((t + ph) % per + per) % per; return u < len ? 1 - u / len : 0; };
+export const litNow = t => .06 + .5 * sm(6, 24, t);      // fraction of lit windows (shared with the window shader)
+
+export const windows = () => event({ name: 'Lit windows & heat island', t0: 0, t1: 60, bands: ['vis', 'ir'], freq: ['incandescent', 'ledWhite', 'thermal290'], note: 'Windows and shop fronts light up; on a thermal camera the facades leak heat around the window frames while the glass mirrors the cold sky.',
+  update() { const { t } = S, lit = litNow(t);
+    BUILD.lit.value = lit; BUILD.shop.value = .25 + .75 * sm(4, 12, t);
+    S.act.vis += lit * .8 + BUILD.shop.value * .3; S.act.ir += .25; },
   where: () => null });
 
-export const streetLights = () => event({ name: 'Street lights', t0: 8, t1: 60, bands: ['vis', 'ir'], freq: ['na589', 'na819'], note: 'Sodium lamps flicker on at dusk: orange light with a strong near-infrared tail.',
-  init() { this.v = new EmField('vis', LAMPS.length, '#ffb45a'); this.i = new EmField('ir', LAMPS.length); },
+// Half of the avenue has been re-lamped with white LEDs (no infrared); the rest are old high-pressure sodium lamps
+// that strike pink-red, warm up to orange over several minutes and radiate strongly at 819 nm.
+export const streetLights = () => event({ name: 'Street lights', t0: 8, t1: 60, bands: ['vis', 'ir'], freq: ['na589', 'na819', 'ledWhite'], note: 'A mix of new white LED lamps (they switch on instantly, no infrared) and old sodium lamps (slow orange warm-up, strong near-infrared line at 819 nm).',
+  init() { this.v = new EmField('vis', LAMPS.length); this.i = new EmField('ir', LAMPS.length); this.c = new THREE.Color(); },
   update() { const { t, T } = S; let sum = 0;
-    LAMPS.forEach((l, k) => { const on = sm(9 + l.k * 4, 9.6 + l.k * 4, t), warm = on * (t < 9.6 + l.k * 4 ? .6 + .4 * Math.sin(T * 40 + k) : 1);   // a brief flicker while striking
-      sum += on; this.v.set(k, l.p, 2.4, warm * 1.1); this.i.set(k, l.p, 3.2, warm * .25); });
-    const n = sum / Math.max(1, LAMPS.length); LAMPS.poolMat.color.setRGB(.55 * n, .3 * n, .1 * n); },
+    LAMPS.forEach((l, k) => {
+      const t0 = 9 + l.k * 4;
+      if (l.led) { const on = t > t0 ? 1 : 0; sum += on; this.v.color(k, '#eef3ff'); this.v.set(k, l.p, 2.1, on * 1.15); return; }
+      const warm = sm(t0, t0 + 6, t), strike = t > t0 ? 1 : 0, fl = t < t0 + .8 ? .6 + .4 * Math.sin(T * 40 + k) : 1;
+      sum += warm;
+      this.v.color(k, this.c.setRGB(1, .3 + .42 * warm, .2 + .15 * warm));    // pink-red strike -> orange
+      this.v.set(k, l.p, 2.4, strike * fl * (.25 + .85 * warm)); this.i.set(k, l.p, 3.2, strike * warm * .3);
+    });
+    const n = sum / Math.max(1, LAMPS.length); LAMPS.poolMat.color.setScalar(.8 * n); },
   where: () => null });
 
 // Mobile mast on a rooftop on the south side of the avenue, just before the park.
 export const cellTower = () => event({ name: '5G mast', t0: 0, t1: 60, bands: ['micro', 'vis'], freq: ['nr35', 'lte800', 'navRed'], note: 'Sector antennas on a rooftop beam microwave to every phone in the street; red light for aircraft.',
   init() {
-    const cands = ROOFS.filter(r => r.side < 0 && r.p.z > PARK_Z + 8 && r.p.z < PARK_Z + 70);
-    const r = cands.sort((a, b) => b.h - a.h)[0] || ROOFS[0], b = r.p, H = 12, pts = [];
-    const leg = k => new V3(b.x + Math.cos(k * 2.09) * 1.4, b.y, b.z + Math.sin(k * 2.09) * 1.4), top = new V3(b.x, b.y + H, b.z);
-    for (let k = 0; k < 3; k++) pts.push(leg(k), top);
-    for (let s = 0; s < 5; s++) for (let k = 0; k < 3; k++) pts.push(leg(k).lerp(top, s / 5), leg((k + 1) % 3).lerp(top, (s + 1) / 5));
-    S.scene.add(solid(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0x0b0b10 }))));
-    this.top = top; this.panels = [0, 1, 2].map(k => new V3(b.x + Math.cos(k * 2.09 + .5) * .9, b.y + H - 1.5, b.z + Math.sin(k * 2.09 + .5) * .9));
-    this.big = new Em('micro'); this.pe = this.panels.map(() => new Em('micro')); this.red = new Em('vis', '#ff2020');
+    this.big = new Em('micro'); this.pe = MAST.panels.map(() => new Em('micro')); this.red = new Em('vis', '#ff2020');
+    addTx('micro', () => ({ p: MAST.panels[0], power: 1.4 }));      // paints the facades below in the microwave surface term
   },
   update() { const { T } = S;
-    this.big.set(this.top, 45, .7); this.pe.forEach((e, k) => e.set(this.panels[k], 5, .5 + .5 * Math.max(0, Math.sin(T * 3 + k * 2.1))));
-    this.red.set(this.top, 2.2, T % 1.6 < .5 ? 1.3 : .05); },
-  where() { return this.top; } });
+    this.big.set(MAST.top, 38, .55); this.pe.forEach((e, k) => e.set(MAST.panels[k], 5, .5 + .5 * Math.max(0, Math.sin(T * 3 + k * 2.1))));
+    this.red.set(MAST.top, 2.2, T % 1.6 < .5 ? 1.3 : .05); },
+  where() { return MAST.top; } });
 
-export const wifi = () => event({ name: 'Wi-Fi routers', t0: 0, t1: 60, bands: ['micro'], freq: ['wifi24', 'wifi5'], note: '2.4 and 5 GHz routers behind the windows, chattering in short bursts.',
-  init() { this.e = WINDOWS.map(p => ({ p, r: 1.5 + R() * 3, ph: R() * 6 })); this.f = new EmField('micro', this.e.length); },
-  update() { const { T } = S; this.e.forEach((q, k) => { const b = Math.max(0, Math.sin(T * q.r + q.ph)) ** 6; this.f.set(k, q.p, 2.2, .25 + b * .6); }); },
+// Wi-Fi: an access point in ~60 % of the flats along the street and in the shops. Beacons tick all the time (dim),
+// data bursts come from the flats whose lights are on. 2.4 GHz = deeper orange, 5 GHz = pale yellow.
+export const wifi = () => event({ name: 'Wi-Fi routers', t0: 0, t1: 60, bands: ['micro'], freq: ['wifi24', 'wifi5'], note: 'Hundreds of 2.4 GHz (deep orange) and 5 GHz (pale yellow) access points behind the windows and in the shops: steady beacons, bursts of data from the flats where someone is home.',
+  init() {
+    this.f = tintMicro(new EmField('micro', FLATS.length));
+    FLATS.forEach((q, k) => this.f.color(k, q.g5 ? new THREE.Color(.8, 1.15, 1.9) : new THREE.Color(1, .72, .5)));
+    this.near = [];                                    // the nearest busy routers light up the facades (surface term)
+    for (let i = 0; i < 3; i++) addTx('micro', () => this.near[i] || null);
+  },
+  update() { const { t } = S, lit = litNow(t), cam = S.camera.position, near = [];
+    FLATS.forEach((q, k) => {
+      const home = q.shop ? sm(0, 2, t) : (q.k < lit / .56 ? 1 : 0);
+      const b = Math.max(0, Math.sin(t * 2 * q.r + q.ph)) ** 8 * home, d = q.p.distanceTo(cam);
+      this.f.set(k, q.p, q.shop ? 1.6 : 1.3, .12 + b * .55);
+      if (b > .3 && d < 45) near.push({ p: q.p, power: .45 * b, d });
+    });
+    near.sort((a, b) => a.d - b.d); this.near = near.slice(0, 3); },
   where: () => null });
 
 // Cars on the avenue; it runs on through the park, so they appear and vanish far away.
-export const traffic = () => event({ name: 'Traffic', t0: 0, t1: 60, bands: ['vis', 'ir', 'micro'], freq: ['ledWhite', 'navRed', 'thermal700', 'carRadar'], note: 'Headlights and tail lights, hot engines and exhausts, and 77 GHz collision radar in every new car.',
+export const traffic = () => event({ name: 'Traffic', t0: 0, t1: 60, bands: ['vis', 'ir', 'micro'], freq: ['ledWhite', 'navRed', 'thermal700', 'carRadar', 'tpms'], note: 'Headlights and tail lights, hot engines and exhausts, 77 GHz collision radar in every new car, and the tyre-pressure sensors in each wheel chirping at 433 MHz.',
   init() {
-    const lanes = [[2.2, -1], [5.8, -1], [-2.2, 1], [-5.8, 1]];   // [x, direction along z]: westbound on the north (+x) side
+    const lanes = [[2.2, -1], [5.3, -1], [-2.2, 1], [-5.3, 1]];   // [x, direction along z]: westbound on the north (+x) side
     const geoB = new THREE.BoxGeometry(1.8, .75, 4.4), geoC = new THREE.BoxGeometry(1.6, .6, 2.3); geoB.translate(0, .62, 0); geoC.translate(0, 1.3, -.2);
     this.cars = [];
     for (const [x, dir] of lanes) for (let k = 0; k < 7; k++) {
       const col = new THREE.Color().setHSL(R(), .3 + R() * .3, .06 + R() * .12);
-      this.cars.push({ G: new THREE.Object3D(), col, x: x + (R() - .5) * .4, dir, z0: k / 7 + R() * .08, v: 9 + R() * 5, ex: new Rib('ir', null, 3, 1) });
+      this.cars.push({ G: new THREE.Object3D(), col, x: x + (R() - .5) * .4, dir, z0: k / 7 + R() * .08, v: 9 + R() * 5, ex: new Rib('ir', null, 3, 1), tp: 5 + R() * 6, tph: R() * 10 });
     }
-    const n = this.cars.length, m = new THREE.MeshStandardMaterial({ roughness: .4, metalness: .5 });   // bodies and cabins: two instanced draws
-    this.bodies = [geoB, geoC].map(g => { const im = new THREE.InstancedMesh(g, m, n); im.instanceMatrix.setUsage(THREE.DynamicDrawUsage); im.frustumCulled = false;
-      this.cars.forEach((c, i) => im.setColorAt(i, c.col)); S.scene.add(solid(im)); return im; });
+    const n = this.cars.length, m = new THREE.MeshStandardMaterial({ roughness: .4, metalness: .5 });   // bodies and cabins: one instanced draw
+    const g = new THREE.InstancedMesh(mergeBoxes(geoB, geoC), m, n); g.instanceMatrix.setUsage(THREE.DynamicDrawUsage); g.frustumCulled = false;
+    this.cars.forEach((c, i) => g.setColorAt(i, c.col)); S.scene.add(solid(g)); this.body = g;
     this.hidden = new THREE.Matrix4().makeScale(0, 0, 0);   // one instanced field per light type for all cars
-    this.hl = new EmField('vis', n * 2, '#fff4dc'); this.tl = new EmField('vis', n * 2, '#ff2a1a'); this.hot = new EmField('ir', n, null, 1); this.rad = new EmField('micro', n);
+    this.hl = new EmField('vis', n * 2, '#fff4dc'); this.tl = new EmField('vis', n * 2, '#ff2a1a'); this.hot = new EmField('ir', n, null, 1);
+    this.rad = new EmField('micro', n); this.tpms = new EmField('micro', n);
   },
   update() { const { t, T } = S, cam = S.camera.position, lights = sm(6, 12, t), Z0 = -900, L = 1600;
     for (const [ci, c] of this.cars.entries()) {
       const s = ((c.z0 * L + c.dir * c.v * t * 2) % L + L) % L, z = Z0 + s;           // position along the loop, script-time driven
       const fade = sm(Z0, Z0 + 150, z) * (1 - sm(Z0 + L - 150, Z0 + L, z));          // vanish only far away
       c.G.position.set(c.x, 0, z); c.G.rotation.y = c.dir > 0 ? 0 : Math.PI; c.G.updateMatrix();
-      this.bodies.forEach(im => { im.setMatrixAt(ci, fade > .01 ? c.G.matrix : this.hidden); im.instanceMatrix.needsUpdate = true; });
+      this.body.setMatrixAt(ci, fade > .01 ? c.G.matrix : this.hidden);
       if (fade <= .01) continue;
       const fw = new V3(0, 0, c.dir), side = new V3(1, 0, 0), toCam = cam.clone().sub(c.G.position).normalize(), face = fw.dot(toCam);
       const front = c.G.position.clone().addScaledVector(fw, 2.25), back = c.G.position.clone().addScaledVector(fw, -2.25);
@@ -74,8 +105,20 @@ export const traffic = () => event({ name: 'Traffic', t0: 0, t1: 60, bands: ['vi
       c.ex.set([back.clone().setY(.35), back.clone().addScaledVector(fw, -1.6).setY(.6)], .5, .9, .4 * fade);
       this.hot.set(ci, c.G.position.clone().addScaledVector(fw, 1.3).setY(.8), 1.8, .35 * fade);
       this.rad.set(ci, front.clone().setY(.5), .8, (.25 + .3 * Math.max(0, Math.sin(T * 7 + c.z0 * 40))) * fade);
-    } },
+      const tp = burst(t, c.tp, c.tph, .35);                                        // TPMS: a short chirp from one wheel
+      if (tp > 0) this.tpms.set(ci, c.G.position.clone().addScaledVector(fw, hash2(ci, Math.floor((t + c.tph) / c.tp)) < .5 ? 1.4 : -1.4).add(new V3(.9 * Math.sign(cam.x - c.x), .35, 0)), .9, tp * .7 * fade);
+    }
+    this.body.instanceMatrix.needsUpdate = true; },
   where: () => null });
+
+function mergeBoxes(a, b) {
+  const g = new THREE.BufferGeometry(), pa = a.toNonIndexed(), pb = b.toNonIndexed();
+  for (const k of ['position', 'normal']) {
+    const A = pa.attributes[k].array, B = pb.attributes[k].array, out = new Float32Array(A.length + B.length);
+    out.set(A); out.set(B, A.length); g.setAttribute(k, new THREE.BufferAttribute(out, 3));
+  }
+  return g;
+}
 
 // Fireworks over the park at the end of the walk.
 export const fireworks = () => event({ name: 'Fireworks', t0: 50, t1: 60, bands: ['vis', 'ir'], freq: ['strontium', 'thermal1200'], note: 'Metal salts burn in bright colours; the shells and burning stars are hot in infrared too.',

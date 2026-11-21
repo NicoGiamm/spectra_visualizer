@@ -1,0 +1,168 @@
+// The city's radio & microwave ecosystem: crowds of small emitters (phones, Bluetooth, key fobs,
+// scooters), multipath bouncing off the facades (engine/world/bounce.js), the ambient RF haze of
+// the street canyon, the tram's pantograph arcing, the power line's ELF hum, LED switching
+// interference and the FM/DAB mast on the broadcast hill.
+import * as THREE from 'three';
+import { V3, sm, R, hash2 } from 'spectra/core/util.js';
+import { dirAE } from 'spectra/core/geom.js';
+import { S } from 'spectra/core/state.js';
+import { event } from 'spectra/core/events.js';
+import { Em, Rib, EmField } from 'spectra/render/sources.js';
+import { solid } from 'spectra/render/instrument.js';
+import { bounce, along } from 'spectra/world/bounce.js';
+import { addTx } from 'spectra/render/surface.js';
+import { burst } from './events.js';
+import { SIDEWALK_X, TRAM_Z, WINDOWS, PARKED, BUS, FM, MAST, PYLONS, POWER_Z, PYLON_H, FLATS, BOXES, SIGNS } from './world.js';
+
+// ---------------------------------------------------------------- 4.1 the crowd
+
+export const crowd = () => event({ name: 'Pedestrians & phones', t0: 4, t1: 60, bands: ['ir', 'micro'], freq: ['thermal310', 'lte', 'bluetooth'], note: 'A hundred pedestrians on the two sidewalks: warm bodies on a thermal camera, phones pinging LTE/5G, Bluetooth earbuds chirping on their own slower cycle.',
+  init() {
+    this.p = Array.from({ length: 110 }, () => ({ x: (R() < .5 ? 1 : -1) * SIDEWALK_X + (R() - .5) * 3, z0: -30 + R() * 280, dir: R() < .5 ? -1 : 1, v: .5 + R() * 1.2, per: 2.5 + R() * 5.5, ph: R() * 11, bper: 5 + R() * 13, bph: R() * 17 }));
+    this.b = new EmField('ir', this.p.length, null, 1); this.d = new EmField('micro', this.p.length);
+  },
+  update() { const { t } = S, cam = S.camera.position;
+    this.p.forEach((q, k) => {
+      const z = q.z0 + q.dir * q.v * t * 1.5;
+      if (Math.abs(z - cam.z) > 140) return;
+      const pos = new V3(q.x, 1.05, z);
+      this.b.set(k, pos, 1.3, .4);
+      const ping = burst(t, q.per, q.ph, .2) + .4 * burst(t, q.bper, q.bph, .12);
+      if (ping > .02) this.d.set(k, pos.clone().setY(1.35), .8, ping * .75);
+    }); },
+  where: () => null });
+
+// A few fast e-scooters on the same sidewalks: warm wheels/riders, LTE-M modems on the poles.
+export const scooters = () => event({ name: 'E-scooters', t0: 6, t1: 56, bands: ['ir', 'micro'], freq: ['thermal310', 'lteIoT'], note: 'Rental scooters zip down the sidewalks, their onboard LTE-M modem chattering to the masts; the rider and motor read warm in IR.',
+  init() {
+    this.s = Array.from({ length: 5 }, () => ({ x: (R() < .5 ? 1 : -1) * (SIDEWALK_X - 1.6) + (R() - .5) * 2, z0: R() * 400, dir: R() < .5 ? -1 : 1, v: 6.5 + R() * 3.5, per: 2.6 + R() * 3, ph: R() * 7 }));
+    this.b = new EmField('ir', this.s.length, null, 1); this.m = new EmField('micro', this.s.length);
+  },
+  update() { const { t } = S, cam = S.camera.position;
+    this.s.forEach((q, k) => {
+      const z = (((q.z0 + q.dir * q.v * t + 80) % 400) + 400) % 400 - 80;   // loop the visible stretch
+      if (Math.abs(z - cam.z) > 160) return;
+      const pos = new V3(q.x, .8, z);
+      this.b.set(k, pos, 1.5, .5);
+      const b = burst(t, q.per, q.ph, .22);
+      if (b > .02) this.m.set(k, pos.clone().setY(1.15), .9, b * .7);
+    }); },
+  where: () => null });
+
+// Parked cars keep their 433.92 MHz sensors alive; sometimes a fob unlocks and the cluster wakes up.
+export const parkedRF = () => event({ name: 'Parked cars: 433 MHz', t0: 0, t1: 60, bands: ['micro'], freq: ['tpms', 'keyFob'], note: 'Tyre-pressure sensors chirp on every parked car at 433.92 MHz, and occasionally a key fob unlocks one — a 69 cm microwave chirp, the whole kerb side twinkles.',
+  init() {
+    this.c = PARKED.map(q => ({ p: q.p.clone().setY(.55), per: 5 + q.k * 22, ph: q.k * 37, side: q.side }));
+    this.f = new EmField('micro', this.c.length);
+  },
+  update() { const { t, camera } = S, cam = camera.position;
+    this.c.forEach((q, k) => {
+      if (Math.abs(q.p.z - cam.z) > 120) return;
+      const tp = burst(t, q.per, q.ph, .2) * .45, fob = burst(t, q.per * 3.3 + 7, q.ph + 2.6, .5);
+      const I = Math.max(tp, fob * 1.1);
+      if (I > .02) this.f.set(k, q.p, 1.2, I);
+    }); },
+  where: () => null });
+
+// The bus shelter: a backlit LED advertising screen and the shelter's LTE-M modem ticketing machines.
+export const busStop = () => event({ name: 'Bus shelter: LED screen', t0: 9, t1: 60, bands: ['vis', 'micro'], freq: ['ledWhite', 'lteIoT'], note: 'The advertising panel across the avenue snaps on (white LED, no IR tail like the sodium lamps) and posts to the network through its shelter modem.',
+  init() { this.scr = new Em('vis', '#bfe0ff'); this.mod = new Em('micro'); },
+  update() { const { t, T } = S;
+    const on = sm(9, 12, t) * (hash2(Math.floor(T * 1.7), 3) < .07 ? .3 : 1);   // an ad change briefly blanks the panel
+    this.scr.set(BUS.screen, 2.4, on * 1.05);
+    this.mod.set(BUS.p.clone().setY(1.4), 1.1, burst(t, 3.1, .8, .25) * .8); },
+  where() { return BUS.screen; } });
+
+// ---------------------------------------------------------------- 4.2 multipath
+
+export const multipath = () => event({ name: 'Multipath off the facades', t0: 6, t1: 52, bands: ['micro'], freq: ['nr35', 'wifi24', 'wifi5'], note: 'Packets from the 5G mast and the strongest routers ricochet 2–4 times down the street canyon off the facades and the asphalt, each hop a sixth of the brightness of the last — and the hit face lights up in the surface microwave term.',
+  init() {
+    this.walls = BOXES.concat([{ min: new V3(-2e3, -.2, -2e3), max: new V3(2e3, 0, 2e3) }]);   // + the street itself
+    const org = MAST.panels.concat(WINDOWS.slice(0, 4));
+    this.rays = Array.from({ length: 8 }, (_, i) => ({ org: org[i % org.length].clone(), per: 2.4 + R() * 2, ph: R() * 9, cyc: -1, ray: null, rib: new Rib('micro', null, 12, 0) }));
+  },
+  update() { const { t } = S;
+    for (const q of this.rays) {
+      const cyc = Math.floor((t + q.ph) / q.per);
+      if (cyc !== q.cyc) { q.cyc = cyc;
+        const az = (hash2(cyc, 3) < .5 ? 90 : 270) + (hash2(cyc * 7 + 11, 5) - .5) * 70, el = -4 - hash2(cyc, 9) * 16;
+        q.ray = bounce(q.org, dirAE(az, el), this.walls, 2 + Math.floor(hash2(cyc, 5) * 3), 260);
+      }
+      const age = (((t + q.ph) % q.per) + q.per) % q.per, dur = q.per * .7;
+      if (age >= dur || !q.ray) continue;
+      const s = age / dur * (260 + 22);
+      const seg = along(q.ray, s - 22, s);
+      if (seg.pts.length < 2) continue;
+      q.rib.set(seg.pts, .55, .8, .95 * Math.pow(.5, seg.hits), 0);   // −6 dB per bounce
+    } },
+  where: () => null });
+
+// ---------------------------------------------------------------- 4.3 ambient haze
+
+export const haze = () => event({ name: 'Street-canyon RF haze', t0: 0, t1: 60, bands: ['micro'], freq: ['wifi24', 'wifi5', 'lte'], note: 'The canyon itself is a cloud of microwave: layered camera-facing crackle at 8/25/70 m whose density follows the number of live access points within ~80 m. Walk into the park and it fades — you feel yourself leaving the RF zone.',
+  init() { this.f = new EmField('micro', 3); this.d = [8, 25, 70]; },
+  update() { const { camera } = S, cam = camera.position;
+    let n = 0;
+    for (const q of FLATS) { const dz = q.p.z - cam.z; if (dz * dz + (q.p.x - cam.x) ** 2 < 6400) n++; }
+    const dens = sm(10, 110, n);
+    const fwd = new V3(); camera.getWorldDirection(fwd); fwd.y = 0;
+    if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, -1); fwd.normalize();
+    for (let k = 0; k < 3; k++) {
+      const d = this.d[k];
+      this.f.set(k, cam.clone().addScaledVector(fwd, d).setY(cam.y + d * .012), d * .62, dens * [.13, .09, .045][k]);
+    } },
+  where: () => null });
+
+// ---------------------------------------------------------------- 4.4 true radio
+
+export const tram = () => event({ name: 'Tram: pantograph arcing', t0: 11, t1: 42, bands: ['radio', 'vis', 'uv'], freq: ['arcRF', 'arcLight', 'arcUV'], note: 'The cross-street tram drags its pantograph along the contact wire: broadband radio crackle and blue-white copper-arc light with UVA — the trolley equivalent of a welder flash, overhead right in front of you.',
+  init() {
+    const g = new THREE.BoxGeometry(13, 3.1, 2.8); g.translate(0, 1.55, 0);
+    this.body = solid(new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: 0x15171d, roughness: .5, metalness: .45 })));
+    this.fl = new Em('vis', '#cfe6ff'); this.uv = new Em('uv'); this.ar = new Rib('radio', null, 6, 0); this.p = null;
+  },
+  update() { const { t, T } = S; this.body.visible = false; this.p = null;
+    for (const [a, b] of [[11.5, 15.5], [38, 41.5]]) {
+      if (t < a || t > b) continue;
+      const u = (t - a) / (b - a), x = -175 + u * 350, on = 1 - sm(b - .8, b, t);
+      this.body.position.set(x, 0, TRAM_Z); this.body.visible = true;
+      const spark = hash2(Math.floor(T * 9), 4) < .62 ? .55 + .45 * hash2(Math.floor(T * 31), 7) : 0;
+      const top = new V3(x, 6.1, TRAM_Z);
+      this.ar.set([top, new V3(x, 3.2, TRAM_Z)], .3, .3, on * spark * .9);
+      this.fl.set(new V3(x, 4.4, TRAM_Z), 2.4, on * spark * 1.15);
+      this.uv.set(new V3(x, 4.8, TRAM_Z), 1.6, on * spark * .6);
+      this.p = new V3(x, 3.1, TRAM_Z);
+    } },
+  where() { return this.p; } });
+
+export const powerlines = () => event({ name: 'Power line: ELF hum', t0: 0, t1: 60, bands: ['radio'], freq: ['powerHum', 'coronaRF'], note: 'The high-voltage line across the far park hums at 50 Hz — a signal so long-wavelength it counts as radio here — with corona noise crackling off the crossarms: the longest ladder in the city, faint but unbroken.',
+  init() {
+    this.a = [];
+    for (const x of PYLONS) { this.a.push(new V3(x, PYLON_H - 4, POWER_Z - 7)); this.a.push(new V3(x, PYLON_H - 10, POWER_Z + 9)); }
+    this.f = new EmField('radio', this.a.length);
+  },
+  update() { const { T, camera } = S, cam = camera.position;
+    this.a.forEach((p, k) => {
+      const near = 1 - sm(500, 1100, p.distanceTo(cam));
+      const cor = hash2(Math.floor(T * 2) + k * 13, 77) < .1 ? .3 : 0;
+      this.f.set(k, p, 30, (.055 + cor) * (.4 + .6 * near));
+    }); },
+  where: () => null });
+
+export const ledSwitch = () => event({ name: 'LED switching interference', t0: 12, t1: 60, bands: ['radio'], freq: ['smpsEMI'], note: 'Cheap LED drivers behind the shop signs flicker at half-mains cycles; that switching noise leaks into the radio band right at the sign — short broadband blips compressed against the script time.',
+  init() { this.s = SIGNS.filter(q => !q.neon); this.f = new EmField('radio', this.s.length); },
+  update() { const { t } = S;
+    this.s.forEach((q, k) => { const b = burst(t, 1.6 + q.k * 5, q.k * 13.7, .22) * .5; if (b > .02) this.f.set(k, q.p, 1.8, b); }); },
+  where: () => null });
+
+export const fmMast = () => event({ name: 'FM & DAB on the hill', t0: 0, t1: 60, bands: ['radio', 'vis'], freq: ['fm', 'dab', 'navRed'], note: 'The lattice mast on the broadcast hill keeps the neighbourhood alive: FM (100 MHz) and DAB+ Band III stream from it, and the radio surface term paints dashes on every facade facing the hill. Red aviation light on the cap.',
+  init() {
+    this.fm = new Em('radio'); this.dab = new Em('radio'); this.red = new Em('vis', '#ff2020');
+    addTx('radio', () => ({ p: FM.top, power: 2.4 + 1.2 * Math.max(0, Math.sin(S.t * .4)) }));
+  },
+  update() { const { t, T } = S;
+    const live = .55 + .45 * sm(0, 8, t);
+    this.fm.set(FM.top.clone().setY(FM.top.y - 14), 120, live * .5);
+    this.dab.set(FM.top.clone().setY(FM.top.y - 70), 80, burst(t, .66, .2, .2) * live * .8);
+    this.red.set(FM.top, 30, T % 2.2 < .6 ? 1.2 : .05); },
+  where() { return FM.top; } });

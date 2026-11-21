@@ -139,6 +139,25 @@ export const SPECTRUM = {
   lloydFringe:     { name: 'sea-cliff interferometer fringes (Lloyd\'s mirror, 200 MHz)', f: 200e6 },
 
   // ===== city additions =====
+  bluetooth:       { name: 'Bluetooth (earbuds, 2.4 GHz)', f: 2.44e9 },
+  keyFob:          { name: 'car key fob (433.92 MHz)', f: 433.92e6 },
+  tpms:            { name: 'tyre-pressure sensors (433.92 MHz)', f: 433.92e6 },
+  lteIoT:          { name: 'LTE-M modem (scooters, bus screen)', f: 800e6 },
+  tetra:           { name: 'TETRA Band II police net (250 MHz)', f: 250e6 },
+  sBandRadar:      { name: 'airport surveillance radar (S-band)', f: 2.8e9 },
+  dab:             { name: 'DAB+ digital radio (Band III)', f: 220e6 },
+  powerHum:        { name: '50 Hz power-line field (ELF)', f: 50 },
+  coronaRF:        { name: 'power-line corona noise (broadband HF/VHF)', f: 10e6 },
+  arcRF:           { name: 'pantograph arcing (broadband radio)', f: 30e6 },
+  arcLight:        { name: 'copper arc light (blue-white)', lam: 450e-9 },
+  arcUV:           { name: 'arc UVA emission', lam: 340e-9 },
+  smpsEMI:         { name: 'LED-driver switching interference', f: 30e6 },
+  neon:            { name: 'neon discharge 640 nm', lam: 640.2e-9 },
+  ledBlue:         { name: 'blue LED light bar', lam: 465e-9 },
+  ledAmber:        { name: 'amber LED indicator', lam: 590e-9 },
+  ir850:           { name: '850 nm IR illuminator', lam: 850e-9 },
+  lidar905:        { name: '905 nm LiDAR pulses', lam: 905e-9 },
+  steam:           { name: 'warm moist exhaust/steam (~320 K)', lam: 9e-6 },
 
 };
 
