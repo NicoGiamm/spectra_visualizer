@@ -34,9 +34,11 @@ export const radioTower = () => event({ name: 'Radio / TV tower', t0: 0, t1: 60,
   where() { return this.top; } });
 
 export const warmRocks = () => event({ name: 'Warm rocks cooling', t0: 0, t1: 45, bands: ['ir'], freq: ['thermal290'], note: 'Rocks heated during the day give off infrared as they cool.',
-  init() { this.e = new EmField('ir', NEAR_ROCKS.length); },
-  update() { const w = warmF();   // the ground itself cools via its surface properties; these are the boulders that soaked up most sun
-    NEAR_ROCKS.forEach((r, i) => this.e.set(i, r.p, r.s * 1.6, w * .35)); },
+  // the rock surfaces cool via their surface properties (plan 1.4); only the 5 largest boulders near the trail
+  // (largest thermal mass, so they stay warmest) keep a glow of their own — chosen by size, no R() draws
+  init() { this.r = [...NEAR_ROCKS].sort((a, b) => b.s - a.s).slice(0, 5); this.e = new EmField('ir', this.r.length); },
+  update() { const w = warmF();
+    this.r.forEach((r, i) => this.e.set(i, r.p, r.s * 1.6, w * .35)); },
   where: () => null });
 
 export const hut = () => event({ name: 'Mountain hut', t0: 8, t1: 34, bands: ['vis', 'ir', 'micro'], freq: ['incandescent', 'thermal700', 'wifi24'], note: 'Lit windows, heat leaking from the chimney, Wi-Fi router (2.4 GHz microwave).',
