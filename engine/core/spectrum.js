@@ -120,6 +120,18 @@ export const SPECTRUM = {
   wxTelemetry:     { name: 'weather-station telemetry link (VHF)', f: 169.4e6 },
 
   // ===== seaside additions =====
+  aisAtoN:         { name: 'AIS aid-to-navigation broadcast (VHF)', f: 161.975e6 },
+  vhf16:           { name: 'marine VHF channel 16 voice', f: 156.8e6 },
+  sbandRadar:      { name: 'ship S-band radar', f: 3.05e9 },
+  racon:           { name: 'radar beacon (racon) reply', f: 9.4e9 },
+  radarClutter:    { name: 'radar echoes off turbine blades (X-band)', f: 9.4e9 },
+  navGreen:        { name: 'green navigation light', lam: 520e-9 },
+  navWhiteLED:     { name: 'white LED lantern', lam: 560e-9 },
+  navYellow:       { name: 'yellow special-mark light', lam: 590e-9 },
+  deckLight:       { name: 'metal-halide deck floodlights', lam: 560e-9 },
+  mistScatter:     { name: 'moonlight scattered by sea-mist droplets', lam: 550e-9 },
+  mistThermal:     { name: 'thermal emission of cool mist (~285 K)', lam: 10.2e-6 },
+  lloydFringe:     { name: 'sea-cliff interferometer fringes (Lloyd\'s mirror, 200 MHz)', f: 200e6 },
 
   // ===== city additions =====
 

@@ -16,6 +16,6 @@ run({
     sky.airliner(), sky.venus(), local.lighthouse(), local.ship(), sky.cmb(), sky.milkyWay(), sky.meteorShower(),
     sky.pulsar(), sky.comet(), sky.satellitePass(), sky.starlink(), sky.blackHoleBinary(), sky.aurora(), sky.moonrise(),
     sky.airShowers(), sky.thunderstorm({ note: 'Far out over the sea: lightning, radio "sferics" and terrestrial gamma-ray flashes.' }),
-    sky.fastRadioBurst(), sky.supernova(), sky.gammaRayBurst(), local.bioluminescence(), sky.noctilucentClouds(), sky.moonHalo(),
+    sky.fastRadioBurst(), sky.supernova(), sky.gammaRayBurst(), local.bioluminescence(), local.seaMist(), sky.noctilucentClouds(), sky.moonHalo(),
   ],
 });

@@ -7,7 +7,7 @@ import { deg, dirAE, skyP, onSky } from 'spectra/core/geom.js';
 import { Em, Rib, EmField } from 'spectra/render/sources.js';
 import { solid } from 'spectra/render/instrument.js';
 import { SUN_AZ, sunEl } from 'spectra/world/atmosphere.js';
-import { coastZ, heightAt, SEA, STAND } from './world.js';
+import { coastZ, heightAt, SEA, STAND, ENVSEA } from './world.js';
 import { spectralGroup, addTx } from 'spectra/render/surface.js';
 
 // The last sliver of Sun flashes green as it drops under a sharp sea horizon (sunEl crosses 0 at t≈7.3).
@@ -75,7 +75,7 @@ export const ship = () => event({ name: 'Container ship', t0: 4, t1: 52, bands: 
     addTx('micro', () => this.radarTx); addTx('radio', () => this.aisTx);
     this.radar = new Em('micro'); this.ais = new Em('radio'); this.funnel = new Rib('ir', null, 6, 1); this.hot = new Em('ir', null, 1);
   },
-  update() { const { t, T } = S, p = (t - this.t0) / (this.t1 - this.t0); this.g.visible = p >= 0 && p <= 1; if (!this.g.visible) { this.p = this.radarTx = this.aisTx = null; return; }
+  update() { const { t, T } = S, p = (t - this.t0) / (this.t1 - this.t0); this.g.visible = p >= 0 && p <= 1; if (!this.g.visible) { this.p = this.radarTx = this.aisTx = null; ENVSEA.radI.value = 0; return; }
     const az = lerp(236, 318, p), c = S.camera.position, d = dirAE(az, 0), pos = new V3(c.x + d.x * this.dist, 0, c.z + d.z * this.dist);
     this.g.position.copy(pos); this.g.rotation.y = -(az + 90) * DEG;
     const fw = new V3(Math.cos((az + 90) * DEG), 0, Math.sin((az + 90) * DEG)), at = (f, y) => pos.clone().addScaledVector(fw, f).add(new V3(0, y, 0));
@@ -84,6 +84,7 @@ export const ship = () => event({ name: 'Container ship', t0: 4, t1: 52, bands: 
     this.deck.forEach((e, k) => e.set(at(-60 + k * 45, 22), 14, nav * I * .5));
     const ra = T * 2.4, face = Math.max(0, Math.cos(ra - Math.atan2(c.z - pos.z, c.x - pos.x))) ** 16;   // radar crackles brightest as its antenna sweeps past you
     this.radar.set(at(-85, 34), 60 + 120 * face, I * (.2 + .9 * face));
+    ENVSEA.radP.value.copy(at(-85, 34)); ENVSEA.radA.value = ra; ENVSEA.radI.value = I * 3;   // the same sweep echoes off the headlands and the sea (surface shaders read this)
     const ping = (t % 3) / 3; this.ais.set(at(-85, 44), 220, ping < .2 ? I * (1 - ping / .2) : 0);
     this.radarTx = { p: at(-85, 34), power: I * 40 * face };   // the sweep reaches the beach (range scaled up: X-band is strong)
     this.aisTx = { p: at(-85, 44), power: ping < .2 ? I * 3 * (1 - ping / .2) : 0 };
@@ -96,3 +97,13 @@ export const bioluminescence = () => event({ name: 'Bioluminescent surf', t0: 24
     this.e.forEach((q, k) => { const z = coastZ(q.x) - q.off, b = Math.max(0, Math.sin(T * 1.4 + q.off * .32 + q.ph)) ** 12;
       this.f.set(k, new V3(q.x, .25, z), .9 * q.s, I * b * 1.3); }); },
   where() { return new V3(STAND.x - 6, .5, coastZ(STAND.x) - 6); } });
+
+// Late sea mist: the sea breathes fog in. The look lives in the sea shader (moonlit scatter by day-light
+// of the droplets, a ~285 K screen that hides the warm water toward the horizon in IR); this event drives
+// the shared uMist and the meter activity.
+export const seaMist = () => event({ name: 'Sea mist', t0: 42, t1: 60, bands: ['vis', 'ir'], freq: ['mistScatter', 'mistThermal'],
+  note: 'Cool fog rolls in off the sea: it scatters the moonlight, and in 8–14 µm it reads as a cold screen hiding the warm water.',
+  init() { this.h = new V3(0, 4, -1); },
+  update() { const m = sm(42, 54, S.t); ENVSEA.mist.value = m; if (m <= 0) return;
+    S.act.vis += m * .16; S.act.ir += m * .3; },   // scatter + cold screen: the sea surface itself draws them
+  where() { return this.h; } });
