@@ -16,19 +16,22 @@ import { SIDEWALK_X, FACE_X, PARK_Z, TRAM_Z, WINDOWS, PARKED, BUS, FM, MAST, PYL
 
 // ---------------------------------------------------------------- 4.1 the crowd
 
-export const crowd = () => event({ name: 'Pedestrians & phones', t0: 4, t1: 60, bands: ['ir', 'micro'], freq: ['thermal310', 'lte', 'bluetooth'], note: 'A hundred pedestrians on the two sidewalks: warm bodies on a thermal camera, phones pinging LTE/5G, Bluetooth earbuds chirping on their own slower cycle.',
+export const crowd = () => event({ name: 'Pedestrians & phones', t0: 4, t1: 60, bands: ['ir', 'micro'], freq: ['thermal310', 'lte', 'bluetooth'], tags: ['time-compressed'], note: 'A hundred pedestrians on the two sidewalks: warm bodies on a thermal camera, phones pinging LTE/5G, Bluetooth earbuds chirping on their own slower cycle. Time-compressed: an idle phone in a pocket only talks to the network now and then, not every few seconds.',
   init() {
     this.p = Array.from({ length: 110 }, () => ({ x: (R() < .5 ? 1 : -1) * SIDEWALK_X + (R() - .5) * 3, z0: -30 + R() * 280, dir: R() < .5 ? -1 : 1, v: .5 + R() * 1.2, per: 2.5 + R() * 5.5, ph: R() * 11, bper: 5 + R() * 13, bph: R() * 17 }));
     this.b = new EmField('ir', this.p.length, null, 1); this.d = new EmField('micro', this.p.length);
   },
   update() { const { t } = S, cam = S.camera.position; if (!inWin(this)) return;
     this.p.forEach((q, k) => {
-      const z = q.z0 + q.dir * q.v * t * 1.5;
+      // walkers loop along their 280 m stretch of sidewalk (z −30…250) and fade in/out over the last 12 m at each
+      // end, instead of drifting up to ~150 m past the canyon by the end of the walk
+      const span = 280, u = (((q.z0 + 30 + q.dir * q.v * t * 1.5) % span) + span) % span, z = u - 30;
       if (Math.abs(z - cam.z) > 140) return;
+      const edge = sm(0, 12, u) * sm(0, 12, span - u); if (edge <= 0) return;
       const pos = new V3(q.x, 1.05, z);
-      this.b.set(k, pos, 1.3, .4);
+      this.b.set(k, pos, 1.3, .4 * edge);
       const ping = burst(t, q.per, q.ph, .2) + .4 * burst(t, q.bper, q.bph, .12);
-      if (ping > .02) this.d.set(k, pos.clone().setY(1.35), .8, ping * .75);
+      if (ping > .02) this.d.set(k, pos.clone().setY(1.35), .8, ping * .75 * edge);
     }); },
   where: () => null });
 
@@ -49,8 +52,9 @@ export const scooters = () => event({ name: 'E-scooters', t0: 6, t1: 56, bands: 
     }); },
   where: () => null });
 
-// Parked cars keep their 433.92 MHz sensors alive; sometimes a fob unlocks and the cluster wakes up.
-export const parkedRF = () => event({ name: 'Parked cars: 433 MHz', t0: 0, t1: 60, bands: ['micro'], freq: ['tpms', 'keyFob'], note: 'Tyre-pressure sensors chirp on every parked car at 433.92 MHz, and occasionally a key fob unlocks one — a 69 cm microwave chirp, the whole kerb side twinkles.',
+// Parked cars: direct TPMS sensors are motion-triggered and sleep once the car stops, so a parked car is quiet
+// until a key fob unlocks or locks it (433.92 MHz here; many EU fobs use 868 MHz) — a short 69 cm microwave chirp.
+export const parkedRF = () => event({ name: 'Parked cars: key fobs', t0: 0, t1: 60, bands: ['micro'], freq: ['keyFob'], note: 'Now and then someone unlocks a parked car: the key fob sends a short 433.92 MHz burst (a 69 cm microwave), so the kerb side twinkles one car at a time. The tyre-pressure sensors stay silent — they only transmit while the wheels turn.',
   init() {
     this.c = PARKED.map(q => ({ p: q.p.clone().setY(.55), per: 5 + q.k * 22, ph: q.k * 37, side: q.side }));
     this.f = new EmField('micro', this.c.length);
@@ -58,8 +62,7 @@ export const parkedRF = () => event({ name: 'Parked cars: 433 MHz', t0: 0, t1: 6
   update() { const { t, camera } = S, cam = camera.position;
     this.c.forEach((q, k) => {
       if (Math.abs(q.p.z - cam.z) > 120) return;
-      const tp = burst(t, q.per, q.ph, .2) * .45, fob = burst(t, q.per * 3.3 + 7, q.ph + 2.6, .5);
-      const I = Math.max(tp, fob * 1.1);
+      const I = burst(t, q.per * 3.3 + 7, q.ph + 2.6, .5) * 1.1;   // fob unlock/lock press
       if (I > .02) this.f.set(k, q.p, 1.2, I);
     }); },
   where: () => null });
