@@ -38,6 +38,8 @@ files: scenarios/city/rf.js, scenarios/city/world.js, scenarios/city/street.js
 
 *2026-11-21:* the haze half is done in M4/T3 (561c5ab): no haze blocks in the sky or over the trees at -t 30. Still open here: blocky clusters on the right (north) facade at -t 30 are Wi-Fi routers a few metres away drawn at 1.3 m with the 26-cell micro crackle (`events.js` `wifi`, `this.f.set(k, q.p, q.shop ? 1.6 : 1.3, …)`) — shrink with distance like the haze (size = min(1.3, k·d)); the 5G mast's 38 m glow (`events.js` `this.big.set(MAST.top, 38, .55)`) has the same large-cell look when on screen; the flat white windows / shop fronts.
 
+*2026-11-21:* found in T5: with only Visible on (Human eye) at night the street, sidewalks and facade walls render solid black, even under lit lamps (T5 shot at -t 35 vis only); in all-bands view they look lit only because the IR/micro surface overlays paint them. In scope here ("with Human eye, the city reads as a city at night"): lamps should light the asphalt and sidewalks, facades should keep some ambient/moonlit value. Check whether it regressed with the 1.6 surfaces (519656e/a9adb2f) vs the pre-mission city (e6843ca had merged light-pool meshes).
+
 ## Outcome
 
 <Written by `mission-tracker task <ref> --done --evidence <file>`: what changed, numbers, shots, what was not verified.>
