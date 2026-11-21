@@ -11,7 +11,7 @@ run({
   hint: 'Drag to look out over the bay (a quarter sphere ahead) · scroll to zoom · click a band or press 1–7 to filter · space = play/pause · lasts 2 minutes',
   build,
   events: () => [
-    sky.sunset(), local.greenFlash(), sky.sunDogs(), sky.zodiacalScatter(), local.warmSand(), local.gulls(),
+    sky.sunset(), local.greenFlash(), sky.sunDogs(), sky.crepuscularRays(), sky.purpleLight(), sky.zodiacalLight(), local.warmSand(), local.gulls(),
     observer({ name: 'You', note: 'Standing on the sand; your phone pings the network (microwave) every few seconds.' }),
     sky.airliner(), sky.venus(), local.lighthouse(), local.ship(), sky.cmb(), sky.milkyWay(), sky.meteorShower(),
     sky.pulsar(), sky.comet(), sky.satellitePass(), sky.starlink(), sky.blackHoleBinary(), sky.aurora(), sky.moonrise(),

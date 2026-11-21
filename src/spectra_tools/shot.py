@@ -90,9 +90,9 @@ def print_console(run: Run, verbose: bool = False) -> None:
 
 def shot(name: str, out: Path, t: float | None = None, yaw: float | None = None, pitch: float | None = None,
          bands: str | None = None, labels: bool = True, size: str = "1400,850", budget: int = 20000,
-         verbose: bool = False) -> int:
+         verbose: bool = False, detector: str | None = None) -> int:
     params: dict = {"paused": "1"}
-    for k, v in (("t", t), ("yaw", yaw), ("pitch", pitch), ("bands", bands)):
+    for k, v in (("t", t), ("yaw", yaw), ("pitch", pitch), ("bands", bands), ("detector", detector)):
         if v is not None:
             params[k] = v
     if not labels:

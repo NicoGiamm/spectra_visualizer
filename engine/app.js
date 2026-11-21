@@ -11,7 +11,7 @@
 //   }
 //
 // URL parameters (handy for screenshots): ?t=30 (script time 0–60) &yaw=0.3 &pitch=0.5
-// &paused &bands=ir,micro &labels=0
+// &paused &bands=ir,micro &labels=0 &detector=orbit (default ground: the atmosphere absorbs far-UV/X/gamma)
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
@@ -26,6 +26,9 @@ import { applyVisMode } from './render/instrument.js';
 import { createAtmosphere, sunEl } from './world/atmosphere.js';
 import { updateSurfaces, uvSkylight } from './render/surface.js';
 import { buildDom, createHud, sizeOverlay, drawOverlay } from './ui/hud.js';
+
+// S.curEvent lets sources group ghost markers (absorbed in Ground mode) by event
+function updateEvent(e) { S.curEvent = e; if (e.update) e.update(); S.curEvent = null; }
 
 export function run(sc) {
   buildDom(sc);
@@ -69,6 +72,7 @@ function start(sc) {
   if (q.has('bands')) { const ids = q.get('bands').split(','); BANDS.forEach(b => S.on[b.id] = ids.includes(b.id)); }
   if (q.has('paused')) hud.setPlay(false);
   if (q.get('labels') === '0') hud.setLabels(false);
+  hud.setDetector(q.get('detector') === 'orbit' ? 'orbit' : 'ground');
 
   // drag to look: a quarter sphere ahead (yaw ±1.35 rad, pitch −0.1…1.5)
   const gl = renderer.domElement; let drag = null;
@@ -86,7 +90,8 @@ function start(sc) {
   hud.sync();
 
   // one simulation step at script time t (no render): what the frame loop does before composer.render()
-  function step(t, drawn) {      // drawn: optional array of Sets, collects the bands each event actually emitted
+  // drawn / absorbed: optional arrays of Sets, collect the bands each event actually emitted / had absorbed (Ground mode)
+  function step(t, drawn, absorbed) {
     S.t = t; S.T = t * 2; S.TIME.value = S.T;
     BANDS.forEach(b => S.act[b.id] = 0);
     hideAllSources();
@@ -96,9 +101,10 @@ function start(sc) {
     updateSurfaces(uvSkylight(sunEl()));
     world.update && world.update(S.t);
     EV.forEach((e, i) => {
-      if (!drawn) { e.update && e.update(); return; }
-      const before = { ...S.act }; e.update && e.update();
+      if (!drawn) { updateEvent(e); return; }
+      const before = { ...S.act }; updateEvent(e);
       BANDS.forEach(b => { if (S.act[b.id] - before[b.id] > 1e-6) drawn[i].add(b.id); });
+      const gh = S.ghosts.get(e); if (gh) gh.bands.forEach(b => absorbed[i].add(b));
     });
   }
   if (q.has('dump')) dumpReport(sc, EV, step, norm, +(q.get('dstep') || .5));
@@ -117,7 +123,7 @@ function start(sc) {
     atmo.update();
     updateSurfaces(uvSkylight(sunEl()));
     world.update && world.update(S.t);
-    EV.forEach(e => e.update && e.update());
+    EV.forEach(updateEvent);
     composer.render();
     const active = EV.filter(e => S.t >= e.t0 && S.t <= e.t1);
     drawOverlay(active); hud.frame(active, norm);
@@ -130,9 +136,9 @@ function start(sc) {
 // count draw calls at a few moments, and write the report as JSON into <script id="spectra-dump">
 // (read by `uv run spectra timeline`).
 function dumpReport(sc, EV, step, norm, dt) {
-  const { renderer, scene, camera } = S, samples = [], drawn = EV.map(() => new Set());
+  const { renderer, scene, camera } = S, samples = [], drawn = EV.map(() => new Set()), absorbed = EV.map(() => new Set());
   for (let t = 0; t <= 60 + 1e-6; t += dt) {
-    step(t, drawn);
+    step(t, drawn, absorbed);
     samples.push({ t: +t.toFixed(3), act: Object.fromEntries(BANDS.map(b => [b.id, +S.act[b.id].toFixed(4)])),
       active: EV.flatMap((e, i) => (t >= e.t0 && t <= e.t1 ? [i] : [])) });
   }
@@ -144,10 +150,10 @@ function dumpReport(sc, EV, step, norm, dt) {
     renderer.info.autoReset = true; return r;
   });
   const report = {
-    scenario: sc.title, step: dt, norm, draws, sources: { em: EMS.length, rib: RIBS.length, fields: FIELDS.length, fieldInstances: FIELDS.reduce((a, f) => a + f.n, 0) },
+    scenario: sc.title, detector: S.detector, step: dt, norm, draws, sources: { em: EMS.length, rib: RIBS.length, fields: FIELDS.length, fieldInstances: FIELDS.reduce((a, f) => a + f.n, 0) },
     events: EV.map((e, i) => {
       const freq = e.freq || [], known = freq.filter(k => SPECTRUM[k]);
-      return { name: e.name, t0: e.t0, t1: e.t1, bands: e.bands, tags: e.tags || [], drawn: [...drawn[i]],
+      return { name: e.name, t0: e.t0, t1: e.t1, bands: e.bands, tags: e.tags || [], drawn: [...drawn[i]], absorbed: [...absorbed[i]],
         freq: known.map(k => ({ key: k, name: SPECTRUM[k].name, band: bandOf(SPECTRUM[k]), at: describe(SPECTRUM[k]),
           ground: SPECTRUM[k].ground !== false, stylised: !!SPECTRUM[k].stylised })),
         unknownFreq: freq.filter(k => !SPECTRUM[k]) };

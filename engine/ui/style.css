@@ -20,7 +20,14 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:13px/
 .ev b{display:block;font-weight:600}
 .ev small{color:var(--muted)}
 .chips{display:flex;gap:4px;margin-top:3px;flex-wrap:wrap}
-.chip{font-size:10px;padding:1px 6px;border-radius:9px;border:1px solid currentColor}
+.chip{font-size:10px;padding:1px 6px;border-radius:9px;border:1px solid currentColor;cursor:help}
+.chip.abs{border-style:dashed;text-decoration:line-through}
+.tag{display:inline-block;margin-left:6px;vertical-align:1px;font-size:9px;font-weight:500;padding:0 5px;border-radius:4px;background:rgba(255,255,255,.1);color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.tag-rare{background:rgba(255,200,80,.18);color:#ffd27a}
+.tag-time-compressed{background:rgba(120,170,255,.16);color:#9cc0ff}
+.tag-stylised{background:rgba(255,110,180,.16);color:#ff9ccc}
+.tag-common{background:rgba(140,230,150,.13);color:#9be3a3}
+.ev small.absnote{display:block;margin-top:2px;color:#9aa6d8;font-style:italic}
 #spectrum{position:fixed;left:10px;right:10px;bottom:10px;display:grid;grid-template-columns:repeat(7,1fr);gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px;backdrop-filter:blur(6px)}
 .cell{position:relative;height:64px;border-radius:6px;overflow:hidden;cursor:pointer;background:rgba(255,255,255,.04);border-top:3px solid var(--c)}
 .cell .fill{position:absolute;left:0;right:0;bottom:0;height:0;background:var(--c);opacity:.35}
