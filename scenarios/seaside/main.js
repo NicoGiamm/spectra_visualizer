@@ -11,11 +11,14 @@ run({
   hint: 'Drag to look out over the bay (a quarter sphere ahead) · scroll to zoom · click a band or press 1–7 to filter · space = play/pause · lasts 2 minutes',
   build,
   events: () => [
-    sky.sunset(), local.greenFlash(), sky.sunDogs(), sky.crepuscularRays(), sky.purpleLight(), sky.zodiacalLight(), local.warmSand(), local.gulls(),
+    sky.sunset(), local.greenFlash(), sky.sunDogs(), sky.crepuscularRays(), local.warmSand(), local.gulls(),
     observer({ name: 'You', note: 'Standing on the sand; your phone pings the network (microwave) every few seconds.' }),
     sky.airliner(), sky.venus(), local.lighthouse(), local.ship(), sky.cmb(), sky.milkyWay(), sky.meteorShower(),
     sky.pulsar(), sky.comet(), sky.satellitePass(), sky.starlink(), sky.blackHoleBinary(), sky.aurora(), sky.moonrise(),
     sky.airShowers(), sky.thunderstorm({ note: 'Far out over the sea: lightning, radio "sferics" and terrestrial gamma-ray flashes.' }),
-    sky.fastRadioBurst(), sky.supernova(), sky.gammaRayBurst(), local.bioluminescence(), local.seaMist(), sky.noctilucentClouds(), sky.moonHalo(),
+    sky.fastRadioBurst(), sky.supernova(), sky.gammaRayBurst(), local.bioluminescence(), sky.noctilucentClouds(), sky.moonHalo(),
+    // added after the original list so the events above keep their seeded R values (crepuscularRays takes the
+    // zodiacalScatter slot with the same 18 R() draws; these three draw none)
+    sky.purpleLight(), sky.zodiacalLight(), local.seaMist(),
   ],
 });

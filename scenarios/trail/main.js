@@ -13,12 +13,15 @@ run({
   // init() order = list order (they share the seeded stream); the panel sorts by t0 itself.
   events: () => [
     sky.sunset(), local.alpenglow(), local.radioTower(), local.warmRocks(),
-    local.cellMast(), local.weatherStation(), local.mountainStream(), local.gnss(), local.cows(),
     observer({ name: 'Hiker (you)', note: 'Headlamp after dark; your phone pings the network (microwave) every few seconds.', lamp: true }),
-    sky.airliner(), sky.venus(), local.hut(), local.deer(), local.sunWarmedSlope(), local.fireflies(), sky.cmb(), sky.milkyWay(), sky.meteorShower(),
-    sky.pulsar(), local.bats(), local.farHikers(), sky.comet(), sky.satellitePass(), sky.starlink(), sky.blackHoleBinary(), sky.aurora(), sky.moonrise(),
+    sky.airliner(), sky.venus(), local.hut(), local.deer(), local.fireflies(), sky.cmb(), sky.milkyWay(), sky.meteorShower(),
+    sky.pulsar(), local.bats(), sky.comet(), sky.satellitePass(), sky.starlink(), sky.blackHoleBinary(), sky.aurora(), sky.moonrise(),
     sky.airShowers(), sky.thunderstorm({ note: 'Over the southern peaks: lightning, radio "sferics" and terrestrial gamma-ray flashes.' }),
-    sky.fastRadioBurst(), sky.supernova(), sky.gammaRayBurst(), local.campfire(), local.sparkDraft(), sky.sunDogs(),
-    sky.crepuscularRays(), sky.purpleLight(), sky.zodiacalLight(), sky.noctilucentClouds(), sky.moonHalo(), local.valleyFog(),
+    sky.fastRadioBurst(), sky.supernova(), sky.gammaRayBurst(), local.campfire(), sky.sunDogs(), sky.crepuscularRays(),
+    sky.noctilucentClouds(), sky.moonHalo(),
+    // added after the original list so the events above keep their seeded R values (crepuscularRays takes the
+    // zodiacalScatter slot with the same 18 R() draws; the removed thermalUpdraft/fireWhirl drew none)
+    local.cellMast(), local.weatherStation(), local.mountainStream(), local.gnss(), local.cows(), local.sunWarmedSlope(),
+    local.farHikers(), local.sparkDraft(), sky.purpleLight(), sky.zodiacalLight(), local.valleyFog(),
   ],
 });
