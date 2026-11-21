@@ -65,4 +65,49 @@ export class Rib {
   }
 }
 
-export function hideAllSources() { EMS.forEach(e => e.m.visible = false); RIBS.forEach(r => r.m.visible = false); }
+// Many point sources of one band in a single draw call (instanced camera-facing quads, same look as Em).
+// Per instance: position, size, intensity, seed, colour. Use for crowds: fireflies, lamps, routers, car lights.
+//   const f = new EmField('vis', 120, '#b8ff3a');  f.set(i, pos, size, I);  f.color(i, '#ff0000');
+const FIELD_VS = `attribute vec3 iPos; attribute float iSize, iI, iSeed; attribute vec3 iColor;
+varying vec2 vUv; flat varying float vI, vSeed; flat varying vec3 vColor;
+void main(){ vUv = uv; vI = iI; vSeed = iSeed; vColor = iColor;
+  if(iI <= 0.){ gl_Position = vec4(2., 2., 2., 1.); return; }          // unused slot: outside the clip volume
+  vec4 mv = modelViewMatrix * vec4(iPos, 1.); mv.xy += position.xy * iSize; gl_Position = projectionMatrix * mv; }`;
+const FIELD_FS = QUAD_FS.replace('uniform int uBand; uniform float uI, uTime, uSeed, uReal; uniform vec3 uColor; varying vec2 vUv;',
+  'uniform int uBand; uniform float uTime, uReal; varying vec2 vUv; flat varying float vI, vSeed; flat varying vec3 vColor;\n#define uI vI\n#define uSeed vSeed\n#define uColor vColor\n');
+if (FIELD_FS === QUAD_FS) throw new Error('EmField: QUAD_FS uniform line changed; update FIELD_FS');
+
+export class EmField {
+  constructor(band, n, color, real) {
+    this.band = band; this.n = n; this.dirty = false;
+    const g = new THREE.InstancedBufferGeometry();
+    g.index = quadGeo.index; g.setAttribute('position', quadGeo.attributes.position); g.setAttribute('uv', quadGeo.attributes.uv);
+    const attr = (name, size, arr) => { const a = new THREE.InstancedBufferAttribute(arr, size); a.setUsage(THREE.DynamicDrawUsage); g.setAttribute(name, a); return a; };
+    const c = new THREE.Color(color || '#ffffff'), cols = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) c.toArray(cols, i * 3);
+    this.aPos = attr('iPos', 3, new Float32Array(n * 3)); this.aSize = attr('iSize', 1, new Float32Array(n));
+    this.aI = attr('iI', 1, new Float32Array(n)); this.aColor = attr('iColor', 3, cols);
+    attr('iSeed', 1, Float32Array.from({ length: n }, Math.random));   // visual only: keeps the seeded R stream untouched
+    g.instanceCount = n;
+    this.m = new THREE.Mesh(g, new THREE.ShaderMaterial({
+      uniforms: { uBand: { value: BI[band] }, uTime: S.TIME, uReal: { value: real ? 1 : 0 } },
+      vertexShader: FIELD_VS, fragmentShader: FIELD_FS,
+      blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    }));
+    this.m.frustumCulled = false; this.m.renderOrder = 5; this.m.visible = false; S.scene.add(this.m); FIELDS.push(this);
+  }
+  set(i, pos, size, I) {
+    if (!(I > .01)) return this;
+    S.act[this.band] += I;
+    this.aPos.setXYZ(i, pos.x, pos.y, pos.z); this.aSize.array[i] = size; this.aI.array[i] = I * GAIN[this.band];
+    this.aPos.needsUpdate = this.aSize.needsUpdate = this.aI.needsUpdate = true;
+    this.dirty = true; this.m.visible = S.on[this.band]; return this;
+  }
+  color(i, c) { (c.isColor ? c : new THREE.Color(c)).toArray(this.aColor.array, i * 3); this.aColor.needsUpdate = true; return this; }
+  clear() {
+    if (this.dirty) { this.aI.array.fill(0); this.aI.needsUpdate = true; this.dirty = false; }
+    this.m.visible = false;
+  }
+}
+
+export function hideAllSources() { EMS.forEach(e => e.m.visible = false); RIBS.forEach(r => r.m.visible = false); FIELDS.forEach(f => f.clear()); }

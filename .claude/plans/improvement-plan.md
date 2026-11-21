@@ -37,7 +37,7 @@ and a commit. Steps inside a phase are ordered; phases 3–6 can be reordered on
   headless over t = 0…60 without rendering). Tooling: `uv run spectra timeline <id>` runs headless Chrome, parses the
   JSON and prints an ASCII gantt + a per-band sparkline of active sources; `--json` for raw output.
   *Done when* the three scenarios print a timeline and gaps/peaks are visible at a glance.
-- [ ] **0.2 Instanced emitters.**
+- [x] **0.2 Instanced emitters.**
   `EmField(band, n, { color, real })`: one InstancedMesh (or one Points geometry) drawing *n* camera-facing
   quads with per-instance position/size/intensity/seed attributes in the same band shader (port `QUAD_FS` to read
   instance attributes). API: `field.set(i, pos, size, I)`; activity accounting identical to `Em`. Same for ribbons if
@@ -243,4 +243,14 @@ read via `--dump-dom`; ~5 s per scenario). Baseline:
 - **Bug found: every meter is pinned at the top** (act / METER_NORM peaks: trail vis 18×, ir 8.5×; city vis 38×,
   ir 12×, micro 7×) — also true in the original single file. Fix in 1.3 (meters must be re-normalised, likely with a
   soft compression like `1 - exp(-act/norm)` instead of a hard clamp).
+
+### 2026-11-21 · 0.2 done
+`EmField(band, n, color, real)` in `engine/render/sources.js` (instanced quads, same band shader via `#define`s,
+per-instance colour, unused slots clipped in the vertex shader; seeds from `Math.random` so the seeded `R` stream —
+and every layout — is unchanged). Migrated: fireflies, warm rocks, warm sand, bioluminescent surf, street lights,
+Wi-Fi, car head/tail lights + engine heat + radar, fireworks stars, Starlink. City scenery merged too (centre-line
+dashes, lamp poles/arms, light pools → 3 meshes; car bodies/cabins → 2 InstancedMeshes).
+Activity samples identical to the baseline (only the random lightning flicker differs).
+Draw calls: trail 101/218/158 → 80/136/158 · seaside 87/179/119 → 74/125/107 · **city 452/719/736 → 64/162/157**.
+Also dimmed the far-facade window average (was a flat beige wall at night).
 

@@ -1,6 +1,7 @@
 // A city avenue running west (-z). You walk the north sidewalk out of the street canyon to the
 // edge of a large park, where the sky opens up over a distant skyline.
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { V3, clamp, lerp, sm, R, noise2 } from 'spectra/core/util.js';
 import { S } from 'spectra/core/state.js';
 import { solid, visOnly, gridMat } from 'spectra/render/instrument.js';
@@ -42,7 +43,7 @@ function buildingMaterials() {
       { vec2 cell; float aa; float w = winMask(vWp, vOn, vSeed, cell, aa); float h = h21(cell);
         vec3 wc = mix(vec3(1.,.66,.32), vec3(.7,.82,1.), step(.72, h21(cell*1.31 + 3.)))*(.8 + .6*h21(cell*2.7));
         float face = step(abs(vOn.y), .5)*step(3.2, vWp.y);
-        totalEmissiveRadiance += mix(w*step(h, uLit)*wc, face*.36*uLit*vec3(.92,.7,.5), aa); }`);
+        totalEmissiveRadiance += mix(w*step(h, uLit)*wc, face*.12*uLit*vec3(.92,.7,.5), aa); }`);
   };
   // instrument view: dark blocks whose windows leak heat when IR is on
   const instr = new THREE.ShaderMaterial({
@@ -70,7 +71,9 @@ function ground() {
   add(ROAD * 2, 1800, 0, -100, 0x111214, .01);                      // the avenue runs on through the park
   [-1, 1].forEach(s => add(WALK, 1800, s * (ROAD + WALK / 2), -100, 0x2a2826, .03));   // sidewalks / park paths
   add(1200, 1000, 0, PARK_Z - 500, 0x0b1408, .0);                   // park lawn
-  for (let z = -900; z < 700; z += 9) add(.18, 3.2, 0, z, 0x8a8478, .02);   // centre line dashes
+  const dashes = [];                                                // centre line: one merged mesh
+  for (let z = -900; z < 700; z += 9) { const g = new THREE.PlaneGeometry(.18, 3.2); g.rotateX(-Math.PI / 2); g.translate(0, .02, z); dashes.push(g); }
+  S.scene.add(solid(new THREE.Mesh(mergeGeometries(dashes), new THREE.MeshStandardMaterial({ color: 0x8a8478, roughness: .95 })), GROUND_INSTR));
 }
 
 function buildings(mat, instr) {
@@ -102,19 +105,20 @@ function buildings(mat, instr) {
 function lamps() {
   const pole = new THREE.CylinderGeometry(.08, .12, 7, 6); pole.translate(0, 3.5, 0);
   const arm = new THREE.BoxGeometry(1.6, .1, .1); arm.translate(-.8, 7, 0);
-  const geo = new THREE.Group(), mat = new THREE.MeshStandardMaterial({ color: 0x1b1c1e, roughness: .6, metalness: .4 });
+  const mat = new THREE.MeshStandardMaterial({ color: 0x1b1c1e, roughness: .6, metalness: .4 });
   const poolMat = new THREE.MeshBasicMaterial({ map: softTex(), color: 0x000000, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
-  const pool = new THREE.PlaneGeometry(14, 14);
+  const parts = [], pools = [], m = new THREE.Matrix4();          // all poles/arms and all light pools merged: two draw calls
   const place = (x, z, dir) => {
-    const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = dir > 0 ? 0 : Math.PI;   // arm reaches over the road
-    g.add(new THREE.Mesh(pole, mat), new THREE.Mesh(arm, mat)); geo.add(g);
+    m.makeRotationY(dir > 0 ? 0 : Math.PI).setPosition(x, 0, z);    // arm reaches over the road
+    parts.push(pole.clone().applyMatrix4(m), arm.clone().applyMatrix4(m));
     const head = new V3(x - 1.5 * dir, 6.9, z);
-    const p = new THREE.Mesh(pool, poolMat); p.rotation.x = -Math.PI / 2; p.position.set(head.x, .05, head.z); S.scene.add(visOnly(p));
+    const pg = new THREE.PlaneGeometry(14, 14); pg.rotateX(-Math.PI / 2); pg.translate(head.x, .05, head.z); pools.push(pg);
     LAMPS.push({ p: head, k: R() });
   };
   for (let z = PARK_Z + 6; z < 420; z += 24) { place(ROAD + .6, z, 1); place(-ROAD - .6, z + 12, -1); }
   for (let z = PARK_Z - 18; z > PARK_Z - 700; z -= 30) { place(ROAD + .6, z, 1); place(-ROAD - .6, z - 15, -1); }   // on through the park
-  S.scene.add(solid(geo));
+  S.scene.add(solid(new THREE.Mesh(mergeGeometries(parts), mat)));
+  S.scene.add(visOnly(new THREE.Mesh(mergeGeometries(pools), poolMat)));
   LAMPS.poolMat = poolMat;
 }
 

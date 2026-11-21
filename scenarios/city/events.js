@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { V3, lerp, sm, env, R } from 'spectra/core/util.js';
 import { S } from 'spectra/core/state.js';
 import { event } from 'spectra/core/events.js';
-import { Em, Rib } from 'spectra/render/sources.js';
+import { Em, Rib, EmField } from 'spectra/render/sources.js';
 import { solid } from 'spectra/render/instrument.js';
 import { BUILD, LAMPS, ROOFS, WINDOWS, PARK_Z, GROUND_INSTR } from './world.js';
 
@@ -14,10 +14,10 @@ export const windows = () => event({ name: 'Lit windows & heat island', t0: 0, t
   where: () => null });
 
 export const streetLights = () => event({ name: 'Street lights', t0: 8, t1: 60, bands: ['vis', 'ir'], note: 'Sodium lamps flicker on at dusk: orange light with a strong near-infrared tail.',
-  init() { this.e = LAMPS.map(() => ({ v: new Em('vis', '#ffb45a'), i: new Em('ir') })); },
+  init() { this.v = new EmField('vis', LAMPS.length, '#ffb45a'); this.i = new EmField('ir', LAMPS.length); },
   update() { const { t, T } = S; let sum = 0;
     LAMPS.forEach((l, k) => { const on = sm(9 + l.k * 4, 9.6 + l.k * 4, t), warm = on * (t < 9.6 + l.k * 4 ? .6 + .4 * Math.sin(T * 40 + k) : 1);   // a brief flicker while striking
-      sum += on; this.e[k].v.set(l.p, 2.4, warm * 1.1); this.e[k].i.set(l.p, 3.2, warm * .25); });
+      sum += on; this.v.set(k, l.p, 2.4, warm * 1.1); this.i.set(k, l.p, 3.2, warm * .25); });
     const n = sum / Math.max(1, LAMPS.length); LAMPS.poolMat.color.setRGB(.55 * n, .3 * n, .1 * n); },
   where: () => null });
 
@@ -39,8 +39,8 @@ export const cellTower = () => event({ name: '5G mast', t0: 0, t1: 60, bands: ['
   where() { return this.top; } });
 
 export const wifi = () => event({ name: 'Wi-Fi routers', t0: 0, t1: 60, bands: ['micro'], note: '2.4 and 5 GHz routers behind the windows, chattering in short bursts.',
-  init() { this.e = WINDOWS.map(p => ({ p, r: 1.5 + R() * 3, ph: R() * 6, e: new Em('micro') })); },
-  update() { const { T } = S; this.e.forEach(q => { const b = Math.max(0, Math.sin(T * q.r + q.ph)) ** 6; q.e.set(q.p, 2.2, .25 + b * .6); }); },
+  init() { this.e = WINDOWS.map(p => ({ p, r: 1.5 + R() * 3, ph: R() * 6 })); this.f = new EmField('micro', this.e.length); },
+  update() { const { T } = S; this.e.forEach((q, k) => { const b = Math.max(0, Math.sin(T * q.r + q.ph)) ** 6; this.f.set(k, q.p, 2.2, .25 + b * .6); }); },
   where: () => null });
 
 // Cars on the avenue; it runs on through the park, so they appear and vanish far away.
@@ -50,27 +50,30 @@ export const traffic = () => event({ name: 'Traffic', t0: 0, t1: 60, bands: ['vi
     const geoB = new THREE.BoxGeometry(1.8, .75, 4.4), geoC = new THREE.BoxGeometry(1.6, .6, 2.3); geoB.translate(0, .62, 0); geoC.translate(0, 1.3, -.2);
     this.cars = [];
     for (const [x, dir] of lanes) for (let k = 0; k < 7; k++) {
-      const m = new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(R(), .3 + R() * .3, .06 + R() * .12), roughness: .4, metalness: .5 });
-      const G = new THREE.Group(); G.add(new THREE.Mesh(geoB, m), new THREE.Mesh(geoC, m)); S.scene.add(solid(G));
-      this.cars.push({ G, x: x + (R() - .5) * .4, dir, z0: k / 7 + R() * .08, v: 9 + R() * 5,
-        hl: [new Em('vis', '#fff4dc'), new Em('vis', '#fff4dc')], tl: [new Em('vis', '#ff2a1a'), new Em('vis', '#ff2a1a')],
-        ex: new Rib('ir', null, 3, 1), hot: new Em('ir', null, 1), rad: new Em('micro') });
+      const col = new THREE.Color().setHSL(R(), .3 + R() * .3, .06 + R() * .12);
+      this.cars.push({ G: new THREE.Object3D(), col, x: x + (R() - .5) * .4, dir, z0: k / 7 + R() * .08, v: 9 + R() * 5, ex: new Rib('ir', null, 3, 1) });
     }
+    const n = this.cars.length, m = new THREE.MeshStandardMaterial({ roughness: .4, metalness: .5 });   // bodies and cabins: two instanced draws
+    this.bodies = [geoB, geoC].map(g => { const im = new THREE.InstancedMesh(g, m, n); im.instanceMatrix.setUsage(THREE.DynamicDrawUsage); im.frustumCulled = false;
+      this.cars.forEach((c, i) => im.setColorAt(i, c.col)); S.scene.add(solid(im)); return im; });
+    this.hidden = new THREE.Matrix4().makeScale(0, 0, 0);   // one instanced field per light type for all cars
+    this.hl = new EmField('vis', n * 2, '#fff4dc'); this.tl = new EmField('vis', n * 2, '#ff2a1a'); this.hot = new EmField('ir', n, null, 1); this.rad = new EmField('micro', n);
   },
   update() { const { t, T } = S, cam = S.camera.position, lights = sm(6, 12, t), Z0 = -900, L = 1600;
-    for (const c of this.cars) {
+    for (const [ci, c] of this.cars.entries()) {
       const s = ((c.z0 * L + c.dir * c.v * t * 2) % L + L) % L, z = Z0 + s;           // position along the loop, script-time driven
       const fade = sm(Z0, Z0 + 150, z) * (1 - sm(Z0 + L - 150, Z0 + L, z));          // vanish only far away
-      c.G.position.set(c.x, 0, z); c.G.rotation.y = c.dir > 0 ? 0 : Math.PI; c.G.visible = fade > .01;
-      if (!c.G.visible) continue;
+      c.G.position.set(c.x, 0, z); c.G.rotation.y = c.dir > 0 ? 0 : Math.PI; c.G.updateMatrix();
+      this.bodies.forEach(im => { im.setMatrixAt(ci, fade > .01 ? c.G.matrix : this.hidden); im.instanceMatrix.needsUpdate = true; });
+      if (fade <= .01) continue;
       const fw = new V3(0, 0, c.dir), side = new V3(1, 0, 0), toCam = cam.clone().sub(c.G.position).normalize(), face = fw.dot(toCam);
       const front = c.G.position.clone().addScaledVector(fw, 2.25), back = c.G.position.clone().addScaledVector(fw, -2.25);
       const hI = (.25 + .75 * lights) * Math.max(0, face) ** .5 * fade, tI = (.3 + .7 * lights) * Math.max(0, -face) ** .5 * fade;
       for (let k = 0; k < 2; k++) { const o = side.clone().multiplyScalar(k ? .65 : -.65);
-        c.hl[k].set(front.clone().add(o).setY(.7), .9, hI * 1.2); c.tl[k].set(back.clone().add(o).setY(.8), .5, tI * .9); }
+        this.hl.set(ci * 2 + k, front.clone().add(o).setY(.7), .9, hI * 1.2); this.tl.set(ci * 2 + k, back.clone().add(o).setY(.8), .5, tI * .9); }
       c.ex.set([back.clone().setY(.35), back.clone().addScaledVector(fw, -1.6).setY(.6)], .5, .9, .4 * fade);
-      c.hot.set(c.G.position.clone().addScaledVector(fw, 1.3).setY(.8), 1.8, .35 * fade);
-      c.rad.set(front.clone().setY(.5), .8, (.25 + .3 * Math.max(0, Math.sin(T * 7 + c.z0 * 40))) * fade);
+      this.hot.set(ci, c.G.position.clone().addScaledVector(fw, 1.3).setY(.8), 1.8, .35 * fade);
+      this.rad.set(ci, front.clone().setY(.5), .8, (.25 + .3 * Math.max(0, Math.sin(T * 7 + c.z0 * 40))) * fade);
     } },
   where: () => null });
 
@@ -81,7 +84,8 @@ export const fireworks = () => event({ name: 'Fireworks', t0: 50, t1: 60, bands:
     return { t0: 50.2 + i * 1.15 + R() * .4, c, col: '#' + new THREE.Color().setHSL(hue, 1, .62).getHexString(),
       dirs: Array.from({ length: 24 }, () => new V3(R() - .5, R() - .5, R() - .5).normalize()), sp: 22 + R() * 14,
       trail: new Rib('vis', '#ffd9a0', 2), flash: null, ir: new Em('ir') }; });
-    this.b.forEach(b => { b.flash = new Em('vis', b.col); b.st = b.dirs.map(() => new Em('vis', b.col)); });
+    this.stars = new EmField('vis', this.b.length * 24);
+    this.b.forEach((b, bi) => { b.flash = new Em('vis', b.col); b.base = bi * 24; b.dirs.forEach((_, k) => this.stars.color(b.base + k, b.col)); });
     this.p = null; },
   update() { const { t } = S; this.p = null;
     for (const b of this.b) { const age = t - b.t0; if (age < -.9 || age > 2.6) continue;
@@ -89,6 +93,6 @@ export const fireworks = () => event({ name: 'Fireworks', t0: 50, t1: 60, bands:
         b.trail.set([base.clone().lerp(b.c, Math.max(0, f - .25)), head], .6, .6, .8, 1); b.ir.set(head, 4, .5); continue; }
       this.p = b.c; const I = 1 - sm(.6, 2.6, age);
       b.flash.set(b.c, 30 * (1 - sm(0, .3, age)) + 8, (1 - sm(0, .4, age)) * 1.4);
-      b.st.forEach((e, k) => { const d = b.dirs[k], r = b.sp * (1 - Math.exp(-age * 2.2)); e.set(b.c.clone().addScaledVector(d, r).add(new V3(0, -2.5 * age * age, 0)), 3.2, I * 1.3); });
+      b.dirs.forEach((d, k) => { const r = b.sp * (1 - Math.exp(-age * 2.2)); this.stars.set(b.base + k, b.c.clone().addScaledVector(d, r).add(new V3(0, -2.5 * age * age, 0)), 3.2, I * 1.3); });
       b.ir.set(b.c, 40 * (.4 + age * .3), I * .5); } },
   where() { return this.p; } });

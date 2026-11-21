@@ -4,7 +4,7 @@ import { V3, DEG, lerp, sm, env, R } from 'spectra/core/util.js';
 import { S } from 'spectra/core/state.js';
 import { event } from 'spectra/core/events.js';
 import { deg, dirAE, skyP, onSky } from 'spectra/core/geom.js';
-import { Em, Rib } from 'spectra/render/sources.js';
+import { Em, Rib, EmField } from 'spectra/render/sources.js';
 import { solid } from 'spectra/render/instrument.js';
 import { SUN_AZ, sunEl } from 'spectra/world/atmosphere.js';
 import { coastZ, heightAt, sandMat, SAND_INSTR, SEA, STAND } from './world.js';
@@ -17,9 +17,9 @@ export const greenFlash = () => event({ name: 'Green flash', t0: 6.4, t1: 8.6, b
   where() { return this.p; } });
 
 export const warmSand = () => event({ name: 'Warm sand cooling', t0: 0, t1: 45, bands: ['ir'], note: 'Sand soaked up the afternoon Sun and radiates it back as infrared; the sea, slower to change, stays cool.',
-  init() { this.e = Array.from({ length: 14 }, () => { const x = (R() - .5) * 90, z = coastZ(x) + 6 + R() * 26; return { p: new V3(x, heightAt(x, z) + .1, z), s: 2.5 + R() * 3, e: new Em('ir') }; }); },
+  init() { this.e = Array.from({ length: 14 }, () => { const x = (R() - .5) * 90, z = coastZ(x) + 6 + R() * 26; return { p: new V3(x, heightAt(x, z) + .1, z), s: 2.5 + R() * 3 }; }); this.f = new EmField('ir', this.e.length); },
   update() { const w = 1 - sm(0, 45, S.t), on = S.on; SAND_INSTR.uniforms.uWarm.value = on.ir ? w * .6 : 0; S.act.ir += w * .4; sandMat.emissive.setRGB(on.ir ? w * .05 : 0, on.ir ? w * .014 : 0, 0);
-    this.e.forEach(q => q.e.set(q.p, q.s, w * .35)); },
+    this.e.forEach((q, k) => this.f.set(k, q.p, q.s, w * .35)); },
   where: () => null });
 
 // Gulls: warm bodies (realistic IR), dark silhouettes against the dusk.
@@ -86,8 +86,8 @@ export const ship = () => event({ name: 'Container ship', t0: 4, t1: 52, bands: 
   where() { return this.p; } });
 
 export const bioluminescence = () => event({ name: 'Bioluminescent surf', t0: 24, t1: 60, bands: ['vis'], note: 'Plankton flash blue wherever the breaking waves stir them: cold light, no heat.',
-  init() { this.e = Array.from({ length: 40 }, () => { const x = STAND.x + (R() - .5) * 140; return { x, off: 2 + R() * 20, ph: R() * 6, s: .5 + R(), e: new Em('vis', '#3fb4ff') }; }); },
+  init() { this.e = Array.from({ length: 40 }, () => { const x = STAND.x + (R() - .5) * 140; return { x, off: 2 + R() * 20, ph: R() * 6, s: .5 + R() }; }); this.f = new EmField('vis', this.e.length, '#3fb4ff'); },
   update() { const { t, T } = S, I = sm(24, 32, t); SEA.mat.uniforms.uBio.value = S.on.vis ? I : 0; if (I <= 0) return; S.act.vis += I * .3;
-    this.e.forEach(q => { const z = coastZ(q.x) - q.off, b = Math.max(0, Math.sin(T * 1.4 + q.off * .32 + q.ph)) ** 12;
-      q.e.set(new V3(q.x, .25, z), .9 * q.s, I * b * 1.3); }); },
+    this.e.forEach((q, k) => { const z = coastZ(q.x) - q.off, b = Math.max(0, Math.sin(T * 1.4 + q.off * .32 + q.ph)) ** 12;
+      this.f.set(k, new V3(q.x, .25, z), .9 * q.s, I * b * 1.3); }); },
   where() { return new V3(STAND.x - 6, .5, coastZ(STAND.x) - 6); } });

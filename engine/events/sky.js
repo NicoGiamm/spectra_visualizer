@@ -7,7 +7,7 @@ import { V3, DEG, clamp, lerp, sm, env, kf, R } from '../core/util.js';
 import { S } from '../core/state.js';
 import { event } from '../core/events.js';
 import { deg, dirAE, skyP, onSky, basis, ringPts, linePts } from '../core/geom.js';
-import { Em, Rib } from '../render/sources.js';
+import { Em, Rib, EmField } from '../render/sources.js';
 import { visOnly } from '../render/instrument.js';
 import { cloudTex, moonTex } from '../render/textures.js';
 import { ENV, SUN_AZ, sunEl, moonDir, GAL_C, CONTRAIL } from '../world/atmosphere.js';
@@ -90,9 +90,9 @@ export const satellitePass = o => event({ name: 'Satellite pass', t0: 25, t1: 39
   where() { return this.p; } }, o);
 
 export const starlink = o => event({ name: 'Starlink train', t0: 28, t1: 36, bands: ['vis', 'micro'], note: 'A string of freshly launched satellites beaming microwave internet.',
-  init() { this.s = Array.from({ length: 22 }, (_, k) => ({ v: new Em('vis', '#f4f6ff'), m: k % 3 === 0 ? new Em('micro') : null })); this.p = null; },
+  init() { this.s = Array.from({ length: 22 }, (_, k) => k); this.v = new EmField('vis', 22, '#f4f6ff'); this.m = new EmField('micro', 22); this.p = null; },
   update() { const { t } = S; if (t < this.t0 || t > this.t1) { this.p = null; return; } const p = (t - this.t0) / (this.t1 - this.t0), I = env(t, this.t0, this.t1, 1);
-    this.s.forEach((s, k) => { const q = p * 1.3 - k * .014; if (q < 0 || q > 1) return; const pos = onSky(dirAE(210 + 110 * q, 20 + 34 * Math.sin(Math.PI * q))); s.v.set(pos, deg(.18), I * .9); s.m && s.m.set(pos, deg(.4), I * .5); if (k === 0) this.p = pos; }); },
+    this.s.forEach((s, k) => { const q = p * 1.3 - k * .014; if (q < 0 || q > 1) return; const pos = onSky(dirAE(210 + 110 * q, 20 + 34 * Math.sin(Math.PI * q))); this.v.set(k, pos, deg(.18), I * .9); if (k % 3 === 0) this.m.set(k, pos, deg(.4), I * .5); if (k === 0) this.p = pos; }); },
   where() { return this.p; } }, o);
 
 export const blackHoleBinary = o => event({ name: 'Black-hole X-ray binary', t0: 30, t1: 60, bands: ['xray', 'radio', 'vis'], note: 'Gas falling into a black hole flickers in X-rays; radio jets flare outward in cones along the spin axis.',

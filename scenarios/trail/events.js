@@ -4,7 +4,7 @@ import { V3, DEG, lerp, sm, env, R } from 'spectra/core/util.js';
 import { S } from 'spectra/core/state.js';
 import { event } from 'spectra/core/events.js';
 import { deg, skyP } from 'spectra/core/geom.js';
-import { Em, Rib } from 'spectra/render/sources.js';
+import { Em, Rib, EmField } from 'spectra/render/sources.js';
 import { solid, visOnly, topoMat } from 'spectra/render/instrument.js';
 import { softTex } from 'spectra/render/textures.js';
 import { trailX, heightAt, terrainMat, NEAR_ROCKS } from './world.js';
@@ -27,9 +27,9 @@ export const radioTower = () => event({ name: 'Radio / TV tower', t0: 0, t1: 60,
   update() { this.light.set(this.top, 5, S.T % 1.5 < .5 ? 1.3 : .05); this.rad.set(this.top, 170, .8); }, where() { return this.top; } });
 
 export const warmRocks = () => event({ name: 'Warm rocks cooling', t0: 0, t1: 45, bands: ['ir'], note: 'Rocks heated during the day give off infrared as they cool.',
-  init() { this.e = NEAR_ROCKS.map(() => new Em('ir')); },
+  init() { this.e = new EmField('ir', NEAR_ROCKS.length); },
   update() { const w = warmF(), on = S.on; topoMat.uniforms.uWarm.value = on.ir ? w : 0; S.act.ir += w * .4; terrainMat.emissive.setRGB(on.ir ? w * .05 : 0, on.ir ? w * .012 : 0, 0);
-    NEAR_ROCKS.forEach((r, i) => this.e[i].set(r.p, r.s * 1.8, w * .6)); },
+    NEAR_ROCKS.forEach((r, i) => this.e.set(i, r.p, r.s * 1.8, w * .6)); },
   where: () => null });
 
 export const hut = () => event({ name: 'Mountain hut', t0: 8, t1: 34, bands: ['vis', 'ir', 'micro'], note: 'Lit windows, heat leaking from the chimney, Wi-Fi router (2.4 GHz microwave).',
@@ -84,9 +84,9 @@ export const deer = () => event({ name: 'Deer crossing', t0: 13, t1: 27, bands: 
   }, where() { return this.p; } });
 
 export const fireflies = () => event({ name: 'Fireflies', t0: 15, t1: 35, bands: ['vis'], note: 'Bioluminescence is "cold light": visible flashes with almost no infrared.',
-  init() { this.f = Array.from({ length: 120 }, () => { const z = -170 + R() * 210, x = trailX(z) + (R() - .5) * 26; return { b: new V3(x, heightAt(x, z) + .3 + R() * 2.2, z), s: .5 + R(), p: R() * 6, r: 1.5 + R() * 2, e: new Em('vis', '#b8ff3a') }; }); },
+  init() { this.f = Array.from({ length: 120 }, () => { const z = -170 + R() * 210, x = trailX(z) + (R() - .5) * 26; return { b: new V3(x, heightAt(x, z) + .3 + R() * 2.2, z), s: .5 + R(), p: R() * 6, r: 1.5 + R() * 2 }; }); this.field = new EmField('vis', this.f.length, '#b8ff3a'); },
   update() { const { t, T } = S, I = env(t, 15, 35, 2); if (I <= 0) return;
-    this.f.forEach(f => { const b = Math.max(0, Math.sin(T * f.r + f.p)) ** 8; f.e.set(f.b.clone().add(new V3(Math.sin(T * .5 * f.s + f.p) * .8, Math.sin(T * 1.1 * f.s) * .3, Math.cos(T * .4 * f.s + f.p) * .8)), .14, I * b * 1.6); }); },
+    this.f.forEach((f, k) => { const b = Math.max(0, Math.sin(T * f.r + f.p)) ** 8; this.field.set(k, f.b.clone().add(new V3(Math.sin(T * .5 * f.s + f.p) * .8, Math.sin(T * 1.1 * f.s) * .3, Math.cos(T * .4 * f.s + f.p) * .8)), .14, I * b * 1.6); }); },
   where: () => null });
 
 export const bats = () => event({ name: 'Bats hunting', t0: 22, t1: 40, bands: ['ir'], note: 'Warm-blooded fliers: invisible against the dark sky, obvious in IR.',
