@@ -137,7 +137,7 @@ export const haze = () => event({ name: 'Street-canyon RF haze', t0: 0, t1: 60, 
 
 // ---------------------------------------------------------------- 4.4 true radio
 
-export const tram = () => event({ name: 'Tram: pantograph arcing', t0: 11, t1: 42, bands: ['radio', 'vis', 'uv'], freq: ['arcRF', 'arcLight', 'arcUV'], note: 'The cross-street tram drags its pantograph along the contact wire: broadband radio crackle and blue-white copper-arc light with UVA — the trolley equivalent of a welder flash, overhead right in front of you.',
+export const tram = () => event({ name: 'Tram: pantograph arcing', t0: 11, t1: 58, bands: ['radio', 'vis', 'uv'], freq: ['arcRF', 'arcLight', 'arcUV'], note: 'The cross-street tram drags its pantograph along the contact wire: broadband radio crackle and blue-white copper-arc light with UVA — the trolley equivalent of a welder flash, overhead right in front of you.',
   init() {
     const g = new THREE.BoxGeometry(13, 3.1, 2.8); g.translate(0, 1.55, 0);
     this.body = solid(new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: 0x2a3038, roughness: .5, metalness: .45 })));
@@ -147,7 +147,7 @@ export const tram = () => event({ name: 'Tram: pantograph arcing', t0: 11, t1: 4
     this.fl = new Em('vis', '#cfe6ff'); this.uv = new Em('uv'); this.ar = new Rib('radio', null, 6, 0); this.p = null;
   },
   update() { const { t, T } = S; this.body.visible = false; this.p = null;
-    for (const [a, b] of [[11.5, 15.5], [38, 41.5]]) {
+    for (const [a, b] of [[11.5, 15.5], [38, 41.5], [54, 57.5]]) {   // three passes; the last one late in the night
       if (t < a || t > b) continue;
       const u = (t - a) / (b - a), x = -175 + u * 350, on = 1 - sm(b - .8, b, t);
       this.body.position.set(x, 0, TRAM_Z); this.body.visible = true;

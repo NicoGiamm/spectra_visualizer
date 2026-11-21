@@ -6,8 +6,8 @@ import { S } from 'spectra/core/state.js';
 import { event } from 'spectra/core/events.js';
 import { Em, Rib, EmField } from 'spectra/render/sources.js';
 import { solid } from 'spectra/render/instrument.js';
-import { addTx } from 'spectra/render/surface.js';
-import { BUILD, LAMPS, FLATS, PARK_Z, MAST } from './world.js';
+import { addTx, spectral } from 'spectra/render/surface.js';
+import { BUILD, LAMPS, FLATS, PARK_Z, MAST, PAINT } from './world.js';
 
 // Microwave fields are drawn in one fixed orange crackle; multiply it by the per-instance colour so channels can
 // be told apart (white = unchanged). Patched locally so the engine shader stays untouched.
@@ -86,7 +86,7 @@ export const traffic = () => event({ name: 'Traffic', t0: 0, t1: 60, bands: ['vi
     }
     const n = this.cars.length, m = new THREE.MeshStandardMaterial({ roughness: .4, metalness: .5 });   // bodies and cabins: one instanced draw
     const g = new THREE.InstancedMesh(mergeBoxes(geoB, geoC), m, n); g.instanceMatrix.setUsage(THREE.DynamicDrawUsage); g.frustumCulled = false;
-    this.cars.forEach((c, i) => g.setColorAt(i, c.col)); S.scene.add(solid(g)); this.body = g;
+    this.cars.forEach((c, i) => g.setColorAt(i, c.col)); S.scene.add(spectral(g, PAINT, { weight: 0 })); this.body = g;
     this.hidden = new THREE.Matrix4().makeScale(0, 0, 0);   // one instanced field per light type for all cars
     this.hl = new EmField('vis', n * 2, '#fff4dc'); this.tl = new EmField('vis', n * 2, '#ff2a1a'); this.hot = new EmField('ir', n, null, 1);
     this.rad = new EmField('micro', n); this.tpms = new EmField('micro', n);

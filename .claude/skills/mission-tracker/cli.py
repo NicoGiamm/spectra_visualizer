@@ -1,6 +1,6 @@
 # /// script
-# requires-python = ">=3.10"
-# dependencies = ["cyclopts>=4", "tomli>=2; python_version < '3.11'"]
+# requires-python = ">=3.11"
+# dependencies = ["cyclopts>=4"]
 # ///
 """mission-tracker — missions (one branch + worktree each) and their tasks; a mission's files live only on its branch.
 
@@ -15,12 +15,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "lib"))
 
-from cyclopts import App  # noqa: E402
-
 import sdlc  # noqa: E402
+from cyclopts import App  # noqa: E402
 from sdlc import Failed, Refused  # noqa: E402
 
-app = App(name="mission-tracker", help="Missions (one branch + worktree each) and their tasks; mission files live only on the branch.")
+app = App(
+    name="mission-tracker",
+    help="Missions (one branch + worktree each) and their tasks; mission files live only on the branch.",
+)
 
 
 @app.command(name="list")
@@ -33,7 +35,7 @@ def list_(*, delivered: bool = False) -> None:
         a, b = sdlc.ahead_behind(m.branch, cfg.main)
         wt = "-"
         if m.worktree:
-            d = len(sdlc.dirty(m.worktree))
+            d = len(sdlc.dirty(m.wt))
             wt = f"open{f' dirty:{d}' if d else ''}"
         print(f"{m.ref:8} {m.status:9} {done}/{len(m.tasks):<4} +{a}/-{b:<5} {wt:10} {m.meta.get('title', '')}")
     if delivered:
@@ -57,12 +59,18 @@ def show(ref: str) -> None:
 @app.command(name="next")
 def next_(ref: str | None = None) -> None:
     """The next open task: in REF's mission, else in the first active, then planned, mission."""
-    ms = [sdlc.find(ref)[0]] if ref else sorted(sdlc.missions(), key=lambda m: ({"active": 0, "planned": 1}.get(m.status, 9), m.num))
+    ms = (
+        [sdlc.find(ref)[0]]
+        if ref
+        else sorted(sdlc.missions(), key=lambda m: ({"active": 0, "planned": 1}.get(m.status, 9), m.num))
+    )
     for m in ms:
         for t in m.tasks:
             if t.status != "done":
                 labels = ", ".join(t.meta.get("labels", []))
-                print(f"{t.ref} [{t.status}{'; ' + labels if labels else ''}] {t.meta.get('title')}  (mission {m.status})")
+                print(
+                    f"{t.ref} [{t.status}{'; ' + labels if labels else ''}] {t.meta.get('title')}  (mission {m.status})"
+                )
                 return
     print("no open task")
 
@@ -79,10 +87,14 @@ def propose(title: str, *, slug: str | None = None) -> None:
     sdlc.git("worktree", "add", "-q", "-b", branch, str(wt), cfg.main, cwd=cfg.root)
     d = wt / cfg.missions_rel / f"M{n}-{slug}"
     (d / "tasks").mkdir(parents=True)
-    (d / "mission.md").write_text(sdlc.render("mission.md", id=f"M{n}", title=title, branch=branch, date=sdlc.today()), encoding="utf-8")
+    (d / "mission.md").write_text(
+        sdlc.render("mission.md", id=f"M{n}", title=title, branch=branch, date=sdlc.today()), encoding="utf-8"
+    )
     sha = sdlc.commit_paths(wt, [d], f"Mission M{n}: propose — {title} (refs M{n})")
     print(f"proposed M{n} on {branch} ({sha})\nfile: {d / 'mission.md'}")
-    print(f"next: fill Problem / Scope / Delivery there, `add-task M{n} \"…\"`, show the user; on their OK: `approve M{n}`")
+    print(
+        f'next: fill Problem / Scope / Delivery there, `add-task M{n} "…"`, show the user; on their OK: `approve M{n}`'
+    )
 
 
 @app.command(name="open")
@@ -104,10 +116,12 @@ def add_task(mission: str, title: str, *, slug: str | None = None, label: list[s
     f = m.dir / "tasks" / f"T{n}-{slug or sdlc.slugify(title)}.md"
     f.parent.mkdir(exist_ok=True)
     f.write_text(sdlc.render("task.md", id=f"{m.ref}/T{n}", title=title, labels=", ".join(labels)), encoding="utf-8")
-    m = sdlc.load(m.branch, m.worktree)
+    m = sdlc.reload(m.branch, m.worktree)
     m.save()
     sha = m.commit(f"Mission {m.ref}: add task T{n} — {title} (refs {m.ref}/T{n})")
-    print(f"added {m.ref}/T{n} ({sha}): {f}\nnext: write its Goal, Plan (files:) and Acceptance, commit with (refs {m.ref}/T{n})")
+    print(
+        f"added {m.ref}/T{n} ({sha}): {f}\nnext: write its Goal, Plan (files:) and Acceptance, commit with (refs {m.ref}/T{n})"
+    )
 
 
 @app.command
@@ -116,7 +130,7 @@ def approve(mission: str) -> None:
     m = sdlc.ensure_worktree(sdlc.find(mission)[0])
     if m.status != "proposed":
         raise Refused(f"{m.ref} is {m.status}, not proposed")
-    if sdlc.dirty(m.worktree):
+    if sdlc.dirty(m.wt):
         raise Refused(f"commit the edits in {m.worktree} first")
     errs = sdlc.check_mission(m, strict=True)
     if errs:
@@ -172,7 +186,9 @@ def task(ref: str, *, done: bool = False, evidence: Path | None = None) -> None:
         print(f"Commits carry `(refs {t.ref})`. Done: tick Acceptance, then `task {t.ref} --done --evidence FILE`.")
         return
     if evidence is None or not evidence.is_file() or not evidence.read_text(encoding="utf-8").strip():
-        raise Refused("--done needs --evidence FILE with the outcome (what changed, verify numbers, what was not verified)")
+        raise Refused(
+            "--done needs --evidence FILE with the outcome (what changed, verify numbers, what was not verified)"
+        )
     acc = sdlc.checklist(sdlc.get_section(t.body, "Acceptance"))
     open_items = [txt for ok, txt in acc if not ok]
     if not acc or open_items:
@@ -187,7 +203,11 @@ def task(ref: str, *, done: bool = False, evidence: Path | None = None) -> None:
     title = t.meta.get("title", "")
     print(f"{t.ref} done ({m.commit(f'Mission {t.ref}: done — {title} (refs {t.ref})')})")
     left = [x for x in m.tasks if x.status != "done"]
-    print(f"next: task {left[0].ref}" if left else f"all tasks of {m.ref} done -> ask the user once: \"ship {m.ref} now?\" (/ship)")
+    print(
+        f"next: task {left[0].ref}"
+        if left
+        else f'all tasks of {m.ref} done -> ask the user once: "ship {m.ref} now?" (/ship)'
+    )
 
 
 @app.command
@@ -195,7 +215,9 @@ def log(mission: str, text: str, *, decision: bool = False) -> None:
     """Append a dated Log line to MISSION (--decision: also under Key decisions), committed on its branch."""
     m = sdlc.ensure_worktree(sdlc.find(mission)[0])
     if decision:
-        kd = "\n".join(l for l in sdlc.get_section(m.body, "Key decisions").splitlines() if not l.startswith("<!--"))
+        kd = "\n".join(
+            line for line in sdlc.get_section(m.body, "Key decisions").splitlines() if not line.startswith("<!--")
+        )
         m.body = sdlc.set_section(m.body, "Key decisions", f"{kd}\n- {sdlc.today()} · {text}".strip())
     m.log(("decision: " if decision else "") + text)
     m.save()
@@ -220,7 +242,7 @@ def close_worktree(mission: str) -> None:
         return
     if m.status == "active":
         raise Refused(f"{m.ref} is active: its worktree stays until `ship merge`")
-    if sdlc.dirty(m.worktree):
+    if sdlc.dirty(m.wt):
         raise Refused(f"{m.worktree} has uncommitted changes")
     sdlc.git("worktree", "remove", str(m.worktree), cwd=sdlc.config().root)
     print(f"removed {m.worktree}; {m.branch} keeps the mission")

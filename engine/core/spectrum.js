@@ -157,6 +157,17 @@ export const SPECTRUM = {
   ir850:           { name: '850 nm IR illuminator', lam: 850e-9 },
   lidar905:        { name: '905 nm LiDAR pulses', lam: 905e-9 },
   steam:           { name: 'warm moist exhaust/steam (~320 K)', lam: 9e-6 },
+  // natural radioactivity of building stone (K-40 line; Tl-208 from the thorium chain; Bi-214 from the uranium/radon chain)
+  k40Gamma:        { name: 'K-40 gamma line (1.46 MeV, granite & brick)', E: 1.461e6 },
+  tl208Gamma:      { name: 'Tl-208 gamma line (2.61 MeV, thorium chain)', E: 2.614e6 },
+  bi214Gamma:      { name: 'Bi-214 gamma line (609 keV, uranium/radon chain)', E: 609.3e3 },
+  blacklight365:   { name: 'black-light / insect-trap tube (UVA 365 nm)', lam: 365e-9 },
+  hg405:           { name: 'mercury violet line leaking from black-light tubes (404.7 nm)', lam: 404.7e-9 },
+  ledRed:          { name: 'red LED rear light', lam: 625e-9 },
+  heaterGlow:      { name: 'red-hot patio-heater mesh (~1100 K, visible tail)', lam: 680e-9 },
+  droneLink:       { name: 'drone control link (2.4 GHz ISM)', f: 2.44e9 },
+  droneVideo:      { name: 'drone video downlink (5.8 GHz)', f: 5.8e9 },
+  batteryWarm:     { name: 'warm traction battery / motors (~305 K)', lam: 9.5e-6 },
 
 };
 

@@ -30,7 +30,9 @@ export const PARKED = [];                          // parked cars { p, dir, k }
 export const BUS = {};                             // bus shelter: { p, screen }
 export const FM = {};                              // broadcast hill: { top, base }
 export const MAST = {};                            // 5G mast on a south roof near the park: { base, top, panels }
-export const PYLONS = [];                          // power-line tower tops (x positions along the line)
+export const PYLONS = [];
+export const KERBS = [];                           // granite kerb stretches near the walk: { x, z0, z1 } (gamma blips)
+export const BAR = {};                             // rooftop bar on a low south-side roof: { p: roof edge centre, h, z0, z1 }                          // power-line tower tops (x positions along the line)
 export const POWER_Z = PARK_Z - 650, PYLON_H = 38;
 
 // shared window uniforms: fraction of windows lit, shop fronts lit (visible light)
@@ -39,8 +41,11 @@ export const BUILD = { lit: { value: 0 }, shop: { value: 0 } };
 // local surface presets (same shape as PRESET): metal poles/rails/units, car paint, painted road marks
 const P = (T0, Teq, tau, eIR, eMW, uvAlb, gamma, rRadio, gloss = 0) => ({ A: [T0, Teq, tau ? 1 / tau : 0, eIR], B: [eMW, uvAlb, gamma, rRadio], C: [gloss, 0, 0, 0] });
 const METAL = P(22, 10, 8, .3, .1, .1, .05, .95, .7);      // thin bare/galvanised metal: low eIR (reads sky-cold), cools fast, mirrors radio
-const PAINT = P(27, 12, 14, .9, .6, .05, .05, .9, .4);     // car bodies: painted steel, glossy, recently driven ones still warm
+export const PAINT = P(27, 12, 14, .9, .6, .05, .05, .9, .4);     // car bodies: painted steel, glossy, recently driven ones still warm
 const MARK = P(34, 16, 30, .92, .88, .35, .3, .5);         // road paint on asphalt: brighter in UV
+// granite kerbstones: like the trail's rock (eIR .9, slow to cool) and the most radioactive stone in the street
+// (K-40, U and Th series; granite typically 2-3x the gamma dose rate of concrete or brick)
+const GRANITE = P(31, 15, 40, .9, .88, .12, 1, .5);
 
 // windows on vertical faces (> 3.2 m) and shop fronts at street level. The plane coordinate seeds the cells,
 // so visible lit windows and IR heat leaks share one pattern without per-instance data.
@@ -74,7 +79,7 @@ function buildingMaterial() {
       { vec2 cell; vec3 wp = winParts(vSurfW, vSurfN, cell); float h = h21(cell);
         vec3 wc = mix(vec3(1.,.66,.32), vec3(.7,.82,1.), step(.72, h21(cell*1.31 + 3.)))*(.8 + .6*h21(cell*2.7));
         float face = step(abs(vSurfN.y), .5)*step(3.2, vSurfW.y);
-        totalEmissiveRadiance += mix(wp.x*step(h, uLit)*wc, face*.12*uLit*vec3(.92,.7,.5), wp.z);
+        totalEmissiveRadiance += mix(wp.x*step(h, uLit)*wc*.62, face*.12*uLit*vec3(.92,.7,.5), wp.z);   // .62: keeps the hue instead of clipping to flat beige up close
         float sc, sf = shopFront(vSurfW, vSurfN, sc);
         // shop window: mullions every ~1.5 m, a dark stall riser at the bottom, brighter towards the ceiling lights
         float mul = step(.07, fract(vSurfW.z/1.5 + .5)), rise = smoothstep(.75, .95, vSurfW.y), top = .7 + .3*smoothstep(1., 2.8, vSurfW.y);
@@ -119,6 +124,10 @@ function ground() {
   for (let z = -900; z < 700; z += 9) { const g = new THREE.PlaneGeometry(.18, 3.2); g.rotateX(-Math.PI / 2); g.translate(0, .02, z); marks.push(g); }
   for (let x = -ROAD + .5; x < ROAD; x += 1.2) { const g = new THREE.PlaneGeometry(.6, 3.5); g.rotateX(-Math.PI / 2); g.translate(x, .021, PARK_Z - 2); marks.push(g); }
   S.scene.add(spectral(new THREE.Mesh(mergeGeometries(marks), new THREE.MeshStandardMaterial({ color: 0x8a8478, roughness: .95 })), MARK, { lines: 'grid', cell: 12, weight: 0 }));
+  // granite kerbs along both sides of the avenue (one merged mesh)
+  const kerbs = [-1, 1].map(s => { const g = new THREE.BoxGeometry(.3, .14, 1100); g.translate(s * (ROAD + .15), .07, -200); return g; });
+  S.scene.add(spectral(new THREE.Mesh(mergeGeometries(kerbs), new THREE.MeshStandardMaterial({ color: 0x5a5856, roughness: .8 })), GRANITE, { weight: .03 }));
+  for (const s of [-1, 1]) KERBS.push({ x: s * (ROAD + .15), z0: -750, z1: 350 });
 }
 
 function buildings() {
@@ -201,7 +210,8 @@ function streetProps(front, metal) {
     BUS.screen = new V3(s.x + .25, 1.35, s.z + 2.4);
     CAMS.push({ p: new V3(s.x + .5, 2.45, s.z - 1.9), n: new V3(1, 0, 0) }); }
   const signMat = new THREE.MeshBasicMaterial({ vertexColors: true, color: 0xffffff });
-  S.scene.add(solid(new THREE.Mesh(mergeGeometries(signG), signMat)));
+  // sign boxes: painted metal with a warm LED driver inside (spectral, so they read in every band, not as black voids)
+  S.scene.add(spectral(new THREE.Mesh(mergeGeometries(signG), signMat), P(30, 24, 30, .9, .6, .05, .05, .9, .3), { weight: 0 }));
   SIGNS.mat = signMat;
   // rooftop HVAC units and their exhausts
   for (const r of ROOFS) {
@@ -272,6 +282,12 @@ function farStructures() {
 }
 
 // mobile mast: a lattice tripod on the tallest south-side roof just before the park
+// rooftop bar: the lowest south-side roof the walk passes, so it can be seen from the north sidewalk
+function bar() {
+  const r = ROOFS.filter(q => q.side < 0 && q.p.z > PARK_Z + 12 && q.p.z < 45 && q !== MAST.roof).sort((a, b) => a.h - b.h)[0] || ROOFS[0];
+  Object.assign(BAR, { p: new V3(-FACE_X - .6, r.h, (r.z0 + r.z1) / 2), h: r.h, z0: r.z0 + 1, z1: r.z1 - 1 });
+}
+
 function mast() {
   const cands = ROOFS.filter(r => r.side < 0 && r.p.z > PARK_Z + 8 && r.p.z < PARK_Z + 70);
   const r = cands.sort((a, b) => b.h - a.h)[0] || ROOFS[0], b = r.p, H = 12, pts = [];
@@ -279,7 +295,7 @@ function mast() {
   for (let k = 0; k < 3; k++) pts.push(leg(k), top);
   for (let s = 0; s < 5; s++) for (let k = 0; k < 3; k++) pts.push(leg(k).lerp(top, s / 5), leg((k + 1) % 3).lerp(top, (s + 1) / 5));
   S.scene.add(solid(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0x0b0b10 }))));
-  Object.assign(MAST, { base: b, top, panels: [0, 1, 2].map(k => new V3(b.x + Math.cos(k * 2.09 + .5) * .9, b.y + H - 1.5, b.z + Math.sin(k * 2.09 + .5) * .9)) });
+  Object.assign(MAST, { roof: r, base: b, top, panels: [0, 1, 2].map(k => new V3(b.x + Math.cos(k * 2.09 + .5) * .9, b.y + H - 1.5, b.z + Math.sin(k * 2.09 + .5) * .9)) });
 }
 
 function parkTrees() {
@@ -321,7 +337,7 @@ function parkedCars() {
 export function build() {
   const metal = [];
   ground(); const front = buildings(); accessPoints(front); lamps(metal); streetProps(front, metal); tramLine(metal); parkedCars();
-  farStructures(); parkTrees(); mast();
+  farStructures(); parkTrees(); mast(); bar();
   S.scene.add(spectral(new THREE.Mesh(mergeGeometries(metal.map(g => g.index ? g.toNonIndexed() : g).map(g => { g.deleteAttribute('uv'); return g; })),
     new THREE.MeshStandardMaterial({ color: 0x1b1c1e, roughness: .5, metalness: .5 })), METAL, { weight: .02 }));
   return {
