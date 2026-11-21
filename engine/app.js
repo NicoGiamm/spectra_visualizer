@@ -18,7 +18,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
-import { clamp } from './core/util.js';
+import { clamp, PLAY } from './core/util.js';
 import { S } from './core/state.js';
 import { BANDS, METER_NORM } from './core/bands.js';
 import { SPECTRUM, bandOf, describe } from './core/spectrum.js';
@@ -123,7 +123,7 @@ function start(sc) {
   function frame(now) {
     const dt = Math.min(.05, (now - last) / 1000); last = now;
     S.T = now / 1000; S.TIME.value = S.T;
-    if (S.playing) { S.t += dt * .5; if (S.t > 60) S.t = 0; }      // half speed: the 0–60 script plays over 120 s
+    if (S.playing) { S.t += dt * PLAY.speed(S.t); if (S.t > 60) S.t = 0; }   // fast opening, then half speed: ~90 s per walk (util.js PLAY)
     BANDS.forEach(b => S.act[b.id] = 0);
     hideAllSources();
     world.walk(S.t, camera);

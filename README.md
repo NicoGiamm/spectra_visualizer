@@ -96,7 +96,9 @@ event({ name, t0, t1, bands: ['vis', 'ir'], note,
   where()  { return this.p; } })                             // label position, or null
 ```
 
-- **Timing.** `t0`/`t1` are on a 0–60 script axis. Playback runs at half speed, so a walk lasts 120 s.
+- **Timing.** `t0`/`t1` are on a 0–60 script axis. Playback fast-forwards the opening sunset (4× the base half speed,
+  easing into it between t 16 and 22) and then runs at half speed, so a walk lasts ~90 s (`PLAY` in
+  `engine/core/util.js`; the slider runs in real seconds).
 - **Emitters.** Every band effect goes through `Em` (camera-facing glow) or `Rib` (camera-facing ribbon along points). `set()` feeds the band meters and respects the filter.
 - **Shared events.** Library events are factories that take overrides, e.g. `sky.thunderstorm({ note: '…', az: 190 })`.
 

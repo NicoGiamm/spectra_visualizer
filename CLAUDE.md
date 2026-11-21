@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-First-person 3D scenes (three.js) that play a 2-minute sunset-to-night timelapse with events emitting across the electromagnetic spectrum; bands can be filtered live. A shared **engine** (`engine/`, plain ES modules, no build) runs **scenarios** (`scenarios/<id>/`: `trail`, `seaside`, `city`). Python tooling in `src/spectra_tools/` (cyclopts CLI `spectra`, run with `uv run`) discovers, serves, bundles and screenshots them. See README.md for the layout and contracts.
+First-person 3D scenes (three.js) that play a 1½-minute sunset-to-night timelapse (the opening sunset is fast-forwarded) with events emitting across the electromagnetic spectrum; bands can be filtered live. A shared **engine** (`engine/`, plain ES modules, no build) runs **scenarios** (`scenarios/<id>/`: `trail`, `seaside`, `city`). Python tooling in `src/spectra_tools/` (cyclopts CLI `spectra`, run with `uv run`) discovers, serves, bundles and screenshots them. See README.md for the layout and contracts.
 
 - `uv run spectra serve` — dev server (ES modules don't load over file://); also regenerates root `index.html`.
 - `uv run spectra build [ids…]` — `dist/<id>.html` single files (each module inlined as a `data:` URL in the import map) + `dist/index.html`; also regenerates root `index.html`. Root `index.html` and `dist/` are generated from `engine/ui/landing.html` — edit the template.

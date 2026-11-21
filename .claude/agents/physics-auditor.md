@@ -12,7 +12,7 @@ a list of events (or a diff, or a scenario id). You report verdicts; the main se
 ## How you work
 
 1. Read `engine/core/spectrum.js` (processes: f / λ / E, `ground`, `stylised`) and `engine/core/bands.js` (band
-   ranges), then each event's code: `bands`, `freq`, `tags`, `note`, timing (`t0`/`t1` on the 0–60 axis = 0–120 s
+   ranges), then each event's code: `bands`, `freq`, `tags`, `note`, timing (`t0`/`t1` on the 0–60 axis ≈ 0–90 s, the opening up to t≈20 fast-forwarded
    real playback of a sunset→night), sky position (`dirAE(az, el)`; front = az 270 west).
 2. Run `uv run spectra timeline <id>` for the declared-vs-drawn band check and its warnings.
 3. For each process: is the frequency/wavelength right (cite a source — a datasheet, ITU allocation, paper or

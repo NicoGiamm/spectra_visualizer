@@ -1,5 +1,5 @@
 // HUD: DOM controls, spectrum meters, event panel, and the overlay canvas (compass, labels, off-screen arrows).
-import { V3, DEG, clamp, lerp } from '../core/util.js';
+import { V3, DEG, clamp, lerp, PLAY } from '../core/util.js';
 import { S } from '../core/state.js';
 import { BANDS, BAND, PRESETS, TRANSMIT, ABSORB_AT } from '../core/bands.js';
 import { SPECTRUM, bandOf, describe } from '../core/spectrum.js';
@@ -24,13 +24,13 @@ export function buildDom(sc) {
   <a class="btn" id="home" href="${sc.home || window.SPECTRA_HOME || '../../index.html'}" title="All scenarios">☰</a>
   <button class="btn" id="play">❚❚ Pause</button>
   <span class="btn" id="clock">19:30</span>
-  <input type="range" id="scrub" min="0" max="120" step="0.01" value="0">
+  <input type="range" id="scrub" min="0" max="${PLAY.len.toFixed(2)}" step="0.01" value="0">
   <span id="presets"></span>
   <button class="btn active" id="labels">Labels</button>
   <button class="btn" id="detector" title="Ground: what reaches a detector on the ground (the air absorbs far-UV, X-rays and gamma rays from space). Orbit: what a satellite would see.">Detector: Ground</button>
 </div>
 <div id="events"><h3>Now happening</h3><div id="evlist"></div></div>
-<div id="hint">${sc.hint || 'Drag to look ahead and up · scroll to zoom · click a band or press 1–7 to filter · space = play/pause · lasts 2 minutes'}</div>
+<div id="hint">${sc.hint || 'Drag to look ahead and up · scroll to zoom · click a band or press 1–7 to filter · space = play/pause · lasts 1½ minutes'}</div>
 <div id="spectrum"></div>`);
 }
 
@@ -58,7 +58,7 @@ export function createHud({ onFilter }) {
   const playBtn = document.getElementById('play'), scrub = document.getElementById('scrub'), labBtn = document.getElementById('labels');
   const setPlay = p => { S.playing = p; playBtn.textContent = p ? '❚❚ Pause' : '▶ Play'; };
   playBtn.onclick = () => setPlay(!S.playing);
-  scrub.oninput = () => { S.t = +scrub.value / 2; };
+  scrub.oninput = () => { S.t = PLAY.script(+scrub.value); };   // the slider runs in real seconds
   const setLabels = v => { S.labelsOn = v; labBtn.classList.toggle('active', v); };
   labBtn.onclick = () => setLabels(!S.labelsOn);
   const detBtn = document.getElementById('detector');
@@ -77,7 +77,7 @@ export function createHud({ onFilter }) {
 
   // meters use soft compression 1 - exp(-act/norm): busy bands approach the top but never pin
   function frame(active, norm) {
-    scrub.value = S.t * 2;
+    scrub.value = PLAY.real(S.t);
     BANDS.forEach(b => { meter[b.id] = lerp(meter[b.id], 1 - Math.exp(-S.act[b.id] / norm[b.id]), .15); fills[b.id].style.height = (meter[b.id] * 100) + '%'; });
     const hrs = 19.5 + S.t / 60 * 4;
     clock.textContent = `${Math.floor(hrs)}:${String(Math.floor((hrs % 1) * 60)).padStart(2, '0')}`;
