@@ -38,6 +38,7 @@ T1, T2 done; T3 audit: sky library and trail groups applied, seaside and city gr
 | [M2/T1](tasks/T1-atmospheric-transmission-detector-mode.md) | done |  | Atmospheric transmission & detector mode |
 | [M2/T2](tasks/T2-panel-shows-the-physics.md) | done |  | Panel shows the physics |
 | [M2/T3](tasks/T3-event-audit-apply-the-verdicts.md) | backlog |  | Event audit — apply the verdicts |
+| [M2/T4](tasks/T4-unused-keys.md) | backlog | gap | Unused SPECTRUM keys: delete warmAir (dropped thermal updraft), decide akr (aurora no longer draws AKR) |
 <!-- tasks:end -->
 
 ## Log
