@@ -88,14 +88,14 @@ export const radar = () => event({ name: 'Airport radar (S-band)', t0: 8, t1: 60
     this.fan.set(pts, .7, 2.6, .5 * near); },
   where() { return this.c; } });
 
-export const police = () => event({ name: 'Police car: LEDs & TETRA', t0: 30, t1: 40, bands: ['vis', 'radio'], freq: ['ledBlue', 'ledAmber', 'tetra'], note: 'A cruiser runs down the avenue: the light bar strobes blue and amber, and its TETRA net chirps on radio at 390 MHz — a band the traffic below it never touches.',
+export const police = () => event({ name: 'Police car: LEDs & TETRA', t0: 30, t1: 40, bands: ['vis', 'micro'], freq: ['ledBlue', 'ledAmber', 'tetra'], note: 'A cruiser runs down the avenue: the light bar strobes blue and amber, and its TETRA radio (the European emergency-services net, ~390 MHz = 77 cm, microwave in this band table) chirps in short bursts.',
   init() {
     const g = new THREE.BoxGeometry(1.8, .8, 4.3); g.translate(0, .7, 0);
     const g2 = new THREE.BoxGeometry(1.55, .55, 2.2); g2.translate(0, 1.32, -.25);
     this.body = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: 0x101418, roughness: .5, metalness: .5 }));
     this.body.add(new THREE.Mesh(g2, new THREE.MeshStandardMaterial({ color: 0x0c0e12, roughness: .6, metalness: .4 })));
     solid(this.body);
-    this.b1 = new Em('vis', '#3060ff'); this.b2 = new Em('vis', '#ffb030'); this.r = new Em('radio');
+    this.b1 = new Em('vis', '#3060ff'); this.b2 = new Em('vis', '#ffb030'); this.r = new Em('micro');
   },
   update() { const { t, T } = S;
     if (t < 30 || t > 40) { this.body.visible = false; return; }

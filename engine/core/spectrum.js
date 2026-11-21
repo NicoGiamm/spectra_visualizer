@@ -143,7 +143,7 @@ export const SPECTRUM = {
   keyFob:          { name: 'car key fob (433.92 MHz)', f: 433.92e6 },
   tpms:            { name: 'tyre-pressure sensors (433.92 MHz)', f: 433.92e6 },
   lteIoT:          { name: 'LTE-M modem (scooters, bus screen)', f: 800e6 },
-  tetra:           { name: 'TETRA Band II police net (250 MHz)', f: 250e6 },
+  tetra:           { name: 'TETRA emergency-services net (380–400 MHz, 77 cm)', f: 390e6 },
   sBandRadar:      { name: 'airport surveillance radar (S-band)', f: 2.8e9 },
   dab:             { name: 'DAB+ digital radio (Band III)', f: 220e6 },
   powerHum:        { name: '50 Hz power-line field (ELF)', f: 50 },
