@@ -7,7 +7,7 @@ import { S } from 'spectra/core/state.js';
 import { event } from 'spectra/core/events.js';
 import { Em, Rib, EmField } from 'spectra/render/sources.js';
 import { solid } from 'spectra/render/instrument.js';
-import { burst } from './events.js';
+import { burst, inWin } from './events.js';
 import { night } from 'spectra/world/atmosphere.js';
 import { SIGNS, CAMS, PLUMES, MANHOLES, PARK_Z, SIDEWALK_X } from './world.js';
 
@@ -57,6 +57,7 @@ export const robot = () => event({ name: 'Delivery robot: LiDAR sweep', t0: 16, 
   init() {
     const g = new THREE.BoxGeometry(.95, .75, 1.15); g.translate(0, .5, 0);
     this.body = solid(new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: 0x1a1c22, roughness: .5, metalness: .3 })));
+    this.body.visible = false; S.scene.add(this.body);
     this.vis = new Em('vis', '#cfe4ff'); this.s = new Em('ir', null, 1); this.l = new Rib('ir', null, 3, 1); this.m = new Em('micro');
   },
   update() { const { t, T } = S, cam = S.camera.position;
@@ -79,7 +80,7 @@ export const radar = () => event({ name: 'Airport radar (S-band)', t0: 8, t1: 60
     this.c = dirAE(232, .35).multiplyScalar(1750).add(new V3(0, 14, PARK_Z + 640));
     this.mast = new Em('micro'); this.fan = new Rib('micro', null, 10, 0);
   },
-  update() { const { T, camera } = S;
+  update() { const { T, camera } = S; if (!inWin(this)) return;
     const near = 1 - sm(1200, 2200, this.c.distanceTo(camera.position));
     this.mast.set(this.c, 26, .4 * near);
     const a = (T % 4) / 4 * Math.PI * 2, r = 120, pts = [];
@@ -94,7 +95,7 @@ export const police = () => event({ name: 'Police car: LEDs & TETRA', t0: 30, t1
     const g2 = new THREE.BoxGeometry(1.55, .55, 2.2); g2.translate(0, 1.32, -.25);
     this.body = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: 0x101418, roughness: .5, metalness: .5 }));
     this.body.add(new THREE.Mesh(g2, new THREE.MeshStandardMaterial({ color: 0x0c0e12, roughness: .6, metalness: .4 })));
-    solid(this.body);
+    solid(this.body); this.body.visible = false; S.scene.add(this.body);
     this.b1 = new Em('vis', '#3060ff'); this.b2 = new Em('vis', '#ffb030'); this.r = new Em('micro');
   },
   update() { const { t, T } = S;

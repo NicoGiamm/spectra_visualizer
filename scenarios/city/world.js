@@ -76,7 +76,9 @@ function buildingMaterial() {
         float face = step(abs(vSurfN.y), .5)*step(3.2, vSurfW.y);
         totalEmissiveRadiance += mix(wp.x*step(h, uLit)*wc, face*.12*uLit*vec3(.92,.7,.5), wp.z);
         float sc, sf = shopFront(vSurfW, vSurfN, sc);
-        totalEmissiveRadiance += sf*uShop*mix(vec3(1.,.78,.5), vec3(.75,.88,1.), step(.55, h21(vec2(sc, 9.))))*(.5 + .5*h21(vec2(sc, 5.))); }`);
+        // shop window: mullions every ~1.5 m, a dark stall riser at the bottom, brighter towards the ceiling lights
+        float mul = step(.07, fract(vSurfW.z/1.5 + .5)), rise = smoothstep(.75, .95, vSurfW.y), top = .7 + .3*smoothstep(1., 2.8, vSurfW.y);
+        totalEmissiveRadiance += sf*mul*rise*top*uShop*mix(vec3(1.,.78,.5), vec3(.75,.88,1.), step(.55, h21(vec2(sc, 9.))))*(.22 + .3*h21(vec2(sc, 5.))); }`);
   };
   return mat;
 }

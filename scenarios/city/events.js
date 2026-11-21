@@ -19,6 +19,7 @@ export function tintMicro(field) {
 export const pulse = (x, w) => Math.max(0, 1 - Math.abs(x) / w);   // triangular blip
 // deterministic burst schedule: 1 while t is within `len` after a tick of period `per` (phase ph)
 export const burst = (t, per, ph, len) => { const u = ((t + ph) % per + per) % per; return u < len ? 1 - u / len : 0; };
+export const inWin = e => S.t >= e.t0 && S.t <= e.t1;   // for update()s that have no envelope of their own
 export const litNow = t => .06 + .5 * sm(6, 24, t);      // fraction of lit windows (shared with the window shader)
 
 export const windows = () => event({ name: 'Lit windows & heat island', t0: 0, t1: 60, bands: ['vis', 'ir'], freq: ['incandescent', 'ledWhite', 'thermal290'], note: 'Windows and shop fronts light up; on a thermal camera the facades leak heat around the window frames while the glass mirrors the cold sky.',
