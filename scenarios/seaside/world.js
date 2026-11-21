@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { V3, clamp, lerp, sm, kf, R, noise2, fbm2, ridged2 } from 'spectra/core/util.js';
 import { S } from 'spectra/core/state.js';
 import { dirAE } from 'spectra/core/geom.js';
-import { solid, gridMat } from 'spectra/render/instrument.js';
+import { spectral, PRESET, mixSurf, surfaceUniforms, SURF_FRAG_DECL, SURF_VERT_DECL } from 'spectra/render/surface.js';
 import { COMMON } from 'spectra/render/shaders.js';
 import { heightfield } from 'spectra/world/heightfield.js';
 import { HOR, HEMI, SUN_AZ, sunEl, moonDir, moonlit } from 'spectra/world/atmosphere.js';
@@ -25,7 +25,6 @@ export function heightAt(x, z) {
 
 export const sandMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .97, metalness: 0 });
 export const SEA = { mat: null };
-export const SAND_INSTR = gridMat(6, [.2, .17, .3]);   // instrument view of the beach; uWarm = sand heat
 export const STAND = new V3(0, 0, coastZ(0) + 18);              // where the viewer stands
 STAND.y = heightAt(STAND.x, STAND.z);
 
@@ -37,16 +36,21 @@ function terrain() {
     let c = mix(C.wet, C.sand, sm(0, 6, d));
     c = mix(c, C.dune, sm(30, 90, d) * (.5 + .5 * nz));
     return mix(c, C.rock, clamp(sm(.15, .35, slope) + sm(8, 30, y) * .8));
-  } });
-  S.scene.add(solid(new THREE.Mesh(g, sandMat), SAND_INSTR));
+  }, surfAt(x, y, z, slope) {        // wet sand -> dry sand -> dune grass -> granite promontories
+    const d = z - coastZ(x), L = (a, b, k) => mixSurf([[a, 1 - k], [b, k]]);
+    let s = L(PRESET.wetSand, PRESET.sand, sm(0, 6, d));
+    s = L(s, PRESET.meadow, sm(30, 90, d) * .7);
+    return L(s, PRESET.rock, clamp(sm(.15, .35, slope) + sm(8, 30, y) * .8));
+  }, meanRadius: 250 });
+  S.scene.add(spectral(new THREE.Mesh(g, sandMat), 'attr', { lines: 'grid', cell: 6, mean: g.userData.surfMean, weight: 1 }));
 }
 
 function sea() {
   const mat = new THREE.ShaderMaterial({
-    uniforms: { uTime: S.TIME, uHor: { value: new THREE.Color() }, uSky: { value: new THREE.Color() }, uDeep: { value: new THREE.Color(.004, .008, .014) },
+    uniforms: { ...surfaceUniforms(PRESET.water), uTime: S.TIME, uHor: { value: new THREE.Color() }, uSky: { value: new THREE.Color() }, uDeep: { value: new THREE.Color(.004, .008, .014) },
       uSunDir: { value: new V3() }, uSunI: { value: 0 }, uMoonDir: { value: new V3() }, uMoonI: { value: 0 }, uBio: { value: 0 } },
-    vertexShader: `varying vec3 vW; void main(){ vec4 w = modelMatrix*vec4(position,1.); vW = w.xyz; gl_Position = projectionMatrix*viewMatrix*w; }`,
-    fragmentShader: COMMON + coastGLSL + `
+    vertexShader: SURF_VERT_DECL + `varying vec3 vW; void main(){ vec4 w = modelMatrix*vec4(position,1.); vW = w.xyz; vSurfW = w.xyz; vSurfN = vec3(0., 1., 0.); gl_Position = projectionMatrix*viewMatrix*w; }`,
+    fragmentShader: SURF_FRAG_DECL + coastGLSL + `
     varying vec3 vW; uniform float uTime, uSunI, uMoonI, uBio; uniform vec3 uHor, uSky, uDeep, uSunDir, uMoonDir;
     vec2 wave(vec2 p, vec2 k, float w, float a){ float ph = dot(k,p) + w*uTime; return a*k*cos(ph); }   // gradient of a*sin
     void main(){
@@ -74,13 +78,14 @@ function sea() {
       float bio = (crest*smoothstep(.45, .8, n2(p*.35 + uTime*.2)) + wash*.12*n2(p*2. + uTime))*fd;   // patchy, only where waves break
       col += vec3(.1,.55,1.)*uBio*bio*(.6 + .4*n2(p*3. + uTime*2.))*1.2;               // bioluminescent surf
       col = mix(col, uHor, 1. - exp(-pow(dist*.0001, 2.)));
+      col += uOverlay*surfBands(vW, N, 1.);                                             // faint spectral layer (water: warm IR, cold microwave)
       gl_FragColor = vec4(col, 1.);
     }`,
   });
   SEA.mat = mat;
   const m = new THREE.Mesh(new THREE.PlaneGeometry(40000, 40000, 1, 1), mat);
   m.rotation.x = -Math.PI / 2; m.position.y = .05;
-  S.scene.add(solid(m, gridMat(40)));
+  S.scene.add(spectral(m, 'water', { custom: true, lines: 'grid', cell: 40, weight: 1.6 }));
 }
 
 function rocks() {   // boulders at the foot of the promontories and a few on the beach
@@ -96,7 +101,7 @@ function rocks() {   // boulders at the foot of the promontories and a few on th
   }
   const mesh = new THREE.InstancedMesh(g, new THREE.MeshStandardMaterial({ color: new THREE.Color(.08, .075, .07), roughness: .9, flatShading: true }), M.length);
   M.forEach((m, i) => { mesh.setMatrixAt(i, m); mesh.setColorAt(i, new THREE.Color().setScalar(.7 + R() * .6)); });
-  S.scene.add(solid(mesh));
+  S.scene.add(spectral(mesh, 'rock', { weight: .3 }));
 }
 
 export function build() {

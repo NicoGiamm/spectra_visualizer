@@ -7,7 +7,8 @@ import { deg, dirAE, skyP, onSky } from 'spectra/core/geom.js';
 import { Em, Rib, EmField } from 'spectra/render/sources.js';
 import { solid } from 'spectra/render/instrument.js';
 import { SUN_AZ, sunEl } from 'spectra/world/atmosphere.js';
-import { coastZ, heightAt, sandMat, SAND_INSTR, SEA, STAND } from './world.js';
+import { coastZ, heightAt, SEA, STAND } from './world.js';
+import { spectralGroup, addTx } from 'spectra/render/surface.js';
 
 // The last sliver of Sun flashes green as it drops under a sharp sea horizon (sunEl crosses 0 at t≈7.3).
 export const greenFlash = () => event({ name: 'Green flash', t0: 6.4, t1: 8.6, bands: ['vis'], freq: ['greenFlash'], tags: ['rare'], note: 'Refraction splits the last sliver of the Sun over a clean sea horizon: a second of emerald.',
@@ -18,8 +19,8 @@ export const greenFlash = () => event({ name: 'Green flash', t0: 6.4, t1: 8.6, b
 
 export const warmSand = () => event({ name: 'Warm sand cooling', t0: 0, t1: 45, bands: ['ir'], freq: ['thermal290'], note: 'Sand soaked up the afternoon Sun and radiates it back as infrared; the sea, slower to change, stays cool.',
   init() { this.e = Array.from({ length: 14 }, () => { const x = (R() - .5) * 90, z = coastZ(x) + 6 + R() * 26; return { p: new V3(x, heightAt(x, z) + .1, z), s: 2.5 + R() * 3 }; }); this.f = new EmField('ir', this.e.length); },
-  update() { const w = 1 - sm(0, 45, S.t), on = S.on; SAND_INSTR.uniforms.uWarm.value = on.ir ? w * .6 : 0; S.act.ir += w * .4; sandMat.emissive.setRGB(on.ir ? w * .05 : 0, on.ir ? w * .014 : 0, 0);
-    this.e.forEach((q, k) => this.f.set(k, q.p, q.s, w * .35)); },
+  update() { const w = 1 - sm(0, 30, S.t);   // the beach surface cools by itself; these are the sun-baked hollows
+    this.e.forEach((q, k) => this.f.set(k, q.p, q.s, w * .25)); },
   where: () => null });
 
 // Gulls: warm bodies (realistic IR), dark silhouettes against the dusk.
@@ -45,8 +46,9 @@ export const lighthouse = () => event({ name: 'Lighthouse', t0: 9, t1: 60, bands
     for (let i = 0; i < 4; i++) { const seg = new THREE.Mesh(new THREE.CylinderGeometry(2.6 - i * .35, 2.95 - i * .35, 5, 16), i % 2 ? red : white); seg.position.y = 2.5 + i * 5; G.add(seg); }
     const lamp = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.3, 2.4, 12), new THREE.MeshStandardMaterial({ color: 0x222226 })); lamp.position.y = 21.2; G.add(lamp);
     const cap = new THREE.Mesh(new THREE.ConeGeometry(1.7, 1.6, 12), red); cap.position.y = 23.2; G.add(cap);
-    S.scene.add(solid(G));
+    S.scene.add(spectralGroup(G, 'concrete', { weight: .02 }));
     this.top = new V3(x, y + 21.2, z);
+    addTx('radio', () => ({ p: this.top, power: sm(9, 13, S.t) * .9 }));
     this.beam = [new Rib('vis', '#fff1c8', 2), new Rib('vis', '#fff1c8', 2)]; this.flash = new Em('vis', '#fff6dc'); this.glow = new Em('vis', '#ffe6a8'); this.ra = new Em('radio');
   },
   update() { const { t, T } = S, I = sm(9, 13, t); if (I <= 0) return;
@@ -70,9 +72,10 @@ export const ship = () => event({ name: 'Container ship', t0: 4, t1: 52, bands: 
     for (let i = 0; i < 9; i++) { const c = new THREE.Mesh(new THREE.BoxGeometry(17, 9 + (i * 7 % 5) * 2, 28), new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(R(), .35, .12), roughness: .8 })); c.position.set(-60 + i * 18, 15, 0); G.add(c); }
     this.g = solid(G); S.scene.add(G); this.dist = 3200;
     this.mast = new Em('vis', '#ffffff'); this.side = new Em('vis', '#ff3030'); this.stern = new Em('vis', '#ffffff'); this.deck = Array.from({ length: 4 }, () => new Em('vis', '#ffcf88'));
+    addTx('micro', () => this.radarTx); addTx('radio', () => this.aisTx);
     this.radar = new Em('micro'); this.ais = new Em('radio'); this.funnel = new Rib('ir', null, 6, 1); this.hot = new Em('ir', null, 1);
   },
-  update() { const { t, T } = S, p = (t - this.t0) / (this.t1 - this.t0); this.g.visible = p >= 0 && p <= 1; if (!this.g.visible) { this.p = null; return; }
+  update() { const { t, T } = S, p = (t - this.t0) / (this.t1 - this.t0); this.g.visible = p >= 0 && p <= 1; if (!this.g.visible) { this.p = this.radarTx = this.aisTx = null; return; }
     const az = lerp(236, 318, p), c = S.camera.position, d = dirAE(az, 0), pos = new V3(c.x + d.x * this.dist, 0, c.z + d.z * this.dist);
     this.g.position.copy(pos); this.g.rotation.y = -(az + 90) * DEG;
     const fw = new V3(Math.cos((az + 90) * DEG), 0, Math.sin((az + 90) * DEG)), at = (f, y) => pos.clone().addScaledVector(fw, f).add(new V3(0, y, 0));
@@ -82,6 +85,8 @@ export const ship = () => event({ name: 'Container ship', t0: 4, t1: 52, bands: 
     const ra = T * 2.4, face = Math.max(0, Math.cos(ra - Math.atan2(c.z - pos.z, c.x - pos.x))) ** 16;   // radar crackles brightest as its antenna sweeps past you
     this.radar.set(at(-85, 34), 60 + 120 * face, I * (.2 + .9 * face));
     const ping = (t % 3) / 3; this.ais.set(at(-85, 44), 220, ping < .2 ? I * (1 - ping / .2) : 0);
+    this.radarTx = { p: at(-85, 34), power: I * 40 * face };   // the sweep reaches the beach (range scaled up: X-band is strong)
+    this.aisTx = { p: at(-85, 44), power: ping < .2 ? I * 3 * (1 - ping / .2) : 0 };
     this.funnel.set([at(-95, 30), at(-100, 60), at(-108, 95)], 10, 26, I * .5); this.hot.set(at(-95, 31), 18, I * .45); },
   where() { return this.p; } });
 

@@ -101,6 +101,15 @@ export const SPECTRUM = {
   wifi24:          { name: 'Wi-Fi 2.4 GHz', f: 2.4e9 },
   wifi5:           { name: 'Wi-Fi 5 GHz', f: 5.5e9 },
   carRadar:        { name: 'automotive radar 77 GHz', f: 77e9 },
+
+  // ===== sky & engine additions (engine owner) =====
+
+  // ===== trail additions =====
+
+  // ===== seaside additions =====
+
+  // ===== city additions =====
+
 };
 
 const RANGES = [['radio', 1, Infinity], ['micro', 1e-3, 1], ['ir', 700e-9, 1e-3], ['vis', 380e-9, 700e-9],
