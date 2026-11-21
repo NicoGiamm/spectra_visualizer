@@ -35,7 +35,7 @@ T1–T5 implemented on main in a9adb2f before missions existed (draw calls 82/21
 | Task | Status | Labels | Title |
 |---|---|---|---|
 | [M4/T1](tasks/T1-crowd-of-emitters.md) | done | needs-verification | Crowd of emitters |
-| [M4/T2](tasks/T2-multipath-bouncing.md) | in-progress | needs-verification | Multipath bouncing |
+| [M4/T2](tasks/T2-multipath-bouncing.md) | done | needs-verification | Multipath bouncing |
 | [M4/T3](tasks/T3-ambient-field-haze.md) | backlog | needs-verification | Ambient field haze |
 | [M4/T4](tasks/T4-true-radio-in-the-city.md) | backlog | needs-verification | True radio in the city |
 | [M4/T5](tasks/T5-more-visible-ir-life.md) | backlog | needs-verification | More visible/IR life |
@@ -51,3 +51,4 @@ T1–T5 implemented on main in a9adb2f before missions existed (draw calls 82/21
 - 2026-11-21 · city step on main before this mission ran: 82e40cf multipath facade hits (T2), 519656e per-building Tcore (M1/T6), 5a36c6d complexity parity (city sky events, street.js life, granite gamma, black-light UV; 54 events), a48e444 meterNorm retuned in Orbit (T6 partial). Draw calls 97/246/244 Orbit, timeline 0 warnings Orbit+Ground. Not yet reviewed nor physics-audited.
 - 2026-11-21 · decision: Parked cars: no TPMS chirps while parked (direct TPMS sensors are motion-triggered and sleep once the car stops); keep 433.92 MHz key-fob unlocks. Deviates from T1's Goal text, recorded in T1 Notes — physics-first convention, per the M4 audit (audit.md #2)
 - 2026-11-21 · M4/T1 done
+- 2026-11-21 · M4/T2 done

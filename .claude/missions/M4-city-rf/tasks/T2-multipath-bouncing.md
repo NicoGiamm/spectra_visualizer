@@ -1,10 +1,10 @@
 ---
 id: M4/T2
 title: Multipath bouncing
-status: in-progress
+status: done
 labels: [needs-verification]
 started: 2026-11-21
-completed:
+completed: 2026-11-21
 ---
 
 # M4/T2 — Multipath bouncing
@@ -42,4 +42,8 @@ files: engine/world/bounce.js, scenarios/city/rf.js
 
 ## Outcome
 
-<Written by `mission-tracker task <ref> --done --evidence <file>`: what changed, numbers, shots, what was not verified.>
+Verified the multipath event against the Acceptance and fixed four things in it (84df135, engine/world/bounce.js + scenarios/city/rf.js). `bounce(origin, dir, boxes, maxHits)` reflects 8 `Rib('micro')` packets (2 from the 5G mast panels, 6 from the routers just ahead) off the city's `BOXES` and the street; a 22 m packet slice travels outward along each path. The per-bounce fade was ×½ on shaders that scale intensity linearly (−3 dB as drawn); it is now ×¼ (−6 dB in power) for the ribbons and the facade hit flashes (`addHits('micro')`, ≤ 12 hits per frame in the shared surface term), comment and note match. Rays that escaped after one hit are re-drawn (hashed, no R()) so each reflects 2–4 times; the last leg now stops at the next surface instead of passing through walls and the ground; rays are aimed mostly west because most hits used to fall behind the viewer. The event is tagged `stylised` + `time-compressed` (real packets travel at c; M4 audit #4).
+
+Numbers: `spectra timeline` 0 warnings Orbit + Ground for all three scenarios; city draw calls 97/246/244 → 97/243/244 (faint legs now under the Rib cutoff, packets end at the next surface). Shots exit 0: city -t 5/30/54, `--bands micro,radio -t 30`; aimed `-t 18 --yaw .2 --pitch .3 --bands micro` shows two white hit flashes on opposite facades and packets crossing the canyon (also checked by the main session).
+
+Not verified / deviations: flashes in Ground mode (timeline only); flashes are microwave only (all processes are microwave, no radio hit term); with Visible on they are faint at the fixed .12 overlay; in micro instrument views the surface crackle makes the packets hard to pick out (T8); late in the walk (t ≳ 45) router windows are behind the viewer, so only mast rays reach the view.
