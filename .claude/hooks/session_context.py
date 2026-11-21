@@ -1,33 +1,32 @@
-"""SessionStart: print the roadmap position and working-tree state (stdout becomes session context)."""
+"""SessionStart: where the work stands — open missions (branches), the current worktree's mission and next task.
+
+stdout becomes session context. Missions live only on their `mission/*` branches (.claude/sdlc.md).
+"""
 
 import os
-import re
 import subprocess
 
 root = os.environ.get("CLAUDE_PROJECT_DIR", ".")
-plan = os.path.join(root, ".claude", "plans", "improvement-plan.md")
-
-open_steps = []
-try:
-    with open(plan, encoding="utf-8") as f:
-        for line in f:
-            m = re.match(r"- \[( |~)\] \*\*([0-9.]+)\s*(.*?)\*\*", line)
-            if m:
-                open_steps.append(f"{m.group(2)} {m.group(3)}{' (in progress)' if m.group(1) == '~' else ''}")
-except OSError:
-    pass
+cli = os.path.join(root, ".claude", "skills", "mission-tracker", "cli.py")
 
 
-def git(*args: str) -> str:
+def run(*args: str, timeout: int = 30) -> str:
     try:
-        return subprocess.run(["git", "-C", root, *args], capture_output=True, text=True, timeout=10).stdout.strip()
+        return subprocess.run(list(args), cwd=os.getcwd(), capture_output=True, text=True, timeout=timeout).stdout.strip()
     except Exception:
         return ""
 
 
-print("Roadmap (.claude/plans/improvement-plan.md) — next open steps: " + ("; ".join(open_steps[:4]) or "none"))
-print(f"Branch {git('branch', '--show-current')}; last commit: {git('log', '-1', '--format=%h %s')}")
-dirty = git("status", "--short")
+branch = run("git", "branch", "--show-current")
+print(f"Branch {branch}; last commit: {run('git', 'log', '-1', '--format=%h %s')}")
+dirty = run("git", "status", "--short")
 if dirty:
-    print("Uncommitted changes:\n" + dirty)
-print("Workflow: .claude/sdlc.md (/plan-step, /verify-scene, /ship).")
+    print("Uncommitted changes:\n" + "\n".join(dirty.splitlines()[:15]))
+if os.path.isfile(cli):
+    listing = run("uv", "run", "-q", cli, "list")
+    if listing:
+        print("Open missions (mission-tracker list):\n" + listing)
+    if branch.startswith("mission/M"):
+        ref = branch.split("/", 1)[1].split("-", 1)[0]
+        print(f"This worktree is mission {ref}; next: {run('uv', 'run', '-q', cli, 'next', ref)}")
+print("Workflow: .claude/sdlc.md — /mission-tracker, /verify-scene, /ship. Planning files live only on mission branches.")

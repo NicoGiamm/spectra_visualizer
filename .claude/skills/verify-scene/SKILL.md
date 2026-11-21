@@ -16,8 +16,8 @@ There is no lint or unit test: these two commands are the checks. Arguments: `$A
    Bands for the instrument view: from `--bands`, else the bands the touched events/materials use
    (default `ir,micro`). Moments: from `--t`, else `5,30,54`.
 2. **Timeline** — one call for all ids: `uv run spectra timeline <ids>`. Read the physics-check section: it must
-   report **0 warnings**. Note scene draw calls per scenario and compare them with the last numbers in the plan's
-   progress notes (or a baseline the session recorded at stage 2). Flag an increase > 10 % or a city above ~400.
+   report **0 warnings**. Note scene draw calls per scenario and compare them with the baseline recorded at the task's start, else
+   the last Outcome of the mission (`mission-tracker show M<N>/T<k>`). Flag an increase > 10 % or a city above ~400.
 3. **Shots** — for each id, run in sequence (each takes ~30 s; use a 600000 ms timeout):
    - `uv run spectra shot <id> -t <m> -o <scratch>/<id>-t<m>.png` for each moment;
    - `uv run spectra shot <id> -t 30 --bands <bands> -o <scratch>/<id>-instr.png`.

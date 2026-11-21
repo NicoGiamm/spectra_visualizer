@@ -14,13 +14,24 @@
       "Bash(git branch --show-current)",
       "Bash(git worktree list *)",
       "Bash(git add *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(uv run .claude/skills/mission-tracker/cli.py *)",
+      "Bash(uv run .claude/skills/ship/cli.py status *)",
+      "Bash(uv run .claude/skills/ship/cli.py review-brief *)",
+      "Bash(uv run .claude/skills/ship/cli.py deliver *)",
+      "Bash(uv run .claude/skills/ship/cli.py align *)",
+      "EnterWorktree",
+      "ExitWorktree"
     ],
     "ask": [
       "Bash(git push *)",
       "Bash(git reset --hard *)",
       "Edit(.claude/settings.json)",
-      "Edit(.claude/hooks/**)"
+      "Edit(.claude/hooks/**)",
+      "Bash(uv run .claude/skills/ship/cli.py merge *)",
+      "Bash(uv run .claude/skills/ship/cli.py cleanup *)",
+      "Edit(.claude/sdlc.toml)",
+      "Edit(.claude/lib/**)"
     ],
     "deny": [
       "Bash(git push --force *)",
@@ -42,12 +53,22 @@
           {
             "type": "command",
             "command": "uv run --no-project \"$CLAUDE_PROJECT_DIR/.claude/hooks/session_context.py\"",
-            "timeout": 20
+            "timeout": 60
           }
         ]
       }
     ],
     "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --no-project \"$CLAUDE_PROJECT_DIR/.claude/hooks/git_guard.py\"",
+            "timeout": 20
+          }
+        ]
+      },
       {
         "matcher": "Edit|Write",
         "hooks": [

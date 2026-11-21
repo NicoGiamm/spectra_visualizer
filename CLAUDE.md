@@ -1,34 +1,54 @@
-# CLAUDE.md
+# Spectra Visualizer
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+First-person three.js scenes (`trail`, `seaside`, `city`) playing a ~90 s sunset-to-night timelapse in which events
+emit across the electromagnetic spectrum; bands can be filtered live. A shared **engine** (`engine/`, plain ES
+modules, no build step) runs **scenarios** (`scenarios/<id>/`); Python tooling (`src/spectra_tools/`, CLI
+`spectra`) serves, bundles, screenshots and audits them. README.md has the layout and the scenario/event contracts.
 
-## What this is
+## Commands
 
-First-person 3D scenes (three.js) that play a 1½-minute sunset-to-night timelapse (the opening sunset is fast-forwarded) with events emitting across the electromagnetic spectrum; bands can be filtered live. A shared **engine** (`engine/`, plain ES modules, no build) runs **scenarios** (`scenarios/<id>/`: `trail`, `seaside`, `city`). Python tooling in `src/spectra_tools/` (cyclopts CLI `spectra`, run with `uv run`) discovers, serves, bundles and screenshots them. See README.md for the layout and contracts.
+| Command | What it is for |
+|---|---|
+| `uv run spectra serve` | dev server (ES modules don't load over `file://`) |
+| `uv run spectra build [ids…]` | `dist/<id>.html` single files + landing page |
+| `uv run spectra timeline [ids…]` | event gantt, band activity, draw calls, **physics check — keep it at 0 warnings** |
+| `uv run spectra shot <id> -t 30 [--bands ir,micro] [--yaw .3 --pitch .5] -o <png>` | headless render; exits 1 on any console/shader message |
 
-- `uv run spectra serve` — dev server (ES modules don't load over file://); also regenerates root `index.html`.
-- `uv run spectra build [ids…]` — `dist/<id>.html` single files (each module inlined as a `data:` URL in the import map) + `dist/index.html`; also regenerates root `index.html`. Root `index.html` and `dist/` are generated from `engine/ui/landing.html` — edit the template.
-- `uv run spectra timeline [ids…]` — headless `?dump`: event gantt, per-band activity vs meter tops, scene draw calls, and a physics check (declared bands ↔ `freq` processes ↔ bands actually drawn). Keep it at 0 warnings; compare draw calls before/after perf work.
-- `uv run spectra shot <id> -t 30 [--yaw .3 --pitch .5 --bands ir,micro] -o out.png` — headless render; prints grouped console messages (shader compile logs included) and exits 1 on any. **Run it after every change**; there is no lint or test suite.
+There is no lint or test suite: `timeline` + `shot` are the tests (`/verify-scene` runs both and inspects the
+PNGs). Python is always run through `uv`; CLIs use cyclopts.
 
-**Roadmap:** `.claude/plans/improvement-plan.md` is the multi-step plan (spectral surfaces, physical realism, aurora, city RF density). Work it step by step, in phase order.
+## How work is done
 
-## Workflow
+Every change is a task of a **mission**: one branch `mission/M<N>-<slug>` + one worktree under `.claude/worktrees/`,
+its plan files (`.claude/missions/…`) living **only on that branch**, never on `main`. The lifecycle — propose →
+user approves → start → per task explore / plan / implement / verify / commit → fresh-context review → user's OK →
+`--no-ff` merge — is defined in `.claude/sdlc.md`.
 
-`.claude/sdlc.md` defines the lifecycle: **frame → explore → plan → implement → verify → review → commit**, sized by lane (trivial / standard / large), with a definition of done. In short:
-
-- `/plan-step [id]` runs one roadmap step end to end; `/verify-scene [ids]` is the test suite (timeline at 0 warnings + shots at 3 moments + an instrument view, PNGs inspected); `/ship` commits by explicit path and never pushes unasked. `/new-event`, `/new-scenario` scaffold to contract.
-- Agents: `step-dev` implements **one** plan step at a time on `main` (never parallel, never commits); `reviewer` (fresh context, read-only) before every non-trivial commit; `physics-auditor` when events or `spectrum.js` change.
-- Detailed conventions are path-scoped rules in `.claude/rules/` (`render`, `events`, `sky-world`, `tooling`, `plan`) and load when you touch matching files. Hooks: generated files (root `index.html`, `dist/`) are refused; `.js` edits are checked for bundler-breaking imports, arrow `where` + `this`, and `Math.random`.
+- `/mission-tracker` — `list`, `next`, `propose`, `approve`, `start`, `task M<N>/T<k> [--done --evidence f]`.
+- `/verify-scene` — the test suite. `/ship` — review gate and merge into `main`. `/new-event`, `/new-scenario`.
+- Agents: `step-dev` (one task in the worktree, never commits, one at a time), `reviewer` (read-only, before every
+  merge), `physics-auditor` (events and `spectrum.js`).
+- Commits on a mission branch carry `(refs M<N>/T<k>)`; nothing is committed straight on `main` unless the user
+  says so (`[no-mission]`); never push unasked. Hooks enforce this.
 
 ## Conventions that hold everywhere
 
-- Imports: engine modules import each other relatively; scenarios import the engine as `spectra/...` (import map in each `index.html`) and their own files relatively. The bundler regex only recognises `import`/`export … from` at the start of a line — keep imports static and on their own lines.
-- **New spectral sources use `Em`/`Rib` (crowds: `EmField`), never hand-drawn meshes**; band effects live in GLSL (`engine/render/shaders.js`).
-- **Every event lists its physical processes** in `freq: [...]` — keys of `SPECTRUM` in `engine/core/spectrum.js`; add new processes there rather than guessing a band.
-- **Seeded randomness**: layouts and event `init()`s draw from the shared `R` (`engine/core/util.js`) in list order, never `Math.random`, so scrubbing repeats. New events go **after** the existing list in `events()`.
-- **Front is azimuth 270 (west, −z) in every scenario**; view clamp yaw ±1.35, pitch −0.1…1.5 — keep sky azimuths ~205–340 and above the horizon. **One shared timeline** (`engine/world/atmosphere.js`) for sun, moon, lights.
+- **Physics first, stylisation second.** The look per band is stylised; *what* emits, how much and when follows
+  real physics. Every event lists its processes in `freq: [...]` (keys of `SPECTRUM`, `engine/core/spectrum.js`);
+  add a sourced process there rather than guessing a band; tag what is `stylised`, `rare` or `time-compressed`.
+- **Sources vs surfaces.** Glowing things use `Em` / `Rib` / `EmField` (band looks live in GLSL); the landscape's
+  own emission comes from surface presets (`engine/render/surface.js`). One table per fact, no scattered literals.
+- **Seeded randomness.** Layout and `init()` draw from `R` (`engine/core/util.js`) in list order — new events go
+  after the existing list; `Math.random` only for visual-only jitter.
+- **One shared sky.** Front is azimuth 270 (west) everywhere, view clamp yaw ±1.35 / pitch −0.1…1.5; one timeline
+  (`engine/world/atmosphere.js`) drives sun, moon and lights for every scenario.
+- **Imports** are static, one per line (the bundler's regex inlines them); scenarios import the engine as `spectra/…`.
+- **Budget:** the city stays under ~400 draw calls (`spectra timeline` reports them).
+- Root `index.html` and `dist/` are generated — edit `engine/ui/landing.html`.
 
-## Verifying visually
+## Where the details are
 
-`uv run spectra shot` finds the Playwright-cached `chrome-headless-shell` under `~/.cache/ms-playwright/` (or `$SPECTRA_CHROME`) and renders with SwiftShader — slow (~30 s), but it compiles every shader. Check several moments (`-t 5`, `30`, `54`) and an instrument view (`--bands ir,micro`). Drag-to-look can't be exercised; use `--yaw/--pitch`. Write screenshots to the scratchpad, not the repo (`shots/` is git-ignored).
+Path-scoped rules in `.claude/rules/` load when you open matching files: `render` (shaders, emitters, instrument
+view, surfaces, tuning), `events` (event contract, timing, `freq`), `sky-world` (geometry, atmosphere, terrain),
+`tooling` (the `spectra` CLI, bundler, headless Chrome), `missions` (the planning store). Adapter values for the
+SDLC: `.claude/sdlc.toml`.

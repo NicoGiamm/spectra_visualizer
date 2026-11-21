@@ -51,5 +51,5 @@ threshold `.9`.
 
 - Shader compile errors only surface at render time: `uv run spectra shot` prints the compile log and exits 1. A
   shader path behind a band that is off at the chosen moment is not compiled — shoot with `--bands` covering it.
-- Surface overlay with Visible on is a fixed `OVERLAY = .12` (plan Q3); there is no HUD slider yet.
-- Draw-call budget for the city: < ~400 (plan 4.6).
+- Surface overlay with Visible on is a fixed `OVERLAY = .12` (decision in mission M1); there is no HUD slider yet.
+- Draw-call budget for the city: < ~400 (mission M4/T6).

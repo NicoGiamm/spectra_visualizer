@@ -1,62 +1,94 @@
 # SDLC — how a change goes from idea to `main`
 
-One maintainer, one branch (`main`), one roadmap (`.claude/plans/improvement-plan.md`), no CI and no
-test suite: the **headless render** (`spectra shot`) and the **timeline physics check** (`spectra timeline`)
-are the tests. The loop is Claude Code's recommended one: **explore → plan → implement → verify →
-review → commit**, with a gate at each arrow. The skills drive it; this file is the one place it's defined.
+One maintainer, one long-lived branch (`main`), no CI and no test suite: the **headless render**
+(`spectra shot`) and the **timeline physics check** (`spectra timeline`) are the tests. Planned work is
+**missions**: one branch `mission/M<N>-<slug>` + one worktree each, holding the mission's plan as files
+(`.claude/missions/M<N>-<slug>/`) **only on that branch** — `main` never carries planning files. Tasks are
+commits on the branch. A mission reaches `main` as one `--no-ff` merge commit, after a fresh-context review and
+the user's word, with its planning folder left out.
+
+Adapter values (names, paths, the mission/task standard): `.claude/sdlc.toml`. Store conventions:
+`.claude/rules/missions.md`. Commands: `/mission-tracker`, `/ship`, `/verify-scene`.
 
 ## Roles
 
 | Who | Owns |
 |---|---|
-| **User** | what gets built (the plan, open questions), approving plans for non-trivial work, every `git push` |
-| **Main session** | the loop below: frames the step, plans, delegates or implements, verifies, reviews the diff, ticks the plan, commits |
-| `step-dev` agent | implements **one** plan step on `main`, verifies it, never commits — one at a time, never in parallel |
-| `reviewer` agent | fresh-context review of the diff before commit; read-only |
+| **User** | which missions exist (approves proposals), decisions, "ship now?", every `git push` |
+| **Main session** | the lifecycle below: proposes, starts, works tasks (or delegates), verifies, commits in the worktree, gets the review, ships after the OK |
+| `step-dev` agent | implements **one** task in the mission's worktree and verifies it; never commits — one at a time, never in parallel |
+| `reviewer` agent | fresh-context review of the whole mission diff before a merge; read-only |
 | `physics-auditor` agent | checks events / `spectrum.js` against real physics; read-only |
 
-## Sizing — pick the lane first
+## The lifecycle
+
+```
+propose ─▶ proposed ─user OK─▶ planned ─start─▶ active ─┬─ per task: open → explore → plan → implement → verify → commit → done
+(branch + worktree  (approve)            (EnterWorktree)│
+ off main)                                              └─ all done ─▶ "ship now?" ─▶ review-brief → reviewer → deliver
+                                                           ─▶ user OK ─▶ ship merge: --no-ff into main WITHOUT .claude/missions/,
+                                                              worktree + branch removed (the record stays in the merge's 2nd parent)
+```
+
+| # | Stage | Command | Exit gate |
+|---|---|---|---|
+| 1 | **Propose**: opens `mission/M<N>-<slug>` off `main` + its worktree; fill Problem / Scope / Delivery and the tasks (Goal, Plan `files:`, Acceptance) there, commit on the branch | `mission-tracker propose "<title>"`, `add-task M<N> "<title>"` | shown to the user |
+| 2 | **Approve** — only after the user's OK | `mission-tracker approve M<N>` | strict standard check (no template placeholders); status `planned` |
+| 3 | **Start** (a planned mission without a worktree gets one back) | `mission-tracker start M<N>`, then `EnterWorktree path=<worktree>` | session works inside the worktree; `ship align` if `main` moved |
+| 4 | **Open a task** — one at a time | `mission-tracker task M<N>/T<k>` | Plan has real `files:`, Acceptance is checkable |
+| 5 | **Explore** the files; record the baseline `spectra timeline <ids>`; broad searches → Explore agent | — | baseline numbers known |
+| 6 | **Plan**: files, new `SPECTRUM` processes (sourced), seeded-`R` impact, draw-call cost, the moments/bands that prove it. Large task → plan mode, user approves | — | plan stated / approved |
+| 7 | **Implement** the smallest change that meets Acceptance — main session or one `step-dev` | — | nothing outside the task's Plan (else a `gap` task) |
+| 8 | **Verify** | `/verify-scene <ids>` | timeline 0 warnings; shots at 5/30/54 + instrument view exit 0; PNGs inspected |
+| 9 | **Commit** in the worktree, by explicit path, `(refs M<N>/T<k>)`; checkpoint commits allowed | `git commit` (git_guard checks) | — |
+| 10 | **Close the task**: tick Acceptance, write the evidence (what changed, numbers, not verified) | `mission-tracker task M<N>/T<k> --done --evidence <file>` | refused unless every item is ticked |
+| 11 | **Ship?** When the tasks are done, ask the user once: "ship M<N> now?" | — | the user's word |
+| 12 | **Review** the whole mission diff | `ship review-brief M<N>` → `reviewer` (+ `physics-auditor` if events/spectrum changed) → `ship deliver M<N> --verdict-file … --reviewed-head …` | `VERDICT: ok` for the current head (a later commit needs a new review) |
+| 13 | **Merge** after the user's OK | `ship align M<N>` if `main` moved (then re-review), `ship merge M<N>` | active mission · reviewer `ok` @ head · branch contains `main` · timeline gate 0 warnings · `--no-ff` merge without `.claude/missions/` · worktree + branch removed |
+| 14 | **Push** | only when the user says so | — |
+
+**Partial delivery** (the user wants part of a mission on `main` now): `ship merge M<N> --partial` — the branch and
+its folder continue; `ship align M<N>` before new work (align always keeps the branch's own mission folder).
+
+## Lanes
 
 | Lane | Examples | Path |
 |---|---|---|
-| **Trivial** | a typo, one tuning number, a comment | implement → `spectra shot` once → commit |
-| **Standard** | one plan step, one new event, a bug fix | the full loop, in the main session or one `step-dev` |
-| **Large** | a whole phase, an engine refactor across scenarios | plan mode, split into plan steps, then one `step-dev` per step **in sequence**, reviewing each before the next |
-
-## The loop
-
-| # | Stage | What happens | Exit gate |
-|---|---|---|---|
-| 1 | **Frame** | Name the unit of work: a plan step (quote its text and *Done when*) or a one-line goal. `/plan-step` picks the next unticked step. | A stated *done when* exists. |
-| 2 | **Explore** | Read the code the step touches; the path-scoped rules in `.claude/rules/` load as files are opened. Broad searches go to an Explore agent. Record the **baseline**: `uv run spectra timeline <ids>` (draw calls, warnings). | Files to change and baseline numbers known. |
-| 3 | **Plan** | Standard/large: plan mode. Name files, new `SPECTRUM` processes (with sources), seeded-`R` impact (where new events go in the list), draw-call cost, which moments/bands will prove it. | User approved (large) or plan stated (standard). |
-| 4 | **Implement** | Smallest change that meets *done when*. Engine contracts: `Em`/`Rib`/`EmField`, `freq`, `S`, `R`. No drive-by refactors; out-of-scope findings become a note. | Code written, nothing outside the step. |
-| 5 | **Verify** | `/verify-scene <ids>`: `spectra timeline` at **0 warnings** and draw calls vs baseline; `spectra shot` at `-t 5`, `30`, `54` plus an instrument view (`--bands` covering the touched bands), each exit 0; **look at the PNGs**. | All checks green, images show the intended effect. |
-| 6 | **Review** | `reviewer` agent on the uncommitted diff, given only the step text. If events or `spectrum.js` changed: `physics-auditor` too. Fix or explicitly accept each finding. | `VERDICT: ok` (or the user accepts a `partial`). |
-| 7 | **Record & commit** | Tick the plan (`[x]` / `[~]`), add a dated progress note with numbers and what was *not* verified. `/ship`: stage by explicit path, one commit per step. | Commit on `main`. |
-| 8 | **Push** | Only when the user says so. | — |
-
-## Commits
-
-- Style from the history: `<Area>: <what> (plan X.Y)`, e.g. `Meters: area-weighted terrain surface mean (plan 1.3)`;
-  `Plan: …` for plan-only edits. Body: why, and the verification numbers.
-- Stage by explicit path, never `git add -A` / `.`; never commit `dist/`, `shots/` or screenshots.
-- One step = one commit (a large step may checkpoint, each commit leaving `spectra shot` green).
-- Never force-push, rewrite pushed history, or `--no-verify`.
+| **Mission** (default) | every roadmap item, a new event or scenario, a refactor | the lifecycle above |
+| **Gap / bug inside a mission** | something found while working | `mission-tracker add-task M<N> "…" --label gap` in the open mission |
+| **No-mission** | a typo, a one-line fix the user wants straight on `main` | only when the user says so: commit on `main` with `[no-mission]` in the message, after one `spectra shot` |
 
 ## Branches and worktrees
 
-Default: work on `main`. A worktree only when the user asks for one (e.g. a risky experiment); it is
-merged back with `git merge --no-ff` as `Merge <topic> worktree: …` and removed afterwards (`git worktree
-remove`, `git branch -d`). Never several agents in parallel worktrees (2026-11-21: they drifted from
-the plan, see memory).
+| Branch | Role | Gets code from |
+|---|---|---|
+| `main` | the only long-lived branch; what `spectra build` publishes; never holds `.claude/missions/` | `ship merge` of missions (`git log --first-parent main` = one line per delivery); `[no-mission]` commits on the user's word |
+| `mission/M<N>-<slug>` | one mission, off `main`: its planning folder + its tasks' commits; deleted when delivered | your commits, `main` merged in by `ship align` |
+
+- Worktree of a branch: `.claude/worktrees/<branch with / → ->` (git-ignored). Enter with `EnterWorktree
+  path=<worktree>`; `ExitWorktree action=keep` returns (never `remove`: `ship` removes it after the delivery).
+  `uv run spectra …` works inside it (own `.venv`, own `shots/`). A proposed/planned mission's worktree can be
+  dropped (`mission-tracker close-worktree M<N>`); the branch keeps everything and `start` re-opens it.
+- The open missions are the `mission/*` branches (`mission-tracker list`); delivered ones are the `Merge mission
+  M<N>: …` commits on `main` (`list --delivered`); a delivered mission's plan: `git show <merge>^2:.claude/missions/`.
+- Concurrent sessions work on **different missions**; within one mission one session or agent at a time.
+- `git_guard` refuses: a commit on `main` without `[no-mission]`; `git merge / rebase / cherry-pick / revert /
+  reset --hard` on `main`; a mission commit without `refs M<N>` of its own mission; `git add -A` / `.`; any force
+  push. The clis run their own git (merges, bookkeeping commits on the branch).
+
+## Commits
+
+- Subject `<Area>: <what> (refs M<N>/T<k>)`, e.g. `Meters: area-weighted terrain surface mean (refs M1/T3)`; body:
+  why + the verification numbers; the attribution trailer the session provides.
+- Stage by explicit path; never commit `dist/`, `shots/`, screenshots or `.claude/settings.local.json`.
+- Never force-push, rewrite pushed history or `--no-verify`.
 
 ## Definition of done
 
-- [ ] The step's *Done when* is met — checked against the plan text, not memory.
-- [ ] `spectra timeline <touched ids>`: 0 warnings; draw calls within budget and noted.
-- [ ] `spectra shot` at 3 moments + 1 instrument view per touched scenario: exit 0, images inspected.
-- [ ] Shared engine change → every scenario timeline-checked and shot at least once.
-- [ ] Reviewer verdict `ok`; physics-auditor `ok` if events/spectrum changed.
-- [ ] Plan ticked, honest dated progress note; README/CLAUDE.md/rules updated if a contract changed.
-- [ ] Committed by explicit path; not pushed unless asked.
+**Task**: Acceptance all ticked against real checks · `spectra timeline <ids>` 0 warnings, draw calls in the
+Outcome · shots at 3 moments + 1 instrument view per touched scenario, exit 0, inspected · engine change → every
+scenario · Outcome says what was not verified · committed with `refs`.
+
+**Mission**: every task done (or the user accepted `--partial`) · reviewer `ok` for the head (physics-auditor `ok`
+if events/spectrum changed) · README / CLAUDE.md / rules updated in the branch if a contract changed · Current
+state updated · `ship merge` green · pushed only on the user's word.

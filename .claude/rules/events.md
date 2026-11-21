@@ -41,8 +41,9 @@ place-specific ones in `scenarios/<id>/events.js`. Every event declares the phys
 
 ## Non-derivable facts
 
-- Detector default is **Ground** (plan Q1): `ground: false` processes are hidden with ghost markers; Orbit is one
-  click away (`S.detector`, `?detector=`).
+- Detector default is **Orbit** (user decision, Q1 — recorded in mission M2): everything is drawn; in Ground mode (one click,
+  `?detector=ground`) `ground: false` processes are hidden with ghost markers. `spectra timeline` reports in Orbit
+  and re-runs the physics check in Ground mode — both must stay at 0 warnings.
 - The night is deliberately "one improbable night" (supernova + GRB + FRB + comet): such events carry
-  `rare` / `time-compressed` tags rather than being removed (plan Q2).
-- The per-event physics verdicts live in the plan's "Audit of existing events" table; apply them, don't re-derive.
+  `rare` / `time-compressed` tags rather than being removed (open question Q2, undecided).
+- The per-event physics verdicts live in `audit.md` of mission M2 (on its branch: `git show mission/M2-physical-honesty:.claude/missions/M2-physical-honesty/audit.md`); apply them, don't re-derive.

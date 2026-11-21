@@ -7,13 +7,13 @@ disable-model-invocation: true
 
 # new-scenario — a new place under the same sky
 
-Arguments: `$ARGUMENTS`. A new scenario is the **large** lane of `.claude/sdlc.md`: plan mode first.
+Arguments: `$ARGUMENTS`. A new scenario is a mission of its own (`/mission-tracker propose`), planned before any file is copied.
 
 ## Steps
 
 1. **Plan** (plan mode): the place, the camera walk, which shared sky events fit (city-like light pollution drops
    aurora/Milky Way), 3–6 local events with their `SPECTRUM` processes, surface presets for the ground and props.
-   Get the user's approval. Consider adding it as a plan phase.
+   Write it as the mission's tasks; get the user's approval (`approve`), `start`, work in the worktree.
 2. **Copy** `scenarios/seaside/` → `scenarios/<id>/`. In `index.html` change `<title>Spectra · Name</title>` and
    `<meta name="description">`; keep the import map (`spectra/` → engine).
 3. **`world.js`**: terrain (heightfield or flat `gridMat`), props via `solid(mesh, instrMat?)`, visible-only sprites
@@ -24,7 +24,7 @@ Arguments: `$ARGUMENTS`. A new scenario is the **large** lane of `.claude/sdlc.m
 5. **Verify**: `uv run spectra list` shows it; `/verify-scene <id>` (timeline 0 warnings, draw calls noted, shots
    at 5/30/54 + instrument view); `uv run spectra build <id>` produces `dist/<id>.html` and the regenerated root
    `index.html` links the new scenario.
-6. Update README's scenario table; review and `/ship`.
+6. Update README's scenario table in the same mission; review and `/ship`.
 
 ## Related
 

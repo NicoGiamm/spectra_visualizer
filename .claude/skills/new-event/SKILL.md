@@ -27,7 +27,8 @@ open the files); this is the procedure.
    the middle (seeded `R`).
 6. **Verify** with `/verify-scene <ids>`: timeline physics check 0 warnings (declared bands = `freq` bands = drawn
    bands), the event visible in shots inside `t0`–`t1` and in an instrument view of its bands.
-7. Hand over to review (`reviewer` + `physics-auditor`) per `.claude/sdlc.md`.
+7. It is a task of a mission (add one with `mission-tracker add-task` if none fits); close it with evidence. The
+   mission's review (`/ship`) runs `reviewer` + `physics-auditor`.
 
 ## Related
 

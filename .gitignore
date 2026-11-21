@@ -226,3 +226,8 @@ __marimo__/
 dist/
 shots/
 .venv/
+
+# Claude Code SDLC (.claude/sdlc.md)
+.claude/worktrees/
+.claude/logs/
+!.claude/lib/
