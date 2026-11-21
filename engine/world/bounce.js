@@ -4,9 +4,10 @@
 //     -> { pts: [origin, hit1, hit2, …, end], hits: [{ p, n, k }], len: [cumulative length per point] }
 //
 // boxes: [{ min: Vector3, max: Vector3 }]. The ray reflects off the face it enters (normal from the slab that
-// was crossed last) up to maxHits times; after the last hit (or if it escapes) it runs on for the remaining
-// maxLen. Pure geometry, no allocation per frame beyond the result: precompute rays in init() and animate a
-// packet along `pts` with `along(ray, s)`.
+// was crossed last) up to maxHits times; after the last hit it runs on for the remaining maxLen but stops (is
+// absorbed) at the next surface it meets instead of passing through it; a ray that escapes runs the full maxLen.
+// The last entry of `len` is therefore the drawn path length (<= maxLen). Pure geometry, no allocation per
+// frame beyond the result: precompute rays in init() and animate a packet along `pts` with `along(ray, s)`.
 import * as THREE from 'three';
 
 const V3 = THREE.Vector3;
@@ -31,9 +32,10 @@ export function bounce(origin, dir, boxes, maxHits = 3, maxLen = 200) {
   let left = maxLen;
   for (let k = 0; k <= maxHits && left > 1e-3; k++) {
     let best = null;
-    if (k < maxHits) for (const b of boxes) { const h = hitBox(o, d, b, left); if (h && (!best || h.t < best.t)) best = h; }
+    for (const b of boxes) { const h = hitBox(o, d, b, left); if (h && (!best || h.t < best.t)) best = h; }
     if (!best) { o.addScaledVector(d, left); pts.push(o.clone()); len.push(maxLen); break; }
     o.addScaledVector(d, best.t); left -= best.t;
+    if (k === maxHits) { pts.push(o.clone()); len.push(maxLen - left); break; }   // absorbed at the next surface
     const n = new V3(); n.setComponent(best.axis, best.sign);
     pts.push(o.clone()); len.push(maxLen - left); hits.push({ p: o.clone(), n, k: hits.length + 1 });
     d.setComponent(best.axis, -d.getComponent(best.axis));      // mirror the crossed component

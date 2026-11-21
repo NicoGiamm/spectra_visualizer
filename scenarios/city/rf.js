@@ -78,7 +78,7 @@ export const busStop = () => event({ name: 'Bus shelter: LED screen', t0: 9, t1:
 
 // ---------------------------------------------------------------- 4.2 multipath
 
-export const multipath = () => event({ name: 'Multipath off the facades', t0: 6, t1: 52, bands: ['micro'], freq: ['nr35', 'wifi24', 'wifi5'], note: 'Packets from the 5G mast and the strongest routers ricochet 2–4 times down the street canyon off the facades and the asphalt, each hop about −6 dB (half the field strength) weaker than the last; the facade or asphalt spot each ray hits flashes in the microwave surface term.',
+export const multipath = () => event({ name: 'Multipath off the facades', t0: 6, t1: 52, bands: ['micro'], freq: ['nr35', 'wifi24', 'wifi5'], tags: ['stylised', 'time-compressed'], note: 'Packets from the 5G mast and the strongest routers ricochet 2–4 times down the street canyon off the facades and the asphalt, each hop about −6 dB (a quarter of the power) weaker than the last; the facade or asphalt spot each ray hits flashes in the microwave surface term. Stylised and time-compressed: a real packet crosses the canyon at the speed of light in well under a microsecond and spreads as a wavefront; here it crawls along one ray as a ribbon.',
   init() {
     this.walls = BOXES.concat([{ min: new V3(-2e3, -.2, -2e3), max: new V3(2e3, 0, 2e3) }]);   // + the street itself
     // ray i < 2 leaves the mast panels, the others leave one of the routers nearest the viewer (picked per cycle)
@@ -93,28 +93,35 @@ export const multipath = () => event({ name: 'Multipath off the facades', t0: 6,
       const cyc = Math.floor((t + q.ph) / q.per);
       if (cyc !== q.cyc) { q.cyc = cyc;
         const h = k => hash2(cyc * 31 + q.i * 7, k);
-        let org, el;
-        if (q.i < 2) { org = MAST.panels[q.i].clone(); el = -18 - 20 * h(1); }
+        let org;
+        if (q.i < 2) org = MAST.panels[q.i].clone();
         else {
-          const near = WINDOWS.slice().sort((a, b) => Math.abs(a.z - cam.z) - Math.abs(b.z - cam.z)).slice(0, 6);
+          const zc = cam.z - 15, near = WINDOWS.slice().sort((a, b) => Math.abs(a.z - zc) - Math.abs(b.z - zc)).slice(0, 3);   // routers just ahead
           org = near[Math.floor(h(1) * near.length)].clone(); org.x -= Math.sign(org.x) * .4;   // just off the facade
-          el = -3 - 9 * h(2);
         }
-        // into the canyon: across the street toward the opposite facade, angled 20-65° down the street,
-        // so the packet zig-zags between the walls and finally hits the asphalt
-        const across = -Math.sign(org.x), a = (20 + 45 * h(3)) * Math.PI / 180, dz = h(4) < .5 ? -1 : 1, ce = Math.cos(el * Math.PI / 180);
-        const dir = new V3(across * Math.cos(a) * ce, Math.sin(el * Math.PI / 180), dz * Math.sin(a) * ce);
-        q.ray = bounce(org, dir, this.walls, 2 + Math.floor(h(5) * 3), 200);
+        // into the canyon: across the street toward the opposite facade, angled 20-65° down the street (mostly
+        // west, ahead of the viewer, who cannot turn round), so the packet zig-zags between the walls and finally
+        // hits the asphalt. A direction that escapes over the roofs after a single hit is re-drawn (hashed, up to
+        // 6 tries) so every packet reflects 2-4 times.
+        const across = -Math.sign(org.x), maxHits = 2 + Math.floor(h(5) * 3);
+        q.ray = null;
+        for (let k = 0; k < 6; k++) {
+          const g = j => h(j + 10 * k), el = (q.i < 2 ? -18 - 20 * g(1) : -3 - 9 * g(2)) * Math.PI / 180;
+          const a = (20 + 45 * g(3)) * Math.PI / 180, dz = g(4) < .8 ? -1 : 1, ce = Math.cos(el);
+          const ray = bounce(org, new V3(across * Math.cos(a) * ce, Math.sin(el), dz * Math.sin(a) * ce), this.walls, maxHits, 200);
+          if (!q.ray || ray.hits.length > q.ray.hits.length) q.ray = ray;
+          if (ray.hits.length >= 2) break;
+        }
       }
       const age = (((t + q.ph) % q.per) + q.per) % q.per, dur = q.per * .9;
       if (age >= dur || !q.ray) continue;
       const s = age / dur * (200 + 22);
       const seg = along(q.ray, s - 22, s);
       if (seg.pts.length < 2) continue;
-      q.rib.set(seg.pts, .55, .8, on * .95 * Math.pow(.5, seg.hits), 0);   // −6 dB (field amplitude ×½) per bounce
+      q.rib.set(seg.pts, .55, .8, on * .95 * Math.pow(.25, seg.hits), 0);   // −6 dB per bounce: drawn intensity (power) ×¼
       // each reflection point flashes as the packet head passes it, with the same per-bounce fade
       q.ray.hits.forEach((h, k) => { const past = s - q.ray.len[k + 1];
-        if (past >= 0 && past < 70) this.hl.push({ p: h.p, power: on * 2.4 * Math.pow(.5, k) * (1 - past / 70) }); });
+        if (past >= 0 && past < 70) this.hl.push({ p: h.p, power: on * 2.4 * Math.pow(.25, k) * (1 - past / 70) }); });
     } },
   where: () => null });
 
