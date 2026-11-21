@@ -11,26 +11,23 @@ First-person 3D scenes (three.js) that play a 2-minute sunset-to-night timelapse
 - `uv run spectra timeline [ids…]` — headless `?dump`: event gantt, per-band activity vs meter tops, scene draw calls, and a physics check (declared bands ↔ `freq` processes ↔ bands actually drawn). Keep it at 0 warnings; compare draw calls before/after perf work.
 - `uv run spectra shot <id> -t 30 [--yaw .3 --pitch .5 --bands ir,micro] -o out.png` — headless render; prints grouped console messages (shader compile logs included) and exits 1 on any. **Run it after every change**; there is no lint or test suite.
 
-**Roadmap:** `.claude/plans/improvement-plan.md` is the multi-step plan (spectral surfaces, physical realism, aurora, city RF density). Work it step by step, tick the checkbox and add a progress note when a step is done.
+**Roadmap:** `.claude/plans/improvement-plan.md` is the multi-step plan (spectral surfaces, physical realism, aurora, city RF density). Work it step by step, in phase order.
 
-Imports: engine modules import each other relatively; scenarios import the engine as `spectra/...` (import map in each `index.html`) and their own files relatively. The bundler regex only recognises `import`/`export … from` at the start of a line — keep imports static and on their own lines.
+## Workflow
 
-## Conventions that matter
+`.claude/sdlc.md` defines the lifecycle: **frame → explore → plan → implement → verify → review → commit**, sized by lane (trivial / standard / large), with a definition of done. In short:
 
-- **Band effects live in GLSL, not JS** (`engine/render/shaders.js`). `bandMat(band, color, ribbon, real)`; `Em` (camera-facing glow quad) and `Rib` (camera-facing ribbon along world points) in `engine/render/sources.js`. `set()` adds to `S.act[band]` (meters) and hides the mesh when the band is filtered off. **New spectral sources use `Em`/`Rib`, never hand-drawn meshes.** The loop hides every source before updates, so an invisible source simply isn't `set()`.
-- **Crowds use `EmField(band, n, color, real)`** (one instanced draw call; `set(i, pos, size, I)`, `color(i, c)`), not hundreds of `Em`s. Merge static scenery (`mergeGeometries`) or instance it; watch draw calls in `spectra timeline`.
-- **Every event lists its physical processes** in `freq: [...]` — keys of `SPECTRUM` in `engine/core/spectrum.js` (f / λ / E; bands are derived, `ground: false` = absorbed by the atmosphere, `stylised: true` = not real as drawn). Add new processes there rather than guessing a band. Optional `tags: ['rare' | 'time-compressed' | 'stylised']`.
-- **`real = 1` picks the realistic IR style** (tight, low-contrast rising heat, no false-colour rings) for moving warm bodies: deer `Rib('ir', null, 4, 1)` + head `Em('ir', null, 1)`, bats, gulls, airliner/ship/car exhausts. Static hot sources keep the thermal palette.
-- **Events** are objects `{ name, t0, t1, bands, note, init(), update(), where() }` on the **0–60 script axis** (`S.t`; playback `t += dt * .5`, slider 0–120). Shared ones are factories in `engine/events/sky.js` taking overrides (`sky.thunderstorm({ note })`); when retiming a library event check what its `update()` hard-codes. Local ones live in the scenario's `events.js`. `update()` must reset sizes/intensities every frame. Read `t`/`T`/`on`/`camera` from `S` (`engine/core/state.js`).
-- **`where` must be a method, not an arrow**, when it reads `this` (ES modules: arrow `this` is undefined).
-- **Front is azimuth 270 (west, −z) in every scenario.** `dirAE(az, el)`, `skyP`, `onSky` (`engine/core/geom.js`) put things on a sphere of radius `D` around the camera. View clamp: yaw ±1.35, pitch −0.1…1.5 — keep sky azimuths ~205–340 and above the horizon.
-- **One shared timeline** in `engine/world/atmosphere.js`: `SUN_AZ`/`sunEl()`, `moonDir()`, `night()`, `moonlit()`, keyframes `HEMI`/`HOR`/`CLOUD`/`CONTRAIL` read with `kf()`. Atmosphere also owns the lights (sun, moon, hemi, headlamp, storm flash) via `ENV`. Options per scenario: `lightPollution` (dims stars/Milky Way, adds a horizon glow), `cloudCover`.
-- **Seeded randomness**: layouts and event `init()`s draw from the shared `R` (`engine/core/util.js`) in list order, never `Math.random`, so scrubbing repeats. The trail's `events()` order matches the original single file so its layout is unchanged.
-- **Instrument view** (Visible off): `solid(obj, instrMat?)` registers solids (default dark material); `visOnly()` for sprites that exist only in visible light. Terrain uses `topoMat` (contours) or `gridMat(cell)` for flat ground; both have `uWarm` for an IR heat glow near the viewer. Per-instance values passed to fragment shaders must be `flat varying` (interpolated seeds + hashes = pixel noise).
-- **Pulsar has two opposite arms**, each with one faded sweep ghost; more reads as a windmill. **Cone-shaped sources are streamlines + a mouth ring** (`ringPts`), never one tapered ribbon (radio dashes scale with `uLen = length / width` and turn to confetti).
-- **Growing structures store a node table** (air showers: `nd` rows `{ n, az, el, j, a, b, lv, w }`, lerped from the parent's current point by `f = clamp((g - a) / (b - a))`; `chain` drives the X-ray shaft).
-- **Keep the ends of the timeline dense** but filler events short-lived (sun dogs, zodiacal scatter, green flash, gulls early; noctilucent clouds, moon halo, fire whirl, fireworks late).
-- **Tuning**: rendered brightness per band = `GAIN`; meter tops = `METER_NORM` (scenario `meterNorm` overrides; the city raises micro/vis/ir). The sun stays small/dim via `sunEl()`, low `mieCoefficient`, bloom threshold `.9`.
+- `/plan-step [id]` runs one roadmap step end to end; `/verify-scene [ids]` is the test suite (timeline at 0 warnings + shots at 3 moments + an instrument view, PNGs inspected); `/ship` commits by explicit path and never pushes unasked. `/new-event`, `/new-scenario` scaffold to contract.
+- Agents: `step-dev` implements **one** plan step at a time on `main` (never parallel, never commits); `reviewer` (fresh context, read-only) before every non-trivial commit; `physics-auditor` when events or `spectrum.js` change.
+- Detailed conventions are path-scoped rules in `.claude/rules/` (`render`, `events`, `sky-world`, `tooling`, `plan`) and load when you touch matching files. Hooks: generated files (root `index.html`, `dist/`) are refused; `.js` edits are checked for bundler-breaking imports, arrow `where` + `this`, and `Math.random`.
+
+## Conventions that hold everywhere
+
+- Imports: engine modules import each other relatively; scenarios import the engine as `spectra/...` (import map in each `index.html`) and their own files relatively. The bundler regex only recognises `import`/`export … from` at the start of a line — keep imports static and on their own lines.
+- **New spectral sources use `Em`/`Rib` (crowds: `EmField`), never hand-drawn meshes**; band effects live in GLSL (`engine/render/shaders.js`).
+- **Every event lists its physical processes** in `freq: [...]` — keys of `SPECTRUM` in `engine/core/spectrum.js`; add new processes there rather than guessing a band.
+- **Seeded randomness**: layouts and event `init()`s draw from the shared `R` (`engine/core/util.js`) in list order, never `Math.random`, so scrubbing repeats. New events go **after** the existing list in `events()`.
+- **Front is azimuth 270 (west, −z) in every scenario**; view clamp yaw ±1.35, pitch −0.1…1.5 — keep sky azimuths ~205–340 and above the horizon. **One shared timeline** (`engine/world/atmosphere.js`) for sun, moon, lights.
 
 ## Verifying visually
 
