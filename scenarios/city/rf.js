@@ -1,6 +1,6 @@
 // The city's radio & microwave ecosystem: crowds of small emitters (phones, Bluetooth, key fobs,
 // scooters), multipath bouncing off the facades (engine/world/bounce.js), the ambient RF haze of
-// the street canyon, the tram's pantograph arcing, the power line's ELF hum, LED switching
+// the street canyon, the tram's pantograph arcing, the power line's 50 Hz field and corona noise, LED switching
 // interference and the FM/DAB mast on the broadcast hill.
 import * as THREE from 'three';
 import { V3, sm, R, hash2 } from 'spectra/core/util.js';
@@ -171,7 +171,7 @@ export const haze = () => event({ name: 'Street-canyon RF haze', t0: 0, t1: 60, 
 
 // ---------------------------------------------------------------- 4.4 true radio
 
-export const tram = () => event({ name: 'Tram: pantograph arcing', t0: 11, t1: 58, bands: ['radio', 'vis', 'uv'], freq: ['arcRF', 'arcLight', 'arcUV'], note: 'The cross-street tram drags its pantograph along the contact wire: broadband radio crackle and blue-white copper-arc light with UVA — the trolley equivalent of a welder flash, overhead right in front of you.',
+export const tram = () => event({ name: 'Tram: pantograph arcing', t0: 11, t1: 58, bands: ['radio', 'vis', 'uv'], freq: ['arcRF', 'arcLight', 'arcUV'], note: 'The cross-street tram drags its pantograph along the contact wire and now and then it loses contact for an instant: a spark — broadband radio crackle, a blue-white flash (nitrogen and copper lines) and the copper UV line at 324.7 nm. On a dry summer wire the sparks are intermittent, bunched where the pantograph crosses wire joints and section insulators; near-continuous arcing only happens on an iced or worn wire.',
   init() {
     const g = new THREE.BoxGeometry(13, 3.1, 2.8); g.translate(0, 1.55, 0);
     this.body = solid(new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: 0x2a3038, roughness: .5, metalness: .45 })));
@@ -185,7 +185,10 @@ export const tram = () => event({ name: 'Tram: pantograph arcing', t0: 11, t1: 5
       if (t < a || t > b) continue;
       const u = (t - a) / (b - a), x = -175 + u * 350, on = 1 - sm(b - .8, b, t);
       this.body.position.set(x, 0, TRAM_Z); this.body.visible = true;
-      const spark = hash2(Math.floor(T * 9), 4) < .62 ? .55 + .45 * hash2(Math.floor(T * 31), 7) : 0;
+      // intermittent sparking: rare along a clean, dry wire, a short flurry over each joint/section insulator (every
+      // 50 m, ±5 m); averaged over a pass the spark duty is ~15 %, not the near-continuous arcing of an iced wire
+      const joint = Math.abs(((x % 50) + 75) % 50 - 25) < 5;
+      const spark = hash2(Math.floor(T * 9), 4) < (joint ? .5 : .06) ? .55 + .45 * hash2(Math.floor(T * 31), 7) : 0;
       const top = new V3(x, 6.1, TRAM_Z);
       this.ar.set([top, new V3(x, 3.2, TRAM_Z)], .3, .3, on * spark * .9);
       this.fl.set(new V3(x, 4.4, TRAM_Z), 2.4, on * spark * 1.15);
@@ -194,7 +197,7 @@ export const tram = () => event({ name: 'Tram: pantograph arcing', t0: 11, t1: 5
     } },
   where() { return this.p; } });
 
-export const powerlines = () => event({ name: 'Power line: ELF hum', t0: 0, t1: 60, bands: ['radio'], freq: ['powerHum', 'coronaRF'], note: 'The high-voltage line across the far park hums at 50 Hz — a signal so long-wavelength it counts as radio here — with corona noise crackling off the crossarms: the longest ladder in the city, faint but unbroken.',
+export const powerlines = () => event({ name: 'Power line: 50 Hz hum & corona', t0: 0, t1: 60, bands: ['radio'], freq: ['powerHum', 'coronaRF'], tags: ['stylised'], note: 'The high-voltage line across the far park carries 50 Hz — a 6000 km wavelength, so it barely radiates: its field is a quasi-static near field that falls to background within tens of metres of the line. Stylised: the faint steady glow on the line stands for that field, which you could never pick up from here. What a radio does hear from the line is the crackle of corona discharge off the conductors and crossarms (worse in rain or fog).',
   init() {
     this.a = [];
     for (const x of PYLONS) { this.a.push(new V3(x, PYLON_H - 4, POWER_Z - 7)); this.a.push(new V3(x, PYLON_H - 10, POWER_Z + 9)); }
@@ -208,20 +211,21 @@ export const powerlines = () => event({ name: 'Power line: ELF hum', t0: 0, t1: 
     }); },
   where: () => null });
 
-export const ledSwitch = () => event({ name: 'LED switching interference', t0: 12, t1: 60, bands: ['radio'], freq: ['smpsEMI'], note: 'Cheap LED drivers behind the shop signs flicker at half-mains cycles; that switching noise leaks into the radio band right at the sign — short broadband blips compressed against the script time.',
+export const ledSwitch = () => event({ name: 'LED switching interference', t0: 12, t1: 60, bands: ['radio'], freq: ['smpsEMI'], tags: ['stylised'], note: 'Cheap LED drivers behind the shop signs are switch-mode supplies chopping at 20 kHz–1 MHz; the harmonics of those fast edges leak into the radio band right at the sign (their visible flicker is something else: rectified mains ripple at 100 Hz). Stylised: the noise is continuous while a sign is lit; it is drawn as short broadband blips.',
   init() { this.s = SIGNS.filter(q => !q.neon); this.f = new EmField('radio', this.s.length); },
   update() { const { t } = S; if (!inWin(this)) return;
     this.s.forEach((q, k) => { const b = burst(t, 1.6 + q.k * 5, q.k * 13.7, .22) * .5; if (b > .02) this.f.set(k, q.p, 1.8, b); }); },
   where: () => null });
 
-export const fmMast = () => event({ name: 'FM & DAB on the hill', t0: 0, t1: 60, bands: ['radio', 'vis'], freq: ['fm', 'dab', 'navRed'], note: 'The lattice mast on the broadcast hill keeps the neighbourhood alive: FM (100 MHz) and DAB+ Band III stream from it, and the radio surface term paints dashes on every facade facing the hill. Red aviation light on the cap.',
+export const fmMast = () => event({ name: 'FM & DAB on the hill', t0: 0, t1: 60, bands: ['radio', 'vis'], freq: ['fm', 'dab', 'navRed'], note: 'The lattice mast on the broadcast hill keeps the neighbourhood alive: FM (100 MHz) and a DAB+ Band III multiplex (~220 MHz, a continuous OFDM signal) stream from it at constant power, and the radio surface term paints dashes on every facade facing the hill. Red aviation light on the cap.',
   init() {
-    this.fm = new Em('radio'); this.dab = new Em('radio'); this.red = new Em('vis', '#ff2020');
-    addTx('radio', () => ({ p: FM.top, power: 2.4 + 1.2 * Math.max(0, Math.sin(S.t * .4)) }));
+    this.tx = new Em('radio'); this.red = new Em('vis', '#ff2020');
+    addTx('radio', () => ({ p: FM.top, power: 3 }));   // broadcast ERP is constant (the old pulse ran 2.4–3.6, mean 2.8)
   },
   update() { const { t, T } = S;
     const live = .55 + .45 * sm(0, 8, t);
-    this.fm.set(FM.top.clone().setY(FM.top.y - 14), 120, live * .5);
-    this.dab.set(FM.top.clone().setY(FM.top.y - 70), 80, burst(t, .66, .2, .2) * live * .8);
+    // FM and the DAB+ multiplex (continuous OFDM) both broadcast steadily from the same antennas: one steady glow
+    // (a second always-on quad would cost a draw call over the M4 baseline)
+    this.tx.set(FM.top.clone().setY(FM.top.y - 28), 130, live * .65);
     this.red.set(FM.top, 30, T % 2.2 < .6 ? 1.2 : .05); },
   where() { return FM.top; } });
