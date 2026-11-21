@@ -1,10 +1,10 @@
 ---
 id: M4/T7
 title: Visible view: RF haze blocks in the sky, overexposed windows and shop fronts
-status: in-progress
+status: done
 labels: [gap]
 started: 2026-11-21
-completed:
+completed: 2026-11-21
 ---
 
 # M4/T7 — Visible view: RF haze blocks in the sky, overexposed windows and shop fronts
@@ -46,4 +46,8 @@ files: scenarios/city/rf.js, scenarios/city/world.js, scenarios/city/street.js
 
 ## Outcome
 
-<Written by `mission-tracker task <ref> --done --evidence <file>`: what changed, numbers, shots, what was not verified.>
+With Human eye (Visible only) at night the city now reads as a lit street (06a6d40, scenarios/city/world.js + events.js, no engine files). Cause of the black street/walls (also present in e6843ca): night lighting was the hemi light (~.02) on near-black albedos, plus 14 m additive pool meshes 24 m apart. A per-pixel `streetLight()` term in the visible material of the street surfaces, buildings and parked cars now takes the nearest 16 lamps (LED white or HPS strike → orange incl. warm-up; 1/d², Lambert, full cutoff, house-side shield, soft knee under the bloom threshold) plus a city-glow/moon ambient; the merged pool mesh takes over beyond 62–88 m. Asphalt lightened 0x111214 → 0x26272a. Windows peak ~.4 linear (was ~.87) with warm incandescent / warm LED / cool LED-TV hues, dimmed and curtained variants and the same cell seeds as the IR heat leaks; shop fronts ~.18 (was ~.52). Wi-Fi and 5G-mast micro glows shrink with distance (size ≤ 0.1·d) like the T3 haze; the haze half of this task was done in T3 (561c5ab).
+
+Numbers: `spectra timeline` 0 warnings Orbit + Ground for all three scenarios; city draw calls 97/266/266 → 97/266/266 (the task's ≤ 97/246/244 was set before T5 added 22 vapour/steam ribbons). Shots exit 0, before/after: city -t 5/30/54 all bands, `--bands vis -t 30/35/54`, aimed -t 30 and -t 54, `--bands micro -t 30`, mast views -t 10/30. Main session re-checked: vis -t 35 (grey street, lit sidewalk, kerb and facade base, lit parked car — before: black with one white patch), vis -t 30 (warm tan shop fronts), aimed -t 30 (amber/peach windows with curtains and a few cool ones), timeline. New shader is NaN-safe (inversesqrt of max(d², 1e-4), +4 in the falloff, non-negative terms into the soft knee).
+
+Not verified / remaining: real-GPU cost of the 16-lamp loop per fragment; lamp brightness tuned by eye; mast sector panels not on screen after a mid-run fix (code checked); a few shop fronts pale grey at -t 35; shop sign boxes flat white / pale blue up close; the granite kerb top a stark white line under the lamps.

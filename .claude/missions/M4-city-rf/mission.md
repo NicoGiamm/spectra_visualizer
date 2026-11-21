@@ -40,7 +40,7 @@ T1–T5 implemented on main in a9adb2f before missions existed (draw calls 82/21
 | [M4/T4](tasks/T4-true-radio-in-the-city.md) | done | needs-verification | True radio in the city |
 | [M4/T5](tasks/T5-more-visible-ir-life.md) | done | needs-verification | More visible/IR life |
 | [M4/T6](tasks/T6-tune.md) | backlog |  | Tune |
-| [M4/T7](tasks/T7-visible-noise.md) | in-progress | gap | Visible view: RF haze blocks in the sky, overexposed windows and shop fronts |
+| [M4/T7](tasks/T7-visible-noise.md) | done | gap | Visible view: RF haze blocks in the sky, overexposed windows and shop fronts |
 | [M4/T8](tasks/T8-instrument-legibility.md) | backlog | gap | Instrument view: microwave surface crackle buries the IR heat leaks |
 <!-- tasks:end -->
 
@@ -55,3 +55,4 @@ T1–T5 implemented on main in a9adb2f before missions existed (draw calls 82/21
 - 2026-11-21 · M4/T3 done
 - 2026-11-21 · M4/T4 done
 - 2026-11-21 · M4/T5 done
+- 2026-11-21 · M4/T7 done
