@@ -1,9 +1,9 @@
 ---
 id: M4/T3
 title: Ambient field haze
-status: backlog
+status: in-progress
 labels: [needs-verification]
-started:
+started: 2026-11-21
 completed:
 ---
 
