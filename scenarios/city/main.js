@@ -19,7 +19,7 @@ run({
   build,
   events: () => [
     sky.sunset(), local.windows(), local.streetLights(), local.cellTower(), local.wifi(), local.traffic(),
-    observer({ name: 'You', note: 'Walking the sidewalk; your phone pings the network (microwave) every few seconds.' }),
+    observer({ name: 'You', note: 'Walking the sidewalk; your phone pings the network (microwave) every few seconds and sends short Bluetooth LE bursts (2.4 GHz, also microwave).' }),
     sky.airliner({ note: 'On approach: nav lights & contrail, hot engines (IR), Mode S/ADS-B transponder (microwave), VHF airband chatter (radio) and weather radar (microwave).' }),
     sky.venus(), sky.cmb(), sky.milkyWay({ note: 'Barely there through the city glow; the dust still glows in IR and Sgr A* in radio.' }),
     sky.meteorShower(), sky.pulsar(), sky.comet(), sky.satellitePass(), sky.starlink(), sky.blackHoleBinary(), sky.moonrise(),

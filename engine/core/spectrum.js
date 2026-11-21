@@ -127,7 +127,7 @@ export const SPECTRUM = {
   // ===== seaside additions =====
   aisAtoN:         { name: 'AIS aid-to-navigation broadcast (VHF)', f: 161.975e6 },
   vhf16:           { name: 'marine VHF channel 16 voice', f: 156.8e6 },
-  sbandRadar:      { name: 'ship S-band radar', f: 3.05e9 },
+  sbandRadar:      { name: 'ship S-band navigation radar (2.9–3.1 GHz)', f: 3.05e9 },
   racon:           { name: 'radar beacon (racon) reply', f: 9.4e9 },
   radarClutter:    { name: 'radar echoes off turbine blades (X-band)', f: 9.4e9 },
   navGreen:        { name: 'green navigation light', lam: 520e-9 },
@@ -139,12 +139,11 @@ export const SPECTRUM = {
   lloydFringe:     { name: 'sea-cliff interferometer fringes (Lloyd\'s mirror, 200 MHz)', f: 200e6 },
 
   // ===== city additions =====
-  bluetooth:       { name: 'Bluetooth (earbuds, 2.4 GHz)', f: 2.44e9 },
   keyFob:          { name: 'car key fob (433.92 MHz)', f: 433.92e6 },
   tpms:            { name: 'tyre-pressure sensors (433.92 MHz)', f: 433.92e6 },
   lteIoT:          { name: 'LTE-M modem (scooters, bus screen)', f: 800e6 },
   tetra:           { name: 'TETRA emergency-services net (380–400 MHz, 77 cm)', f: 390e6 },
-  sBandRadar:      { name: 'airport surveillance radar (S-band)', f: 2.8e9 },
+  airportASR:      { name: 'airport surveillance radar (ATC primary radar, S-band 2.7–2.9 GHz)', f: 2.8e9 },
   dab:             { name: 'DAB+ digital radio (Band III)', f: 220e6 },
   powerHum:        { name: '50 Hz power-line field (ELF)', f: 50 },
   coronaRF:        { name: 'power-line corona noise (broadband HF/VHF)', f: 10e6 },

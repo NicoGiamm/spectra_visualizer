@@ -100,7 +100,7 @@ function terrain() {
   // wet sand mirrors the sky and the low sun in visible light (gloss is stored in aSurfC.x)
   const visExtra = `float wetK = clamp(vSurfC.x*2.2 - .1, 0., 1.);
     if(wetK > 0.){ vec3 V = normalize(W - cameraPosition), Rf = reflect(V, N); Rf.y = abs(Rf.y);
-      float fres = .03 + .97*pow(1. - max(dot(-V, N), 0.), 5.);
+      float fres = .03 + .97*pow(1. - clamp(dot(-V, N), 0., 1.), 5.);   // clamp: pow(<0) is NaN on GPUs
       vec3 sk = mix(uHor, uSky, smoothstep(0., .35, Rf.y)) + vec3(1., .5, .28)*uSunI*pow(max(dot(Rf, uSunDir), 0.), 300.)*4. + vec3(.75,.82,1.)*uMoonI*pow(max(dot(Rf, uMoonDir), 0.), 400.)*2.;
       gl_FragColor.rgb = mix(gl_FragColor.rgb, sk, wetK*min(fres*1.6, .8)); }
     gl_FragColor.rgb += uOverlay*coastExtra(W, N, length(W - cameraPosition), 1.);`;
@@ -178,7 +178,7 @@ function seaMaterial(instr) {
       float line = max(smoothstep(.5 - w.x, .5, f.x), smoothstep(.5 - w.y, .5, f.y))*(1. - smoothstep(.12, .35, max(w.x, w.y)))*(1. - smoothstep(200., 4000., dist));
       gl_FragColor = vec4(vec3(.006,.007,.014) + vec3(.16,.2,.42)*line*.8 + seaBands(W, N, V, Rf, dist, foam, 0.), 1.);
 #else
-      float fres = .02 + .98*pow(1. - max(dot(-V, N), 0.), 5.);
+      float fres = .02 + .98*pow(1. - clamp(dot(-V, N), 0., 1.), 5.);   // clamp: pow(<0) is NaN on GPUs
       vec3 skyc = mix(uHor, uSky, smoothstep(0., .35, Rf.y));
       vec3 col = mix(uDeep, skyc, fres);
       float s = max(dot(Rf, uSunDir), 0.), m = max(dot(Rf, uMoonDir), 0.);

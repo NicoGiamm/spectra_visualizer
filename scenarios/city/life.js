@@ -74,7 +74,7 @@ export const robot = () => event({ name: 'Delivery robot: LiDAR sweep', t0: 16, 
   where() { return new V3(SIDEWALK_X - 1.8, 1, 150 - ((S.t - 16) * 2.8 % 300)); } });
 
 // Beyond the park, the airport's S-band surveillance radar sweeps the horizon.
-export const radar = () => event({ name: 'Airport radar (S-band)', t0: 8, t1: 60, bands: ['micro'], freq: ['sBandRadar'], note: 'Out beyond the park the airport surveillance radar turns at one revolution per four seconds — 2.8 GHz microwave: you cannot see the aircraft it finds, only the fan.',
+export const radar = () => event({ name: 'Airport radar (S-band)', t0: 8, t1: 60, bands: ['micro'], freq: ['airportASR'], note: 'Out beyond the park the airport surveillance radar turns at one revolution per four seconds — 2.8 GHz microwave: you cannot see the aircraft it finds, only the fan.',
   init() {
     this.c = dirAE(232, .35).multiplyScalar(1750).add(new V3(0, 14, PARK_Z + 640));
     this.mast = new Em('micro'); this.fan = new Rib('micro', null, 10, 0);
