@@ -44,7 +44,7 @@ propose ─▶ proposed ─user OK─▶ planned ─start─▶ active ─┬─
 | 10 | **Close the task**: tick Acceptance, write the evidence (what changed, numbers, not verified) | `mission-tracker task M<N>/T<k> --done --evidence <file>` | refused unless every item is ticked |
 | 11 | **Ship?** When the tasks are done, ask the user once: "ship M<N> now?" | — | the user's word |
 | 12 | **Review** the whole mission diff | `ship review-brief M<N>` → `reviewer` (+ `physics-auditor` if events/spectrum changed) → `ship deliver M<N> --verdict-file … --reviewed-head …` | `VERDICT: ok` for the current head (a later commit needs a new review) |
-| 13 | **Merge** after the user's OK | `ship align M<N>` if `main` moved (then re-review), `ship merge M<N>` | active mission · reviewer `ok` @ head · branch contains `main` · timeline gate 0 warnings · `--no-ff` merge without `.claude/missions/` · worktree + branch removed |
+| 13 | **Merge** after the user's OK | `ship align M<N>` if `main` moved (then re-review), `ship merge M<N>` | active mission · reviewer `ok` @ head · branch contains `main` · quality gate (ruff format/check, ty) · timeline gate 0 warnings · `--no-ff` merge without `.claude/missions/` · worktree + branch removed |
 | 14 | **Push** | only when the user says so | — |
 
 **Partial delivery** (the user wants part of a mission on `main` now): `ship merge M<N> --partial` — the branch and
@@ -87,7 +87,8 @@ its folder continue; `ship align M<N>` before new work (align always keeps the b
 
 **Task**: Acceptance all ticked against real checks · `spectra timeline <ids>` 0 warnings, draw calls in the
 Outcome · shots at 3 moments + 1 instrument view per touched scenario, exit 0, inspected · engine change → every
-scenario · Outcome says what was not verified · committed with `refs`.
+scenario · touched Python ruff/ty-clean (the hook reports) · Outcome says what was not verified · committed with
+`refs`.
 
 **Mission**: every task done (or the user accepted `--partial`) · reviewer `ok` for the head (physics-auditor `ok`
 if events/spectrum changed) · README / CLAUDE.md / rules updated in the branch if a contract changed · Current

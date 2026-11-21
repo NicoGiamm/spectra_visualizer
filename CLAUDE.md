@@ -14,8 +14,10 @@ modules, no build step) runs **scenarios** (`scenarios/<id>/`); Python tooling (
 | `uv run spectra timeline [ids…]` | event gantt, band activity, draw calls, **physics check — keep it at 0 warnings** |
 | `uv run spectra shot <id> -t 30 [--bands ir,micro] [--yaw .3 --pitch .5] -o <png>` | headless render; exits 1 on any console/shader message |
 
-There is no lint or test suite: `timeline` + `shot` are the tests (`/verify-scene` runs both and inspects the
-PNGs). Python is always run through `uv`; CLIs use cyclopts.
+There is no test suite: `timeline` + `shot` are the tests (`/verify-scene` runs both and inspects the PNGs).
+Python (≥ 3.11) runs through `uv`, CLIs use cyclopts, and it stays **ruff**-formatted/linted and **ty**-checked
+(`uv run ruff format . && uv run ruff check . && uv run ty check`) — a hook does it on every `.py` edit and
+`ship merge` gates on it.
 
 ## How work is done
 

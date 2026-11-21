@@ -20,6 +20,11 @@ no_mission_token = "[no-mission]"    # a commit straight on main, only when the 
 state_dir = ".claude/logs"      # review-M<N>.json verdict records, in the main checkout (git-ignored)
 merge = "--no-ff"               # a delivery is one merge commit on main: `git log --first-parent main`
 timeline_gate = ["uv", "run", "spectra", "timeline"]  # must print 0 warning(s) in the worktree before a merge
+quality_gate = [                # each must exit 0 in the worktree before a merge (config: pyproject [tool.ruff], [tool.ty])
+  ["uv", "run", "ruff", "format", "--check", "."],
+  ["uv", "run", "ruff", "check", "."],
+  ["uv", "run", "ty", "check"],
+]
 
 [standard.mission]
 statuses = ["proposed", "planned", "active"]  # delivered = merged + branch deleted (no status)

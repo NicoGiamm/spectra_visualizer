@@ -12,7 +12,9 @@ cli = os.path.join(root, ".claude", "skills", "mission-tracker", "cli.py")
 
 def run(*args: str, timeout: int = 30) -> str:
     try:
-        return subprocess.run(list(args), cwd=os.getcwd(), capture_output=True, text=True, timeout=timeout).stdout.strip()
+        return subprocess.run(
+            list(args), cwd=os.getcwd(), capture_output=True, text=True, timeout=timeout
+        ).stdout.strip()
     except Exception:
         return ""
 
@@ -29,4 +31,6 @@ if os.path.isfile(cli):
     if branch.startswith("mission/M"):
         ref = branch.split("/", 1)[1].split("-", 1)[0]
         print(f"This worktree is mission {ref}; next: {run('uv', 'run', '-q', cli, 'next', ref)}")
-print("Workflow: .claude/sdlc.md — /mission-tracker, /verify-scene, /ship. Planning files live only on mission branches.")
+print(
+    "Workflow: .claude/sdlc.md — /mission-tracker, /verify-scene, /ship. Planning files live only on mission branches."
+)
