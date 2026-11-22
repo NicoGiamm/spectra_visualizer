@@ -55,7 +55,6 @@ export const SPECTRUM = {
   o6300:           { name: 'oxygen red line 630.0 nm', lam: 630.0e-9 },
   auroralUV:       { name: 'N₂ Lyman-Birge-Hopfield UV', lam: 160e-9, ground: false },
   auroralXray:     { name: 'auroral bremsstrahlung X-rays', E: 3e4, ground: false },
-  akr:             { name: 'auroral kilometric radiation', f: 300e3, ground: false },
   nlcScatter:      { name: 'sunlight scattered by mesospheric ice', lam: 470e-9 },
   nlcUV:           { name: 'UV scattered by mesospheric ice', lam: 350e-9, ground: false },
   lightning:       { name: 'lightning channel light', lam: 500e-9 },
@@ -65,7 +64,6 @@ export const SPECTRUM = {
   cherenkov:       { name: 'air-shower Cherenkov light', lam: 350e-9 },
   showerFluor:     { name: 'N₂ fluorescence from the shower', lam: 391e-9 },
   showerGamma:     { name: 'shower secondaries (gamma)', E: 1e9, ground: false },
-  warmAir:         { name: 'warm air column (as drawn)', lam: 10e-6, stylised: true },
   // --- thermal emission (Wien peak) ---
   thermal290:      { name: 'thermal emission ~290 K (ground, water)', lam: 10e-6 },
   thermal310:      { name: 'thermal emission ~310 K (bodies)', lam: 9.3e-6 },
