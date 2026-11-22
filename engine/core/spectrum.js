@@ -55,7 +55,6 @@ export const SPECTRUM = {
   o6300:           { name: 'oxygen red line 630.0 nm', lam: 630.0e-9 },
   auroralUV:       { name: 'N₂ Lyman-Birge-Hopfield UV', lam: 160e-9, ground: false },
   auroralXray:     { name: 'auroral bremsstrahlung X-rays', E: 3e4, ground: false },
-  akr:             { name: 'auroral kilometric radiation', f: 300e3, ground: false },
   nlcScatter:      { name: 'sunlight scattered by mesospheric ice', lam: 470e-9 },
   nlcUV:           { name: 'UV scattered by mesospheric ice', lam: 350e-9, ground: false },
   lightning:       { name: 'lightning channel light', lam: 500e-9 },
@@ -65,7 +64,6 @@ export const SPECTRUM = {
   cherenkov:       { name: 'air-shower Cherenkov light', lam: 350e-9 },
   showerFluor:     { name: 'N₂ fluorescence from the shower', lam: 391e-9 },
   showerGamma:     { name: 'shower secondaries (gamma)', E: 1e9, ground: false },
-  warmAir:         { name: 'warm air column (as drawn)', lam: 10e-6, stylised: true },
   // --- thermal emission (Wien peak) ---
   thermal290:      { name: 'thermal emission ~290 K (ground, water)', lam: 10e-6 },
   thermal310:      { name: 'thermal emission ~310 K (bodies)', lam: 9.3e-6 },
@@ -82,11 +80,10 @@ export const SPECTRUM = {
   luciferin:       { name: 'firefly bioluminescence', lam: 560e-9 },
   dinoflagellate:  { name: 'plankton bioluminescence', lam: 475e-9 },
   // --- radio & microwave technology ---
-  fm:              { name: 'FM broadcast', f: 100e6 },
-  airband:         { name: 'VHF airband voice', f: 125e6 },
+  fm:              { name: 'FM broadcast', f: 100e6 },                 // 87.5–108 MHz broadcast band (ITU RR Art. 5, Region 1)
+  airband:         { name: 'VHF airband voice', f: 125e6 },            // 118–137 MHz AM voice (ITU RR Art. 5; ICAO Annex 10 Vol. V)
   ais:             { name: 'AIS ship transponder (VHF)', f: 162e6 },
   satBeacon:       { name: 'satellite VHF beacon', f: 145e6 },
-  radiobeacon:     { name: 'marine radiobeacon', f: 300e3 },
   modeS:           { name: 'aircraft transponder (Mode S / ADS-B)', f: 1090e6 },
   wxRadar:         { name: 'airborne weather radar (X-band)', f: 9.3e9 },
   xbandRadar:      { name: 'ship X-band radar', f: 9.4e9 },
@@ -125,18 +122,30 @@ export const SPECTRUM = {
   wxTelemetry:     { name: 'weather-station telemetry link (VHF)', f: 169.4e6 },
 
   // ===== seaside additions =====
-  aisAtoN:         { name: 'AIS aid-to-navigation broadcast (VHF)', f: 161.975e6 },
+  aisAtoN:         { name: 'AIS aid-to-navigation broadcast (VHF)', f: 161.975e6 },   // AIS 1 (ch. 87B); AIS 2 = 162.025 MHz (ITU-R M.1371-5, ITU RR App. 18)
+  // ch. 16 = 156.800 MHz, international distress, safety and calling (ITU RR Appendix 18; RR Art. 31/52): FM voice, 25 kHz channel
   vhf16:           { name: 'marine VHF channel 16 voice', f: 156.8e6 },
-  sbandRadar:      { name: 'ship S-band navigation radar (2.9–3.1 GHz)', f: 3.05e9 },
+  sbandRadar:      { name: 'ship S-band navigation radar (2.9–3.1 GHz)', f: 3.05e9 },   // 2900–3100 MHz maritime radionavigation (ITU RR Art. 5); IEC 62388 S-band ship radar
+  // racons reply in the 9300–9500 MHz radar band (and 2900–3100 MHz) when a ship's radar sweeps them (ITU-R M.824-4; IALA R0101)
   racon:           { name: 'radar beacon (racon) reply', f: 9.4e9 },
+  // turbine towers and moving blades return strong, Doppler-spread X-band echoes and side-lobe ghosts (MCA/QinetiQ, "Results of the
+  // electromagnetic investigations", North Hoyle offshore wind farm, 2004)
   radarClutter:    { name: 'radar echoes off turbine blades (X-band)', f: 9.4e9 },
   navGreen:        { name: 'green navigation light', lam: 520e-9 },
+  // lantern colours: IALA R0201 / CIE S 004 signal-light chromaticity; white, yellow (special marks, offshore structures: IALA G1162)
   navWhiteLED:     { name: 'white LED lantern', lam: 560e-9 },
   navYellow:       { name: 'yellow special-mark light', lam: 590e-9 },
+  // metal-halide lamps: Hg + Na/Sc/Tl iodide lines across the visible; 560 nm stands for the white mix (Waymouth, "Electric Discharge Lamps", 1971)
   deckLight:       { name: 'metal-halide deck floodlights', lam: 560e-9 },
   mistScatter:     { name: 'moonlight scattered by sea-mist droplets', lam: 550e-9 },
   mistThermal:     { name: 'thermal emission of cool mist (~285 K)', lam: 10.2e-6 },
+  // Sea-cliff interferometers at Dover Heights, Sydney: 200 MHz (McCready, Pawsey & Payne-Scott 1947, the Sun) and
+  // 100 MHz (Bolton & Stanley 1948, Cygnus A)
   lloydFringe:     { name: 'sea-cliff interferometer fringes (Lloyd\'s mirror, 200 MHz)', f: 200e6 },
+  lloydFringe100:  { name: 'sea-cliff interferometer fringes (Lloyd\'s mirror, 100 MHz)', f: 100e6 },
+  // Bluetooth Classic (BR/EDR) audio streaming, A2DP profile: 79 × 1 MHz channels 2.402–2.480 GHz, frequency-hopping
+  // (Bluetooth Core Specification v5.3, Vol. 2 Part A)
+  bluetoothA2DP:   { name: 'Bluetooth Classic audio stream (A2DP)', f: 2.44e9 },
 
   // ===== city additions =====
   keyFob:          { name: 'car key fob (433.92 MHz)', f: 433.92e6 },
@@ -144,19 +153,53 @@ export const SPECTRUM = {
   lteIoT:          { name: 'LTE-M modem (scooters, bus screen)', f: 800e6 },
   tetra:           { name: 'TETRA emergency-services net (380–400 MHz, 77 cm)', f: 390e6 },
   airportASR:      { name: 'airport surveillance radar (ATC primary radar, S-band 2.7–2.9 GHz)', f: 2.8e9 },
-  dab:             { name: 'DAB+ digital radio (Band III)', f: 220e6 },
-  powerHum:        { name: '50 Hz power-line field (ELF)', f: 50 },
+  // DAB+: one continuous COFDM multiplex per block, VHF Band III 174–240 MHz (ETSI EN 300 401); 220 MHz falls in block 11C (centre 220.352 MHz; ITU-R BS.1660)
+  dab:             { name: 'DAB+ digital radio (Band III, continuous OFDM)', f: 220e6 },
+  // 50 Hz mains (EN 50160). λ = 6000 km, so anyone within λ/2π ≈ 950 km sits in the quasi-static near field: the line
+  // radiates essentially nothing, and its E/B field falls to background within tens to about a hundred metres (WHO EHC 238, 2007).
+  // Stylised: drawn as a faint radio glow on the line, which it is not.
+  powerHum:        { name: '50 Hz power-line near field (quasi-static, not radiated)', f: 50, stylised: true },
+  // corona discharge on HV conductors and fittings: broadband impulsive noise, strongest at LF/MF (CISPR TR 18 measures at 0.5 MHz), falling off through HF, worse in
+  // rain, fog and wet snow (CISPR TR 18-1; EPRI "Transmission Line Reference Book, 345 kV and Above", ch. 7)
   coronaRF:        { name: 'power-line corona noise (broadband HF/VHF)', f: 10e6 },
+  // sliding-contact arcs between pantograph and contact wire: broadband impulsive noise from ~100 kHz to a few hundred
+  // MHz, the reason railways have their own EMC standard (EN 50121-2); 30 MHz stands in for the band
   arcRF:           { name: 'pantograph arcing (broadband radio)', f: 30e6 },
-  arcLight:        { name: 'copper arc light (blue-white)', lam: 450e-9 },
-  arcUV:           { name: 'arc UVA emission', lam: 340e-9 },
-  smpsEMI:         { name: 'LED-driver switching interference', f: 30e6 },
+  // a short arc in air: N₂ second-positive bands (337–434 nm), N II/O II ion lines and the electrode metal's lines (Cu I
+  // 510–522 nm for a copper wire) add up to blue-white; 450 nm stands for the visible mix (line data: NIST ASD)
+  arcLight:        { name: 'electric arc in air: N₂ and metal lines, blue-white', lam: 450e-9 },
+  // Cu I resonance line 324.75 nm (3d¹⁰4s ²S½ – 3d¹⁰4p ²P°3/2; NIST ASD), the strongest UV line of a copper arc
+  arcUV:           { name: 'arc UV: Cu I resonance line 324.7 nm', lam: 324.7e-9 },
+  // N₂ second-positive system (C³Πu → B³Πg), 0–0 band head at 337.1 nm — the strongest UV emission of any spark in air
+  // (the nitrogen-laser line; Lofthus & Krupenie, J. Phys. Chem. Ref. Data 6, 113, 1977). Bug-zapper grids are steel
+  // or zinc-plated, not copper, so their spark's UV is the air's own, not arcUV's Cu I line
+  airArcUV:        { name: 'spark in air: N₂ second-positive band 337.1 nm', lam: 337.1e-9 },
+  // LED drivers switch at 20 kHz–1 MHz; the fast edges' harmonics are conducted and radiated up into the HF/VHF range
+  // (CISPR 15 sets limits for lighting from 9 kHz to 300 MHz); 30 MHz stands in for that harmonic comb. The visible
+  // flicker of a cheap driver is the rectified mains ripple at 100 Hz, a different thing.
+  smpsEMI:         { name: 'LED-driver switching interference (kHz–MHz switching harmonics)', f: 30e6 },
   neon:            { name: 'neon discharge 640 nm', lam: 640.2e-9 },
   ledBlue:         { name: 'blue LED light bar', lam: 465e-9 },
   ledAmber:        { name: 'amber LED indicator', lam: 590e-9 },
   ir850:           { name: '850 nm IR illuminator', lam: 850e-9 },
   lidar905:        { name: '905 nm LiDAR pulses', lam: 905e-9 },
-  steam:           { name: 'warm moist exhaust/steam (~320 K)', lam: 9e-6 },
+  // condensed vapour (steam from a leaking district-heating line, cooling-tower drift): liquid droplets are near-black
+  // bodies at 8–14 µm, so the plume shows in thermal IR — the warm, dry air around it does not (air is transparent there)
+  steam:           { name: 'condensed vapour plume: water droplets (~300–320 K)', lam: 9.3e-6 },
+  // the same droplets (µm–tens of µm, ≫ λ) scatter all visible wavelengths alike (Mie regime: Bohren & Huffman,
+  // "Absorption and Scattering of Light by Small Particles", 1983): a pale white plume in the lamplight
+  dropletScatter:  { name: 'lamplight scattered by condensed-vapour droplets (white)', lam: 550e-9 },
+  // natural radioactivity of building stone (K-40 line; Tl-208 from the thorium chain; Bi-214 from the uranium/radon chain)
+  k40Gamma:        { name: 'K-40 gamma line (1.46 MeV, granite & brick)', E: 1.461e6 },
+  tl208Gamma:      { name: 'Tl-208 gamma line (2.61 MeV, thorium chain)', E: 2.614e6 },
+  bi214Gamma:      { name: 'Bi-214 gamma line (609 keV, uranium/radon chain)', E: 609.3e3 },
+  blacklight365:   { name: 'black-light / insect-trap tube (UVA 365 nm)', lam: 365e-9 },
+  hg405:           { name: 'mercury violet line leaking from black-light tubes (404.7 nm)', lam: 404.7e-9 },
+  ledRed:          { name: 'red LED rear light', lam: 625e-9 },
+  heaterGlow:      { name: 'red-hot patio-heater mesh (~1100 K, visible tail)', lam: 680e-9 },
+  droneLink:       { name: 'drone control link (2.4 GHz ISM)', f: 2.44e9 },
+  droneVideo:      { name: 'drone video downlink (5.8 GHz)', f: 5.8e9 },
+  batteryWarm:     { name: 'warm traction battery / motors (~305 K)', lam: 9.5e-6 },
 
 };
 

@@ -1,9 +1,9 @@
 """PreToolUse(Bash): enforce the branching model of .claude/sdlc.md (values from .claude/sdlc.toml).
 
 On main:            no commit except one carrying the no-mission token (only when the user said so); no merge /
-                    rebase / cherry-pick / revert / reset --hard — missions reach main only through `ship merge`,
-                    and .claude/missions/ never does (it lives only on mission branches).
-On mission/M<N>-*:  every commit message carries `refs M<N>[/T<k>]` of that mission.
+                    rebase / cherry-pick / revert / reset --hard — missions reach main only through `ship merge`.
+On mission/M<N>-*:  every commit message carries `refs M<N>[/T<k>]` of that mission (an extra `#<issue>` is fine).
+The plan itself lives in GitHub issues (no mission folder): this hook only looks at branch names and messages.
 Anywhere:           no force push.
 Exit 2 blocks the call and sends the reason to Claude. The clis run git themselves (not through this hook).
 """
@@ -16,11 +16,7 @@ import re
 import shlex
 import subprocess
 import sys
-
-try:
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover
-    tomllib = None
+import tomllib
 
 data = json.load(sys.stdin)
 cmd = data.get("tool_input", {}).get("command", "")
@@ -28,11 +24,20 @@ if "git" not in cmd:
     sys.exit(0)
 
 proj = os.environ.get("CLAUDE_PROJECT_DIR") or data.get("cwd") or os.getcwd()
-cfg = {"main": "main", "prefix": "mission/", "missions": ".claude/missions", "ref": r"refs M\d+(/T\d+)?", "token": "[no-mission]"}
+cfg = {
+    "main": "main",
+    "prefix": "mission/",
+    "ref": r"refs M\d+(/T\d+)?",
+    "token": "[no-mission]",
+}
 try:
     raw = tomllib.loads(open(os.path.join(proj, ".claude", "sdlc.toml"), encoding="utf-8").read())
-    cfg.update(main=raw["repo"]["main_branch"], prefix=raw["branches"]["mission_prefix"], missions=raw["store"]["missions_dir"],
-               ref=raw["store"]["ref_pattern"], token=raw["store"]["no_mission_token"])
+    cfg.update(
+        main=raw["repo"]["main_branch"],
+        prefix=raw["branches"]["mission_prefix"],
+        ref=raw["store"]["ref_pattern"],
+        token=raw["store"]["no_mission_token"],
+    )
 except Exception:
     pass
 
@@ -75,10 +80,12 @@ for seg in re.split(r"&&|\|\||;|\n(?=\s*(?:git|cd)\b)", cmd):
             i += 1
     if i >= len(tok):
         continue
-    sub, args = tok[i], tok[i + 1:]
+    sub, args = tok[i], tok[i + 1 :]
     branch = git_out(where, "branch", "--show-current")
 
-    if sub == "push" and any(a in ("-f", "--force", "--force-with-lease") or a.startswith("--force") or a.startswith("+") for a in args):
+    if sub == "push" and any(
+        a in ("-f", "--force", "--force-with-lease") or a.startswith("--force") or a.startswith("+") for a in args
+    ):
         block("force push is never allowed")
     if sub == "add":
         if any(a in ("-A", "--all", ".", "-u") for a in args):
@@ -93,11 +100,16 @@ for seg in re.split(r"&&|\|\||;|\n(?=\s*(?:git|cd)\b)", cmd):
         if sub == "commit":
             if cfg["token"] in cmd:
                 continue
-            if any(a in ("-a", "--all") or (a.startswith("-") and not a.startswith("--") and "a" in a[1:] and "m" in a[1:]) for a in args):
+            if any(
+                a in ("-a", "--all") or (a.startswith("-") and not a.startswith("--") and "a" in a[1:] and "m" in a[1:])
+                for a in args
+            ):
                 block("no `commit -a`: stage by explicit path")
-            block(f"no commits on {cfg['main']}: work happens on a mission branch (`mission-tracker start M<N>`, then commit in "
-                  f"its worktree). A commit straight on {cfg['main']} needs `{cfg['token']}` in the message, only when the user "
-                  f"explicitly said so.")
+            block(
+                f"no commits on {cfg['main']}: work happens on a mission branch (`mission-tracker start M<N>`, then commit in "
+                f"its worktree). A commit straight on {cfg['main']} needs `{cfg['token']}` in the message, only when the user "
+                f"explicitly said so."
+            )
     elif branch.startswith(cfg["prefix"]) and sub == "commit":
         m = re.match(re.escape(cfg["prefix"]) + r"M(\d+)-", branch)
         refs = [r for r in re.finditer(cfg["ref"], cmd)]
