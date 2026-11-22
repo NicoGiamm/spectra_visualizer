@@ -74,14 +74,14 @@ export const robot = () => event({ name: 'Delivery robot: LiDAR sweep', t0: 16, 
     if (t < 16) return;
     // comes up the north sidewalk from the park toward you (it used to start behind you and never got into view)
     const x = SIDEWALK_X - 1.8, z = ROBOT_Z(t);
+    if (z > cam.z + 20) return;   // passed the viewer: body and emitters off (no light or meter share behind you)
     this.body.position.set(x, 0, z); this.body.visible = true;
     const head = new V3(x, 1, z);
     this.vis.set(head.clone().setY(1.25), .7, .55);
     this.s.set(head, 1.1, .45);
     const d = new V3(Math.sin(T * 2.4), 0, 1).normalize();   // the fan scans ahead of it, east toward you
     this.l.set([head, head.clone().addScaledVector(d, 1.4), head.clone().addScaledVector(d, 3)], .14, .22, .8);
-    this.m.set(head.clone().setY(1.2), .9, burst(t, 3.2, .5, .2) * .6);
-    if (z > cam.z + 20) this.body.visible = false; },
+    this.m.set(head.clone().setY(1.2), .9, burst(t, 3.2, .5, .2) * .6); },
   where() { return new V3(SIDEWALK_X - 1.8, 1, ROBOT_Z(S.t)); } });
 
 // Beyond the park, the airport's S-band surveillance radar sweeps the horizon.

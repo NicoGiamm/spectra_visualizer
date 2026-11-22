@@ -59,7 +59,7 @@ export const streetLights = () => event({ name: 'Street lights', t0: 8, t1: 60, 
   where: () => null });
 
 // Mobile mast on a rooftop on the south side of the avenue, just before the park.
-export const cellTower = () => event({ name: '5G mast', t0: 0, t1: 60, bands: ['micro', 'vis'], freq: ['nr35', 'lte800', 'navRed'], note: 'Sector antennas on a rooftop beam microwave to every phone in the street; red light for aircraft.',
+export const cellTower = () => event({ name: '5G mast', t0: 0, t1: 60, bands: ['micro', 'vis'], freq: ['nr35', 'lte800', 'navRed'], note: 'Sector antennas on a rooftop beam microwave to every phone in the street. The red obstruction light is there because the mast stands under the approach to the airport beyond the park — ordinary rooftop masts don\'t carry one.',
   init() {
     this.big = new Em('micro'); this.pe = MAST.panels.map(() => new Em('micro')); this.red = new Em('vis', '#ff2020');
     addTx('micro', () => ({ p: MAST.panels[0], power: .6 }));      // paints the facades below in the microwave surface term
