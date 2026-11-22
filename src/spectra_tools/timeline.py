@@ -15,8 +15,12 @@ SPARK = " ▁▂▃▄▅▆▇█"
 DUMP_RE = re.compile(r'<script type="application/json" id="spectra-dump">(.*?)</script>', re.S)
 
 
-def fetch(name: str, step: float = 0.5, budget: int = 40000, detector: str = "ground") -> tuple[dict | None, dict[str, int]]:
-    run = run_headless(name, {"dump": "1", "dstep": step, "paused": "1", "detector": detector}, dump_dom=True, budget=budget)
+def fetch(
+    name: str, step: float = 0.5, budget: int = 40000, detector: str = "ground"
+) -> tuple[dict | None, dict[str, int]]:
+    run = run_headless(
+        name, {"dump": "1", "dstep": step, "paused": "1", "detector": detector}, dump_dom=True, budget=budget
+    )
     m = DUMP_RE.search(run.stdout)
     if not m:
         print_console(run)
@@ -51,15 +55,18 @@ def spark(values: list[float], top: float = 1.0) -> str:
 
 def render(rep: dict) -> str:
     W = 30
-    lines = [f"{rep['scenario']}  ·  detector: {rep.get('detector', 'ground')}  ·  {len(rep['events'])} events  ·  sources: {rep['sources']['em']} Em, "
-             f"{rep['sources']['rib']} Rib, {rep['sources']['fields']} fields ({rep['sources']['fieldInstances']} instances)",
-             "draw calls (scene pass): " + ", ".join(f"t={d['t']}: {d['calls']}" for d in rep["draws"]), ""]
+    lines = [
+        f"{rep['scenario']}  ·  detector: {rep.get('detector', 'ground')}  ·  {len(rep['events'])} events  ·  sources: {rep['sources']['em']} Em, "
+        f"{rep['sources']['rib']} Rib, {rep['sources']['fields']} fields ({rep['sources']['fieldInstances']} instances)",
+        "draw calls (scene pass): " + ", ".join(f"t={d['t']}: {d['calls']}" for d in rep["draws"]),
+        "",
+    ]
     axis = "".join(str(t // 10) if t % 10 == 0 else ("·" if t % 5 == 0 else " ") for t in range(61))
     lines.append(f"{'':<{W}} {axis}")
     order = sorted(range(len(rep["events"])), key=lambda i: (rep["events"][i]["t0"], rep["events"][i]["t1"]))
     for i in order:
         e = rep["events"][i]
-        row = "".join("█" if e["t0"] <= t + .5 and e["t1"] >= t else "·" for t in range(61))
+        row = "".join("█" if e["t0"] <= t + 0.5 and e["t1"] >= t else "·" for t in range(61))
         bands = "".join(BAND_LETTER[b] for b in BANDS if b in e["bands"])
         lines.append(f"{e['name'][:W]:<{W}} {row} {bands}")
     lines += ["", f"{'meter fill (1-exp(-act/norm))':<{W}} {axis}  typical  peak  >0.9"]
@@ -68,9 +75,9 @@ def render(rep: dict) -> str:
         norm = rep["norm"][b]
         fills = [fill(s["act"][b], norm) for s in rep["samples"]]
         cols = per_second(rep["samples"], lambda s, b=b, norm=norm: fill(s["act"][b], norm), agg=mean)
-        lit = sorted(f for f in fills if f > .01)
-        typical = lit[len(lit) // 2] if lit else 0.0               # median while the band is active at all
-        above = sum(f >= .9 for f in fills) * rep["step"]          # script seconds near the top
+        lit = sorted(f for f in fills if f > 0.01)
+        typical = lit[len(lit) // 2] if lit else 0.0  # median while the band is active at all
+        above = sum(f >= 0.9 for f in fills) * rep["step"]  # script seconds near the top
         near_top[b] = above
         lines.append(f"{b:<{W}} {spark(cols)}  {typical:5.2f}  {max(fills, default=0):4.2f}  {above:4.0f} s")
     n_active = per_second(rep["samples"], lambda s: len(s["active"]))
@@ -85,7 +92,10 @@ def render(rep: dict) -> str:
 def physics(rep: dict) -> list[str]:
     """Cross-check declared bands, listed processes (freq) and the bands actually drawn."""
     ground = rep.get("detector", "ground") == "ground"
-    out, warn = ["", f"physics check (declared bands · processes · drawn, {'Ground' if ground else 'Orbit'} detector):"], 0
+    out, warn = (
+        ["", f"physics check (declared bands · processes · drawn, {'Ground' if ground else 'Orbit'} detector):"],
+        0,
+    )
     for e in sorted(rep["events"], key=lambda e: e["t0"]):
         decl, drawn = set(e["bands"]), set(e["drawn"])
         fb = {f["band"] for f in e["freq"]}
@@ -103,7 +113,9 @@ def physics(rep: dict) -> list[str]:
         if drawn - decl:
             notes.append(f"draws undeclared band: {sorted(drawn - decl)}")
         if ground and drawn & dark:
-            notes.append(f"draws absorbed band in Ground mode (mark the source origin 'high'/'space'): {sorted(drawn & dark)}")
+            notes.append(
+                f"draws absorbed band in Ground mode (mark the source origin 'high'/'space'): {sorted(drawn & dark)}"
+            )
         hidden = set(e.get("absorbed", []))
         if ground and hidden - dark:
             notes.append(f"hides a band whose processes reach the ground: {sorted(hidden - dark)}")

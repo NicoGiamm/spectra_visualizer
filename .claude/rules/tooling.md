@@ -15,14 +15,18 @@ paths:
 ## Guardrails
 
 1. **Python runs through `uv`** (`uv run spectra …`, `uv add`), CLIs use **cyclopts** — never pip, argparse or click.
-2. **Root `index.html` and `dist/` are generated from `engine/ui/landing.html`** by `spectra serve`/`build` — edit the
+   Python ≥ 3.11.
+2. **Python stays ruff-formatted, ruff-clean and ty-clean** (`pyproject.toml` `[tool.ruff]`, `[tool.ty]`; dev group).
+   The `python_quality` hook formats, lints and type-checks every `.py` Claude writes; `ship merge` runs the same
+   three over the whole worktree. Fix a finding — don't add `# noqa` / `# type: ignore` without a reason in the line.
+3. **Root `index.html` and `dist/` are generated from `engine/ui/landing.html`** by `spectra serve`/`build` — edit the
    template; a hook refuses direct edits.
-3. **The bundler regex (`IMPORT_RE` in `build.py`) only recognises `import`/`export … from` at the start of a line.**
+4. **The bundler regex (`IMPORT_RE` in `build.py`) only recognises `import`/`export … from` at the start of a line.**
    Keep imports static and on their own lines; no dynamic `import()`. A new import form needs a regex change + a
    `spectra build` + opening a `dist/*.html` shot.
-4. **`spectra shot` exits 1 on any console message** (JS or shader log). Don't weaken that to make a shot pass —
+5. **`spectra shot` exits 1 on any console message** (JS or shader log). Don't weaken that to make a shot pass —
    fix the message.
-5. **`timeline` reads the page's `?dump` JSON** (`<script id="spectra-dump">`, via `--dump-dom`); changing the dump
+6. **`timeline` reads the page's `?dump` JSON** (`<script id="spectra-dump">`, via `--dump-dom`); changing the dump
    shape in `engine/app.js` means changing `timeline.py` in the same commit.
 
 ## Non-derivable facts
@@ -30,4 +34,4 @@ paths:
 - Headless Chrome = the Playwright-cached `chrome-headless-shell` under `~/.cache/ms-playwright/` (or
   `$SPECTRA_CHROME`), rendering with SwiftShader: ~30 s per shot, ~5 s per scenario for `timeline`.
 - three.js loads from a CDN — offline, every shot fails.
-- There is no test suite or linter; `spectra shot` + `spectra timeline` are the checks.
+- There is no test suite: `spectra shot` + `spectra timeline` are the checks for the scenes; ruff + ty for the Python.

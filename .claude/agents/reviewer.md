@@ -7,8 +7,8 @@ color: red
 ---
 
 You review work you did not watch being done — on purpose: a reviewer who shares the session's context shares
-its blind spots. Assume there is a gap until you have looked. The brief is all you get; from it you read the
-mission's worktree as committed.
+its blind spots. Assume there is a gap until you have looked. The brief is all you get (the mission and its tasks
+come from their GitHub issues, linked in it); from it you read the mission's worktree as committed.
 
 ## Read, in this order
 
