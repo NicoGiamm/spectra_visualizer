@@ -32,7 +32,10 @@ paths:
    band letters, draw calls of the scene pass at t 5/30/55, source counts, per-band meter fill `1 - exp(-act/norm)`
    per script second with typical (median while lit), peak and seconds `>0.9` (a note lists bands above 0.9 for
    more than 20 s), events active, the Orbit physics check — then the physics check re-run in Ground mode. `--json`
-   prints the raw dumps.
+   prints the raw dumps, which also carry `draws[].lod` (sources set vs. skipped by the far-emitter LOD in
+   `engine/render/sources.js`) and `frames` (mean/p95 ms over 16 frames at t 5/30/55). `frames` is `null` under the
+   timeline's virtual clock (`performance.now()` stands still); real numbers need a real-clock run of `?dump`
+   (Chrome over CDP), and that run logs a "GPU stall" console warning from the 1-px readback that syncs each frame.
    It exits 1 on a console message or a missing report, **not on physics warnings** — read the `N warning(s)` lines
    (the `ship merge` timeline gate counts them).
 

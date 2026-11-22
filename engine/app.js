@@ -22,7 +22,7 @@ import { clamp, PLAY } from './core/util.js';
 import { S } from './core/state.js';
 import { BANDS, METER_NORM } from './core/bands.js';
 import { SPECTRUM, bandOf, describe } from './core/spectrum.js';
-import { hideAllSources, EMS, RIBS, FIELDS } from './render/sources.js';
+import { hideAllSources, EMS, RIBS, FIELDS, LOD } from './render/sources.js';
 import { applyVisMode } from './render/instrument.js';
 import { createAtmosphere, sunEl } from './world/atmosphere.js';
 import { updateSurfaces, uvSkylight } from './render/surface.js';
@@ -115,7 +115,7 @@ function start(sc) {
       const gh = S.ghosts.get(e); if (gh) gh.bands.forEach(b => absorbed[i].add(b));
     });
   }
-  if (q.has('dump')) dumpReport(sc, EV, step, norm, +(q.get('dstep') || .5));
+  if (q.has('dump')) dumpReport(sc, EV, step, norm, +(q.get('dstep') || .5), composer);
   if (q.has('t')) S.t = clamp(+q.get('t'), 0, 60); else S.t = 0;
   document.getElementById('loading').remove();
 
@@ -142,8 +142,11 @@ function start(sc) {
 
 // ?dump: step the whole 0–60 script without drawing, sample per-band activity and the active events,
 // count draw calls at a few moments, and write the report as JSON into <script id="spectra-dump">
-// (read by `uv run spectra timeline`).
-function dumpReport(sc, EV, step, norm, dt) {
+// (read by `uv run spectra timeline`). frames: mean / p95 wall-clock ms of FRAME_N full frames (step + composer
+// render, synced with a 1-pixel readback; gl.finish() doesn't block in Chrome) at the same moments — relative
+// numbers only (headless SwiftShader).
+const FRAME_N = 16;
+function dumpReport(sc, EV, step, norm, dt, composer) {
   const { renderer, scene, camera } = S, samples = [], drawn = EV.map(() => new Set()), absorbed = EV.map(() => new Set());
   for (let t = 0; t <= 60 + 1e-6; t += dt) {
     step(t, drawn, absorbed);
@@ -154,11 +157,28 @@ function dumpReport(sc, EV, step, norm, dt) {
     step(t);
     renderer.info.autoReset = false; renderer.info.reset();
     renderer.render(scene, camera);
-    const r = { t, calls: renderer.info.render.calls, triangles: renderer.info.render.triangles };
+    const r = { t, calls: renderer.info.render.calls, triangles: renderer.info.render.triangles,
+      lod: { skipped: { ...LOD.skipped }, total: { ...LOD.total } } };   // sources set vs. not drawn (far LOD)
     renderer.info.autoReset = true; return r;
   });
+  const gl = renderer.getContext(), px = new Uint8Array(4);
+  // under `--virtual-time-budget` (spectra timeline) performance.now() stands still during synchronous work: the
+  // first warm-up frame (no readback) then reads 0 ms and the sample is skipped (null) before any readPixels, whose
+  // 'GPU stall' console warning would fail the timeline; a real-clock run (e.g. Chrome over CDP) fills it
+  const frames = [5, 30, 55].map(t => {
+    const ms = [];
+    for (let k = -2; k < FRAME_N; k++) {        // two warm-up frames (shader compile, buffer uploads) not counted
+      const a = performance.now();
+      step(t); composer.render();
+      if (k === -2) { if (!(performance.now() - a > 0)) return { t, n: 0, mean: null, p95: null }; continue; }
+      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      if (k >= 0) ms.push(performance.now() - a);
+    }
+    ms.sort((x, y) => x - y);
+    return { t, n: ms.length, mean: +(ms.reduce((x, y) => x + y, 0) / ms.length).toFixed(2), p95: +ms[Math.ceil(ms.length * .95) - 1].toFixed(2) };
+  });
   const report = {
-    scenario: sc.title, detector: S.detector, step: dt, norm, draws, sources: { em: EMS.length, rib: RIBS.length, fields: FIELDS.length, fieldInstances: FIELDS.reduce((a, f) => a + f.n, 0) },
+    scenario: sc.title, detector: S.detector, step: dt, norm, draws, frames, sources: { em: EMS.length, rib: RIBS.length, fields: FIELDS.length, fieldInstances: FIELDS.reduce((a, f) => a + f.n, 0) },
     events: EV.map((e, i) => {
       const freq = e.freq || [], known = freq.filter(k => SPECTRUM[k]);
       return { name: e.name, t0: e.t0, t1: e.t1, bands: e.bands, tags: e.tags || [], drawn: [...drawn[i]], absorbed: [...absorbed[i]],
