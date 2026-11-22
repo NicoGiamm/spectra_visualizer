@@ -152,7 +152,7 @@ const FLEET = [];
 // all-round green over white, any other vessel fishing all-round red over white; working decks are lit by metal-halide
 // floodlights (lampara/purse-seine boats also use them to draw fish up). Their diesel exhausts are warm in IR.
 // COLREGs Rule 21(b)/(c): sidelights cover 112.5° from dead ahead to 22.5° abaft the beam on their own side, the
-// sternlight the 135° astern; Annex I §9(a): full intensity to the arc's edge, practical cut-off 1–3° outside it.
+// sternlight the 135° astern; Annex I §9(a): full intensity to the arc's edge, cut-off 1–3° outside it forward (≤ 5° allowed at the after limits, §9(a)(ii)).
 const arc = (a, lo, hi) => sm(lo - 3, lo - 1, a) * (1 - sm(hi + 1, hi + 3, a));
 const BOATS = 5, BOAT_L = 7;   // light slots per boat: two floods, the upper all-round light, the white one below it,
                                // port (red) and starboard (green) sidelights, sternlight
@@ -221,7 +221,7 @@ export const buoys = () => event({ name: 'Channel buoys (IALA A)', t0: 9, t1: 60
       this.bu.push({ p: c.clone().addScaledVector(port, 60), col: '#ff2a2a', body: 0x7a1410, ch: chars[i], ph: i * .37 });
       this.bu.push({ p: c.clone().addScaledVector(port, -60), col: '#38ff7a', body: 0x0f5a24, ch: chars[i], ph: i * .37 + .21 }); });
     this.bu.push({ p: A.clone().addScaledVector(d, -450), col: '#ffffff', ch: LFL10, ph: 0, racon: true });
-    const g = new THREE.CylinderGeometry(1.1, 1.5, 3, 8); g.translate(0, .9, 0); const pil = new THREE.CylinderGeometry(.35, .5, 2.5, 6); pil.translate(0, 3.6, 0);
+    const g = new THREE.CylinderGeometry(1.1, 1.5, 3, 8); g.translate(0, .9, 0); const pil = new THREE.CylinderGeometry(.35, .5, 2.5, 8); pil.translate(0, 3.6, 0);
     const geo = mergeGeometries([g, pil].map(x => x.toNonIndexed())), nLat = this.bu.length - 1;   // the lateral marks share one instanced draw
     this.mesh = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .6 }), nLat);
     this.bu.forEach((b, i) => { if (i < nLat) { this.mesh.setColorAt(i, new THREE.Color(b.body)); this.mesh.setMatrixAt(i, new THREE.Matrix4().makeTranslation(b.p.x, 0, b.p.z)); } });   // moored there from the start
@@ -249,14 +249,15 @@ export const buoys = () => event({ name: 'Channel buoys (IALA A)', t0: 9, t1: 60
 // ICAO Annex 14 Vol. I §6.2.4: medium-intensity red (type B) on the nacelles of the peripheral turbines, flashing
 // 20–60 times a minute, all synchronised; corner turbines carry IALA G1162 marine marks, Fl Y 5 s, also synchronised.
 // Tip height 190 m > 150 m, so the lit towers add an intermediate level at half nacelle height: at least three
-// low-intensity type B lights (steady red, 32 cd, 360° between them; ICAO Annex 14 Vol. I Table 6-3 via UK CAA policy
-// on turbines >= 150 m and IEC TS 61400-29:2023; Transport Canada AC 601-001: CL-810 steady red, 32 cd, mid-point
-// ± 10 m). At 9 km the three merge into one point per tower, drawn as one dim steady light — stylised: drawn at ~1/3
-// of the nacelle light instead of the real 32:2000 cd, or it would not show at all.
+// low-intensity Type E lights (red, 32 cd, 360° between them, flashing in step with the nacelle; ICAO Annex 14 Vol. I
+// §6.2.4.3; Transport Canada AC 601-001: >= 3 CL-810, 32 cd, flash at the CL-864 rate, mid-point ± 10 m; the UK
+// onshore policy uses steady Type B instead). At 9 km the three merge into one point per tower, drawn as one dim light
+// on the farm's flash clock — stylised: drawn at ~1/3 of the nacelle light instead of the real 32:2000 cd, or it
+// would not show at all.
 // The ship's X-band radar sees the towers and moving blades as bright, Doppler-smeared clutter (radarClutter).
 const WF_C = new V3(-4500, 0, -7794), WF_S = 900, HUB = 110, BLADE = 80, WF_AX = Math.atan2(Math.cos(260 * DEG), Math.sin(260 * DEG));
 export const windFarm = () => event({ name: 'Offshore wind farm', t0: 0, t1: 60, bands: ['vis', 'micro'], freq: ['navRed', 'navYellow', 'radarClutter'], tags: ['stylised'],
-  note: 'Twelve turbines far out to sea. After dusk their red aviation lights flash together (30 times a minute), with dim steady red lights half way up the towers (they stand over 150 m to the blade tip), and the corner towers add yellow marine lights (Fl Y 5s). To the passing ship\'s X-band radar the towers and turning blades are a smear of bright echoes.',
+  note: 'Twelve turbines far out to sea. After dusk their red aviation lights flash together (30 times a minute), with dimmer red lights half way up the towers flashing with them (they stand over 150 m to the blade tip), and the corner towers add yellow marine lights (Fl Y 5s). To the passing ship\'s X-band radar the towers and turning blades are a smear of bright echoes.',
   init() {
     this.tu = []; for (let i = 0; i < 4; i++) for (let j = 0; j < 3; j++) this.tu.push({ p: WF_C.clone().add(new V3((i - 1.5) * WF_S, 0, (j - 1) * WF_S)), edge: i % 3 === 0 || j !== 1, corner: i % 3 === 0 && j !== 1, ph: (i * 3 + j) * .53 });
     const tw = new THREE.CylinderGeometry(2.4, 3.2, HUB, 10); tw.translate(0, HUB / 2, 0); const tp = new THREE.CylinderGeometry(3.4, 3.4, 15, 10); tp.translate(0, 7.5, 0);   // tower + transition piece
@@ -275,7 +276,7 @@ export const windFarm = () => event({ name: 'Offshore wind farm', t0: 0, t1: 60,
     this.tu.forEach((u, k) => { const hub = u.p.clone().addScaledVector(this.ax, 6).add(new V3(0, HUB + 1, 0)), spin = T * .94 + u.ph;   // 9 rpm
       for (let b = 0; b < 3; b++) { this.tmp.position.copy(hub); this.tmp.rotation.set(0, WF_AX, spin + b * 2.094); this.tmp.updateMatrix(); this.bl.setMatrixAt(k * 3 + b, this.tmp.matrix); }
       if (u.edge && night > 0) this.red.set(k, u.p.clone().add(new V3(0, HUB + 4.5, 0)), 34, night * red * .7)
-        .set(this.tu.length + k, u.p.clone().add(new V3(0, (HUB + 3.5) / 2, 0)), 16, night * .22);   // 32 cd vs 2000 cd: far dimmer, steady
+        .set(this.tu.length + k, u.p.clone().add(new V3(0, (HUB + 3.5) / 2, 0)), 16, night * red * .22);   // 32 cd vs 2000 cd: far dimmer, same flash
       if (u.corner && night > 0) this.yel.set(k, u.p.clone().add(new V3(0, 18, 0)), 24, night * yel * .6);
       if (rI > 0) { const face = Math.max(0, Math.cos(ENVSEA.radA.value - Math.atan2(u.p.z - rp.z, u.p.x - rp.x))) ** 8, dop = .6 + .4 * Math.abs(Math.sin(spin * 3));
         this.clu.set(k, hub, 90 + 120 * face, rI * (.06 + .6 * face) * dop); } });
