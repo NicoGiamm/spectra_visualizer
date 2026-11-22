@@ -131,7 +131,7 @@ export const blackLight = () => event({ name: 'Black light & bug zapper', t0: 10
 // ---------------------------------------------------------------- gamma
 // Granite kerbs (K-40, U and Th series) are the most radioactive stone in the street. Each blip is one photon a
 // detector at your feet would count; the blip rate is illustrative, not a measured count rate.
-export const stoneGamma = () => event({ name: 'Granite kerbs: natural gamma', t0: 0, t1: 60, bands: ['gamma'], freq: ['k40Gamma', 'tl208Gamma', 'bi214Gamma'], note: 'The granite kerbstones carry potassium-40 and traces of uranium and thorium; their gamma rays (609 keV to 2.6 MeV) reach a detector right through the air. Each blip along the kerb beside you stands for a counted photon (the rate is illustrative) — the street is quietly radioactive all night, a little more than the concrete and far more than the sea.',
+export const stoneGamma = () => event({ name: 'Granite kerbs: natural gamma', t0: 0, t1: 60, bands: ['gamma'], freq: ['k40Gamma', 'tl208Gamma', 'bi214Gamma'], note: 'The granite kerbstones carry potassium-40 and traces of uranium and thorium; their gamma rays (609 keV to 2.6 MeV) reach a detector right through the air. Each blip along the kerb beside you stands for a counted photon (the rate is illustrative) — the street is quietly radioactive all night, roughly two to three times the concrete and far more than the sea.',
   init() { this.f = new EmField('gamma', 24); },
   update() { const { t } = S, cam = S.camera.position; if (!inWin(this)) return;
     for (let k = 0; k < 24; k++) {
