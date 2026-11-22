@@ -50,9 +50,18 @@ export const ENVSEA = {
   radP: { value: new V3() }, radA: { value: 0 }, radI: { value: 0 },          // ship X-band radar: position, beam bearing, power
   fire: { value: new THREE.Vector4(0, 0, 0, 0) },                              // bonfire: position, heat
   mist: { value: 0 }, airT: { value: 20 }, uvGlit: { value: 0 }, bio: { value: 0 },
-  rs: { value: Array.from({ length: 3 }, () => new THREE.Vector4()) },        // sky radio sources mirrored by the sea: dir, strength x fringe
+  rs: { value: Array.from({ length: 3 }, () => new THREE.Vector4()) },        // sky radio sources mirrored by the sea: dir, strength
+  lloyd: { value: new THREE.Vector2() },                                       // sea-cliff interferometer phase rate 4πh/λ at the two wavelengths
 };
 const PULSAR_D = dirAE(242, 52);   // must match sky.pulsar()'s spin axis
+// Sea-cliff (Lloyd's mirror) interferometer: an antenna at height h above a flat sea receives a source at elevation e
+// directly and via its sea reflection; the extra path is 2h·sin e and the reflection flips the phase by π (horizontal
+// polarisation, grazing incidence), so the received power goes as 1 − cos(4πh·sin e/λ) — lobes spaced Δ(sin e) = λ/2h,
+// a null on the horizon, and fringes that sweep as a source rises or sets. Wavelengths: 1.5 m (200 MHz, SPECTRUM
+// lloydFringe; McCready, Pawsey & Payne-Scott 1947, the Sun from Dee Why) and 3 m (100 MHz; Bolton & Stanley 1948,
+// Cygnus A from Dover Heights). Bolton & Slee 1953 used the same method at 100 MHz from Dover Heights.
+const LLOYD_LAMBDA = [1.5, 3];                                     // m
+const tide = t => .5 - .5 * Math.cos(Math.PI * t / 60);           // m, a flood tide of 1 m over the evening (time-compressed)
 export const airTemp = t => 12 + 10 * Math.exp(-t / 20);         // °C, falls through the evening
 // Radar echo of a surface at W: bright where the beam just swept past, fading as the antenna turns on (PPI persistence)
 const RADAR_GLSL = `
@@ -112,7 +121,9 @@ function terrain() {
 // band physics (seaBands): IR with water's angle-dependent emissivity, microwave brightness temperature, radio tx and the
 // mirrored radio sky, UV glitter while the sun's UV lasts, near-silent gamma.
 const SEA_GLSL = coastGLSL + RADAR_GLSL + `
-uniform float uSunI, uMoonI, uBio, uMist, uAirT, uUVglit; uniform vec3 uHor, uSky, uDeep, uSunDir, uMoonDir; uniform vec4 uRS[3];
+uniform float uSunI, uMoonI, uBio, uMist, uAirT, uUVglit; uniform vec3 uHor, uSky, uDeep, uSunDir, uMoonDir; uniform vec4 uRS[3]; uniform vec2 uLloyd;
+// Lloyd's-mirror response at sin(elevation) s, 200 MHz in .x and 100 MHz in .y, normalised to 0..1 (0 below the horizon)
+vec2 lloyd(float s){ return s > 0. ? .5 - .5*cos(uLloyd*s) : vec2(0.); }
 vec2 wave(vec2 p, vec2 k, float w, float a){ float ph = dot(k,p) + w*uSurfTime; return a*k*cos(ph); }   // gradient of a*sin
 float skyT(float y){ float e = 1. - pow(.25, 1./max(y, .04)); return mix(-60., uAirT, e); }               // 8–14 µm sky brightness temp
 vec3 seaBands(vec3 W, vec3 N, vec3 V, vec3 Rf, float dist, float foam, float inVis){
@@ -135,10 +146,17 @@ vec3 seaBands(vec3 W, vec3 N, vec3 V, vec3 Rf, float dist, float foam, float inV
   }
   if(uSOnR > 0.){                                   // RADIO: transmitters paint the water; the sea mirrors the radio sky
     col += uSOnR*vec3(1.,.31,.85)*.9*txField(uTxR, W, N, 700., 9.)*1.1;
-    vec3 R0 = reflect(V, vec3(0., 1., 0.)); float img = 0.;
+    // Sea interferometer: each source's mirror image is as bright as the cliff antenna's fringe at the source's
+    // elevation; below it, a column at the source's azimuth maps the antenna's lobe pattern against the elevation the
+    // flat sea reflects there (depression = elevation), so the image slides through the lobes as the source moves.
+    vec3 R0 = reflect(V, vec3(0., 1., 0.)); vec2 Fp = lloyd(R0.y); float img = 0.;
+    float lobes = .6*Fp.x + .4*Fp.y;                // 200 MHz lobes beating against the 100 MHz ones
     for(int i = 0; i < 3; i++){ if(uRS[i].w <= 0.) continue;
-      img += uRS[i].w*(pow(max(dot(R0, uRS[i].xyz), 0.), 3000.)*2.5 + pow(max(dot(Rf, uRS[i].xyz), 0.), 160.)*.7); }
-    col += uSOnR*vec3(1.,.31,.85)*img*(.45 + .55*step(.5, fract(dist/14. - uSurfTime*.9)));
+      vec3 s = uRS[i].xyz; vec2 Fs = lloyd(s.y);
+      float fr = .6*Fs.x + .4*Fs.y;                 // what the cliff antenna records from this source now
+      float az = pow(max(dot(normalize(R0.xz), normalize(s.xz)), 0.), 900.)*exp(-abs(R0.y - s.y)*3.);
+      img += uRS[i].w*((pow(max(dot(R0, s), 0.), 3000.)*2.5 + pow(max(dot(Rf, s), 0.), 160.)*.7)*(.1 + .9*fr) + az*lobes*.7); }
+    col += uSOnR*vec3(1.,.31,.85)*img;
   }
   if(uSOnU > 0.){                                   // ULTRAVIOLET: sun glitter only while the low sun still has UV; foam reflects some
     float s = max(dot(Rf, uSunDir), 0.);
@@ -154,7 +172,7 @@ vec3 seaBands(vec3 W, vec3 N, vec3 V, vec3 Rf, float dist, float foam, float inV
 function seaMaterial(instr) {
   const u = { ...surfaceUniforms(SURF.sea), uHor: ENVSEA.hor, uSky: ENVSEA.sky, uDeep: { value: new THREE.Color(.004, .008, .014) },
     uSunDir: ENVSEA.sunDir, uSunI: ENVSEA.sunI, uMoonDir: ENVSEA.moonDir, uMoonI: ENVSEA.moonI, uBio: ENVSEA.bio, uMist: ENVSEA.mist,
-    uAirT: ENVSEA.airT, uUVglit: ENVSEA.uvGlit, uRS: ENVSEA.rs, uRadP: ENVSEA.radP, uRadA: ENVSEA.radA, uRadI: ENVSEA.radI };
+    uAirT: ENVSEA.airT, uUVglit: ENVSEA.uvGlit, uRS: ENVSEA.rs, uLloyd: ENVSEA.lloyd, uRadP: ENVSEA.radP, uRadA: ENVSEA.radA, uRadI: ENVSEA.radI };
   return new THREE.ShaderMaterial({ uniforms: u,
     vertexShader: SURF_VERT_DECL + `void main(){ vec4 w = modelMatrix*vec4(position,1.); vSurfW = w.xyz; vSurfN = vec3(0., 1., 0.); gl_Position = projectionMatrix*viewMatrix*w; }`,
     fragmentShader: SURF_FRAG_DECL + SEA_GLSL + `
@@ -253,9 +271,10 @@ export function build() {
       E.sunDir.value.copy(dirAE(SUN_AZ, Math.max(el, -1))); E.sunI.value = sm(-1.2, 2, el);
       E.moonDir.value.copy(moonDir()); E.moonI.value = moonlit() * sm(-1, 3, moonDir().y * 57.3);
       E.airT.value = airTemp(t); E.uvGlit.value = sm(.8, 4, el);       // the low sun's UV is gone before it touches the sea
-      // sea interferometer: the flat sea mirrors the radio sky, and the mirrored copies interfere with
-      // each other as they move (Lloyd's mirror — the cliff antenna watches the fringes). Slots:
-      // the Sun's radio during the sunset, Sgr A*'s synchrotron, the pulsar.
+      // sea interferometer (Lloyd's mirror, see LLOYD_LAMBDA): the cliff antenna's boom sits ~35 m above the sea,
+      // less the rising tide. Slots: the Sun's radio during the sunset, Sgr A*'s synchrotron, the pulsar.
+      const h = CLIFF_ANT.y + 7 - tide(t);
+      E.lloyd.value.set(4 * Math.PI * h / LLOYD_LAMBDA[0], 4 * Math.PI * h / LLOYD_LAMBDA[1]);
       const sunD = dirAE(SUN_AZ, el), rs = E.rs.value;
       rs[0].set(sunD.x, sunD.y, sunD.z, env(t, 0, 16, 2) * .9);
       rs[1].set(GAL_C.x, GAL_C.y, GAL_C.z, sm(18, 30, t) * .7);
