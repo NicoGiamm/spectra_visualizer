@@ -25,7 +25,7 @@ come from their GitHub issues, linked in it); from it you read the mission's wor
 2. **Contracts**: new spectral sources via `Em`/`Rib`/`EmField` (no hand-drawn glow meshes); every new event has
    `freq` keys that exist in `SPECTRUM` with a sourced value; `update()` resets what it sets; `where` reading `this`
    is a method; new events appended after the existing list (seeded `R`); `Math.random` only for visual-only jitter;
-   sky azimuths ~205–340 and above the horizon; static imports; `flat varying` for per-instance values; no edit to
+   sky events inside `FOV_SKY` (az 210–330, el 0…60°, whole path); static imports; `flat varying` for per-instance values; no edit to
    root `index.html` or `dist/`.
 3. **Correctness**: a visible bug — wrong band for a process, a frequency that doesn't match its comment, a uniform
    never updated, a source `set()` outside its event window, NaN-prone maths (`pow` of a possibly negative base), a

@@ -410,10 +410,13 @@ export const firstStars = o => event({ name: 'First planet & stars', t0: 11, t1:
   init() { this.f = new EmField('vis', FIRST_LIGHTS.length); FIRST_LIGHTS.forEach((s, i) => this.f.color(i, s[4])); this.r = new Em('radio'); this.p = null; },
   dir(i) { const [az, el] = FIRST_LIGHTS[i]; return dirAE(az, el - .5 * Math.cos((az - 270) * DEG) * Math.max(0, S.t - this.t0)); },   // western sky sinks with the Sun (~0.55°/unit)
   update() { const { t, T } = S, I = env(t, this.t0, this.t1, 1), dep = depression(), dim = ENV.starDim ?? 1;
-    FIRST_LIGHTS.forEach(([, , mag, d0], i) => { const lp = mag < -1 ? 1 : mag < .5 ? .6 + .4 * dim : dim, tw = mag < -1 ? 1 : .85 + .15 * Math.sin(T * (7 + i * 2.3) + i);
-      this.f.set(i, onSky(this.dir(i)), deg(mag < -1 ? .42 : .3 - .05 * mag), I * sm(d0, d0 + 1.3, dep) * lp * tw * (1.1 - .3 * mag)); });
-    this.p = onSky(this.dir(0)); const storm = (T % 11) < 4 ? .5 + .5 * Math.abs(Math.sin(T * 23) * Math.sin(T * 5.3)) : 0;   // Io-driven bursts
-    this.r.set(this.p, deg(1.2), I * storm * .7); },
+    // each light fades out as it sets (extinction in the last ~1.5°): Jupiter sets at t ≈ 42, Spica near t 60
+    const up = i => sm(0, 1.5, Math.asin(this.dir(i).y) / DEG); this.p = null;
+    FIRST_LIGHTS.forEach(([, , mag, d0], i) => { const lp = mag < -1 ? 1 : mag < .5 ? .6 + .4 * dim : dim, tw = mag < -1 ? 1 : .85 + .15 * Math.sin(T * (7 + i * 2.3) + i), u = up(i);
+      if (u <= 0) return; this.f.set(i, onSky(this.dir(i)), deg(mag < -1 ? .42 : .3 - .05 * mag), I * u * sm(d0, d0 + 1.3, dep) * lp * tw * (1.1 - .3 * mag));
+      if (!this.p) this.p = onSky(this.dir(i)); });   // label: Jupiter while it is up, then the next light still above the horizon
+    const storm = (T % 11) < 4 ? .5 + .5 * Math.abs(Math.sin(T * 23) * Math.sin(T * 5.3)) : 0;   // Io-driven bursts
+    if (up(0) > 0) this.r.set(onSky(this.dir(0)), deg(1.2), I * up(0) * storm * .7); },
   where() { return this.p; } }, o);
 
 // A sporadic bolide (mag ≈ −8, brighter than Venus): one fireball a night somewhere over a site is far from
