@@ -42,7 +42,7 @@ export const gulls = () => event({ name: 'Gulls heading home', t0: 0, t1: 20, ba
 // Light characteristic Fl(2) 10 s (IALA notation: a group of two flashes, period 10 s): a rotating optic with two
 // lens panels 72° apart turning once per 10 s, so each panel's beam passes you 2 s after the other, then 8 s dark.
 // The old 285–325 kHz marine radiobeacons are mostly retired; lights now announce themselves as AIS aids to
-// navigation (message 21 on VHF AIS 1/2, ITU-R M.1371-5; nominal reporting interval 3 min, IALA Guideline 1081).
+// navigation (message 21 on VHF AIS 1/2, ITU-R M.1371-5; nominal reporting interval 3 min, IMO MSC.1/Circ.1473; IALA G1062).
 const FL_PERIOD = 10, FL_GAP = 2, FL_HALF = .15;   // s, s, rad (half-width of a beam: ~0.5 s flash)
 const ATON_EVERY = 6;                            // s between drawn AIS bursts (real: ~180 s, time-compressed)
 export const lighthouse = () => event({ name: 'Lighthouse', t0: 9, t1: 60, bands: ['vis', 'radio'], freq: ['incandescent', 'aisAtoN'], tags: ['time-compressed'],
@@ -72,9 +72,9 @@ export const lighthouse = () => event({ name: 'Lighthouse', t0: 9, t1: 60, bands
   where() { return this.top; } });
 
 // A container ship crossing the horizon: nav lights, X-band and S-band radar sweeps (microwave; SOLAS ships ≥ 3000 GT
-// carry both), AIS bursts (VHF radio), the deck crew's phones (LTE + Bluetooth, microwave), hot funnel.
-export const ship = () => event({ name: 'Container ship', t0: 4, t1: 52, bands: ['vis', 'micro', 'radio', 'ir'], freq: ['navRed', 'incandescent', 'xbandRadar', 'sbandRadar', 'ais', 'lte', 'bluetooth', 'thermal700'],
-  note: 'Masthead and side lights, two rotating radars (X-band 9.4 GHz for detail, S-band 3 GHz that sees through rain and spray), AIS position bursts on VHF, the deck crew\'s phones pinging the network and a hot exhaust funnel.',
+// typically carry both), AIS bursts (VHF radio), the deck crew's phones (LTE + Bluetooth, microwave), hot funnel.
+export const ship = () => event({ name: 'Container ship', t0: 4, t1: 52, bands: ['vis', 'micro', 'radio', 'ir'], freq: ['navRed', 'incandescent', 'xbandRadar', 'sbandRadar', 'ais', 'lte', 'bluetooth', 'thermal700'], tags: ['time-compressed'],
+  note: 'Masthead and side lights, two rotating radars (X-band 9.4 GHz for detail, S-band 3 GHz that sees through rain and spray), AIS position bursts on VHF, the deck crew\'s phones pinging the network (more often than an idle phone would) and a hot exhaust funnel.',
   init() {
     const hull = new THREE.MeshStandardMaterial({ color: 0x15100f, roughness: .8 }), G = new THREE.Group();
     const h = new THREE.Mesh(new THREE.BoxGeometry(220, 14, 32), hull); h.position.y = 4; G.add(h);
