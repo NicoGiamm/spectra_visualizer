@@ -1,5 +1,9 @@
 # Spectra Visualizer
 
+<video src="scenarios/seaside/examples/seaside.mp4" controls muted autoplay loop playsinline width="100%"></video>
+
+*The seaside scene from sunset into the night ([watch the video](scenarios/seaside/examples/seaside.mp4)).*
+
 **See a night sky the way every instrument sees it at once.**
 
 Spectra Visualizer is a set of first-person 3D scenes in the browser. Each one plays a ~90-second timelapse from
