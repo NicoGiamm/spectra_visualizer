@@ -110,8 +110,11 @@ const depression = () => -sunEl();                                              
 // (M8/T3, was t 25–39): an ISS-class pass (mag ≈ −3, ~420 km) is bright enough to see from δ ≈ 2° (t ≈ 11), and in
 // the west-facing cone it stays sunlit for the whole pass (sunlitAt: shadow entry only after t ≈ 46, δ ≈ 21°); the
 // fade is computed, so a later retime shows the shadow entry mid-pass. Radio/microwave don't care about the sky.
+// Duration (M9/T3): the ISS orbits in 92.7 min at ~420 km; horizon to horizon at most 10.4 min, above ~12° (the
+// cone's track) ~5 min ≈ 1.5 script units (1 unit ≈ 3.4 min) — 3 real seconds. Drawn over 4 units (×~3 slower,
+// tagged `stylised`) so the eye can follow it; the note says so.
 const satDir = p => dirAE(fovAz(p), 12 + 46 * Math.sin(Math.PI * p));            // across the FOV cone, culminating at 58°
-export const satellitePass = o => event({ name: 'Satellite pass', t0: 11, t1: 23, bands: ['vis', 'radio'], freq: ['sunlight', 'satBeacon'], tags: ['common'], note: 'A bright space station still in sunlight ~400 km up while the ground is in twilight: reflected sunlight, and its amateur-radio downlink on 145.8 MHz that a handheld can pick up (its microwave links go up to relay satellites, not down to you). It would fade out mid-pass where it enters Earth\'s shadow — here, toward the sunset side, that only happens with the Sun ~21° down.',
+export const satellitePass = o => event({ name: 'Satellite pass', t0: 12, t1: 16, bands: ['vis', 'radio'], freq: ['sunlight', 'satBeacon'], tags: ['common', 'stylised'], note: 'A bright space station still in sunlight ~400 km up while the ground is in twilight: reflected sunlight, and its amateur-radio downlink on 145.8 MHz that a handheld can pick up (its microwave links go up to relay satellites, not down to you). It would fade out mid-pass where it enters Earth\'s shadow — here, toward the sunset side, that only happens with the Sun ~21° down. Slowed about threefold so you can follow it: a real pass across this part of the sky takes about five minutes.',
   init() { this.v = new Em('vis'); this.r = new Em('radio'); this.p = null; },   // S/Ku links relayed via TDRSS (geostationary), not to the ground
   update() { const { t } = S, sp = (t - this.t0) / (this.t1 - this.t0); if (sp < 0 || sp > 1) { this.p = null; return; } const I = env(t, this.t0, this.t1, 1), d = satDir(sp), p = onSky(d); this.p = p;
     this.v.set(p, deg(.22), I * sunlitAt(d, 420) * sm(1, 3, depression())); this.r.set(p, deg(.6), I * .5); },
@@ -119,7 +122,10 @@ export const satellitePass = o => event({ name: 'Satellite pass', t0: 11, t1: 23
 
 // A freshly launched Starlink train (~300 km, still orbit-raising; mag ~2–3 each) needs a darker sky than the ISS:
 // it shows from δ ≈ 4–7° (t 15–20). Retimed into the opening (M8/T3, was t 28–36); fully sunlit in the cone (sunlitAt).
-export const starlink = o => event({ name: 'Starlink train', t0: 16, t1: 26, bands: ['vis', 'micro'], freq: ['sunlight', 'kuDownlink'], note: 'A string of freshly launched satellites, still low (~300 km) and sunlit as twilight deepens, beaming microwave internet.',
+// Duration (M9/T3): each satellite crosses the cone in ~4 min at ~300 km (90.5 min orbit), and a fresh train strung
+// out over ~10 min files past for longer: ~15 min ≈ 4.5 units. While orbit-raising the satellites serve no users;
+// their Ku-band link is telemetry/command with ground stations (SpaceX FCC filings, TT&C in Ku-band).
+export const starlink = o => event({ name: 'Starlink train', t0: 18, t1: 22.5, bands: ['vis', 'micro'], freq: ['sunlight', 'kuDownlink'], note: 'A string of freshly launched satellites, still low (~300 km) and sunlit as twilight deepens, filing past for a quarter of an hour. Still raising their orbits, they serve no one yet: their microwave signal is telemetry to ground stations.',
   init() { this.s = Array.from({ length: 22 }, (_, k) => k); this.v = new EmField('vis', 22, '#f4f6ff'); this.m = new EmField('micro', 22); this.p = null; },
   update() { const { t } = S; if (t < this.t0 || t > this.t1) { this.p = null; return; } const p = (t - this.t0) / (this.t1 - this.t0), I = env(t, this.t0, this.t1, 1), vis = I * sm(4, 7, depression());
     this.s.forEach((s, k) => { const q = p * 1.3 - k * .014; if (q < 0 || q > 1) return; const d = dirAE(210 + 110 * q, 20 + 34 * Math.sin(Math.PI * q)), pos = onSky(d); this.v.set(k, pos, deg(.18), vis * .9 * sunlitAt(d, 300)); if (k % 3 === 0) this.m.set(k, pos, deg(.4), I * .5); if (k === 0) this.p = pos; }); },
@@ -421,7 +427,7 @@ const FIRST_LIGHTS = [   // az, el at t0, magnitude, depression where it pops ou
   [231, 19, 0.98, 6.2, '#cfe0ff'],   // Spica (B1, blue-white)
   [266, 25, 2.14, 8.0, '#eef2ff'],   // Denebola (A3 V), the Lion's tail — Regulus and Pollux have set by now
 ];
-export const firstStars = o => event({ name: 'First planet & stars', t0: 11, t1: 60, bands: ['vis', 'radio'], freq: ['sunlight', 'starlight', 'jupiterDAM'], tags: ['common'], note: 'As the Sun sinks 3–7° below the horizon the sky drops below one point of light after another: Jupiter first (mag −2), then Arcturus (mag 0), then Spica (mag 1) and, as twilight deepens, Denebola (mag 2). Jupiter\'s decametric radio storms (10–40 MHz) crackle on and off.',
+export const firstStars = o => event({ name: 'Jupiter & first stars', t0: 11, t1: 60, bands: ['vis', 'radio'], freq: ['sunlight', 'starlight', 'jupiterDAM'], tags: ['common'], note: 'As the Sun sinks 3–7° below the horizon the sky drops below one point of light after another: after Venus, Jupiter (mag −2), then Arcturus (mag 0), then Spica (mag 1) and, as twilight deepens, Denebola (mag 2). Jupiter\'s decametric radio storms (10–40 MHz) crackle on and off.',
   init() { this.f = new EmField('vis', FIRST_LIGHTS.length); FIRST_LIGHTS.forEach((s, i) => this.f.color(i, s[4])); this.r = new Em('radio'); this.p = null; },
   dir(i) { const [az, el] = FIRST_LIGHTS[i]; return dirAE(az, el - .5 * Math.cos((az - 270) * DEG) * Math.max(0, S.t - this.t0)); },   // western sky sinks with the Sun (~0.55°/unit)
   update() { const { t, T } = S, I = env(t, this.t0, this.t1, 1), dep = depression(), dim = ENV.starDim ?? 1;
