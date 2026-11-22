@@ -39,7 +39,14 @@ export const gulls = () => event({ name: 'Gulls heading home', t0: 0, t1: 20, ba
       b.e.set(p, .9, I * .45); }); },
   where: () => null });
 
-export const lighthouse = () => event({ name: 'Lighthouse', t0: 9, t1: 60, bands: ['vis', 'radio'], freq: ['incandescent', 'radiobeacon'], note: 'A rotating beam sweeps the bay every few seconds; its radio beacon keeps broadcasting for ships.',
+// Light characteristic Fl(2) 10 s (IALA notation: a group of two flashes, period 10 s): a rotating optic with two
+// lens panels 72° apart turning once per 10 s, so each panel's beam passes you 2 s after the other, then 8 s dark.
+// The old 285–325 kHz marine radiobeacons are mostly retired; lights now announce themselves as AIS aids to
+// navigation (message 21 on VHF AIS 1/2, ITU-R M.1371-5; nominal reporting interval 3 min, IALA Guideline 1081).
+const FL_PERIOD = 10, FL_GAP = 2, FL_HALF = .15;   // s, s, rad (half-width of a beam: ~0.5 s flash)
+const ATON_EVERY = 6;                            // s between drawn AIS bursts (real: ~180 s, time-compressed)
+export const lighthouse = () => event({ name: 'Lighthouse', t0: 9, t1: 60, bands: ['vis', 'radio'], freq: ['incandescent', 'aisAtoN'], tags: ['time-compressed'],
+  note: 'Its character is Fl(2) 10 s: two flashes in quick succession, then darkness, every 10 seconds, from two lens panels turning together. The old MF radio beacon is gone; the light announces itself to ships as an AIS aid to navigation, short VHF bursts at 162 MHz (every few minutes in reality, more often here).',
   init() {
     const x = 900, z = coastZ(x) + 55, y = heightAt(x, z), G = new THREE.Group(); G.position.set(x, y, z);
     const white = new THREE.MeshStandardMaterial({ color: 0xbfb8ae, roughness: .7 }), red = new THREE.MeshStandardMaterial({ color: 0x6a1410, roughness: .7 });
@@ -48,23 +55,26 @@ export const lighthouse = () => event({ name: 'Lighthouse', t0: 9, t1: 60, bands
     const cap = new THREE.Mesh(new THREE.ConeGeometry(1.7, 1.6, 12), red); cap.position.y = 23.2; G.add(cap);
     S.scene.add(spectralGroup(G, 'concrete', { weight: .02 }));
     this.top = new V3(x, y + 21.2, z);
-    addTx('radio', () => ({ p: this.top, power: sm(9, 13, S.t) * .9 }));
+    addTx('radio', () => this.aisTx);
     this.beam = [new Rib('vis', '#fff1c8', 2), new Rib('vis', '#fff1c8', 2)]; this.flash = new Em('vis', '#fff6dc'); this.glow = new Em('vis', '#ffe6a8'); this.ra = new Em('radio');
   },
-  update() { const { t, T } = S, I = sm(9, 13, t); if (I <= 0) return;
-    const a = T * 1.3, cam = S.camera.position, toCam = Math.atan2(cam.z - this.top.z, cam.x - this.top.x);
-    for (let k = 0; k < 2; k++) {                                                    // two opposite beams
-      const ak = a + k * Math.PI, dir = new V3(Math.cos(ak), -.012, Math.sin(ak));
+  update() { const { t, T } = S, I = sm(9, 13, t); this.aisTx = null; if (I <= 0) return;
+    const w = 2 * Math.PI / FL_PERIOD, a = T * w, cam = S.camera.position, toCam = Math.atan2(cam.z - this.top.z, cam.x - this.top.x);
+    for (let k = 0; k < 2; k++) {                                                    // two panels, FL_GAP seconds apart
+      const ak = a - k * w * FL_GAP, dir = new V3(Math.cos(ak), -.012, Math.sin(ak));
       this.beam[k].set([this.top, this.top.clone().addScaledVector(dir, 650)], 6, 60, I * .28, 0);   // shorter than the distance to you
       const off = Math.abs(Math.atan2(Math.sin(ak - toCam), Math.cos(ak - toCam)));   // beam pointing at you -> blinding flash
-      if (off < .25) this.flash.set(this.top, 60 * (1 - off / .25) + 6, I * 1.6 * (1 - off / .25));
+      if (off < FL_HALF) this.flash.set(this.top, 60 * (1 - off / FL_HALF) + 6, I * 1.6 * (1 - off / FL_HALF));
     }
-    this.glow.set(this.top, 7, I * .8);
-    this.ra.set(this.top, 150, I * (.5 + .3 * Math.sin(T * 2))); },
+    this.glow.set(this.top, 7, I * .4);                                              // lantern seen off-axis between flashes
+    const ping = (T % ATON_EVERY) / ATON_EVERY, b = ping < .05 ? I * (1 - ping / .05) : 0;   // short AIS AtoN burst
+    if (b > 0) { this.ra.set(this.top, 150, b); this.aisTx = { p: this.top, power: b * .9 }; } },
   where() { return this.top; } });
 
-// A container ship crossing the horizon: nav lights, X-band radar sweep (microwave), AIS bursts (VHF radio), hot funnel.
-export const ship = () => event({ name: 'Container ship', t0: 4, t1: 52, bands: ['vis', 'micro', 'radio', 'ir'], freq: ['navRed', 'incandescent', 'xbandRadar', 'ais', 'thermal700'], note: 'Masthead and side lights, a rotating X-band radar, AIS position bursts on VHF and a hot exhaust funnel.',
+// A container ship crossing the horizon: nav lights, X-band and S-band radar sweeps (microwave; SOLAS ships ≥ 3000 GT
+// carry both), AIS bursts (VHF radio), the deck crew's phones (LTE + Bluetooth, microwave), hot funnel.
+export const ship = () => event({ name: 'Container ship', t0: 4, t1: 52, bands: ['vis', 'micro', 'radio', 'ir'], freq: ['navRed', 'incandescent', 'xbandRadar', 'sbandRadar', 'ais', 'lte', 'bluetooth', 'thermal700'],
+  note: 'Masthead and side lights, two rotating radars (X-band 9.4 GHz for detail, S-band 3 GHz that sees through rain and spray), AIS position bursts on VHF, the deck crew\'s phones pinging the network and a hot exhaust funnel.',
   init() {
     const hull = new THREE.MeshStandardMaterial({ color: 0x15100f, roughness: .8 }), G = new THREE.Group();
     const h = new THREE.Mesh(new THREE.BoxGeometry(220, 14, 32), hull); h.position.y = 4; G.add(h);
@@ -72,10 +82,11 @@ export const ship = () => event({ name: 'Container ship', t0: 4, t1: 52, bands: 
     for (let i = 0; i < 9; i++) { const c = new THREE.Mesh(new THREE.BoxGeometry(17, 9 + (i * 7 % 5) * 2, 28), new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(R(), .35, .12), roughness: .8 })); c.position.set(-60 + i * 18, 15, 0); G.add(c); }
     this.g = solid(G); S.scene.add(G); this.dist = 3200;
     this.mast = new Em('vis', '#ffffff'); this.side = new Em('vis', '#ff3030'); this.stern = new Em('vis', '#ffffff'); this.deck = Array.from({ length: 4 }, () => new Em('vis', '#ffcf88'));
-    addTx('micro', () => this.radarTx); addTx('radio', () => this.aisTx);
+    addTx('micro', () => this.radarTx); addTx('micro', () => this.sbandTx); addTx('radio', () => this.aisTx);
+    this.sband = new Em('micro'); this.phones = Array.from({ length: 3 }, () => new Em('micro'));   // no R(): later layouts keep their seeds
     this.radar = new Em('micro'); this.ais = new Em('radio'); this.funnel = new Rib('ir', null, 6, 1); this.hot = new Em('ir', null, 1);
   },
-  update() { const { t, T } = S, p = (t - this.t0) / (this.t1 - this.t0); this.g.visible = p >= 0 && p <= 1; if (!this.g.visible) { this.p = this.radarTx = this.aisTx = null; ENVSEA.radI.value = 0; return; }
+  update() { const { t, T } = S, p = (t - this.t0) / (this.t1 - this.t0); this.g.visible = p >= 0 && p <= 1; if (!this.g.visible) { this.p = this.radarTx = this.sbandTx = this.aisTx = null; ENVSEA.radI.value = 0; return; }
     const az = lerp(236, 318, p), c = S.camera.position, d = dirAE(az, 0), pos = new V3(c.x + d.x * this.dist, 0, c.z + d.z * this.dist);
     this.g.position.copy(pos); this.g.rotation.y = -(az + 90) * DEG;
     const fw = new V3(Math.cos((az + 90) * DEG), 0, Math.sin((az + 90) * DEG)), at = (f, y) => pos.clone().addScaledVector(fw, f).add(new V3(0, y, 0));
@@ -85,6 +96,13 @@ export const ship = () => event({ name: 'Container ship', t0: 4, t1: 52, bands: 
     const ra = T * 2.4, face = Math.max(0, Math.cos(ra - Math.atan2(c.z - pos.z, c.x - pos.x))) ** 16;   // radar crackles brightest as its antenna sweeps past you
     this.radar.set(at(-85, 34), 60 + 120 * face, I * (.2 + .9 * face));
     ENVSEA.radP.value.copy(at(-85, 34)); ENVSEA.radA.value = ra; ENVSEA.radI.value = I * 3;   // the same sweep echoes off the headlands and the sea (surface shaders read this)
+    const sa = T * 2.1 + 1.7, sface = Math.max(0, Math.cos(sa - Math.atan2(c.z - pos.z, c.x - pos.x))) ** 8;   // S-band: wider beam, own rotation
+    this.sband.set(at(-85, 29), 50 + 90 * sface, I * (.15 + .6 * sface));
+    this.sbandTx = { p: at(-85, 29), power: I * 25 * sface };
+    this.phones.forEach((e, k) => {                                              // crew on deck: LTE ping every ~3 s, Bluetooth blips between
+      const lt = ((T + k * 1.1) % 3) / 3, bt = ((T * 1.3 + k * .7) % 1.5) / 1.5;
+      const b = lt < .06 ? 1 - lt / .06 : bt < .04 ? .35 * (1 - bt / .04) : 0;
+      if (b > 0) e.set(at(-70 + k * 55, 13), 16, I * .5 * b); });
     const ping = (t % 3) / 3; this.ais.set(at(-85, 44), 220, ping < .2 ? I * (1 - ping / .2) : 0);
     this.radarTx = { p: at(-85, 34), power: I * 40 * face };   // the sweep reaches the beach (range scaled up: X-band is strong)
     this.aisTx = { p: at(-85, 44), power: ping < .2 ? I * 3 * (1 - ping / .2) : 0 };

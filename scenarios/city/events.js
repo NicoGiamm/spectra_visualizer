@@ -31,7 +31,7 @@ export const windows = () => event({ name: 'Lit windows & heat island', t0: 0, t
   where: () => null });
 
 // Half of the avenue has been re-lamped with white LEDs (no infrared); the rest are old high-pressure sodium lamps
-// that strike pink-red, warm up to orange over several minutes and radiate strongly at 819 nm.
+// that strike a dim bluish-white, warm up to orange over several minutes and radiate strongly at 819 nm.
 export const streetLights = () => event({ name: 'Street lights', t0: 8, t1: 60, bands: ['vis', 'ir'], freq: ['na589', 'na819', 'ledWhite'], tags: ['time-compressed'], note: 'A mix of new white LED lamps (they switch on instantly, no infrared) and old high-pressure sodium lamps: they strike with a dim bluish-white glow and warm up to orange (minutes in reality, compressed here), with a strong near-infrared line at 819 nm.',
   init() { this.v = new EmField('vis', LAMPS.length); this.i = new EmField('ir', LAMPS.length); this.c = new THREE.Color(); this.lc = LAMPS.map(() => new THREE.Color()); },
   update() { const { t, T } = S, cam = S.camera.position; let sum = 0;

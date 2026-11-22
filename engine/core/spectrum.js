@@ -86,7 +86,6 @@ export const SPECTRUM = {
   airband:         { name: 'VHF airband voice', f: 125e6 },            // 118–137 MHz AM voice (ITU RR Art. 5; ICAO Annex 10 Vol. V)
   ais:             { name: 'AIS ship transponder (VHF)', f: 162e6 },
   satBeacon:       { name: 'satellite VHF beacon', f: 145e6 },
-  radiobeacon:     { name: 'marine radiobeacon', f: 300e3 },
   modeS:           { name: 'aircraft transponder (Mode S / ADS-B)', f: 1090e6 },
   wxRadar:         { name: 'airborne weather radar (X-band)', f: 9.3e9 },
   xbandRadar:      { name: 'ship X-band radar', f: 9.4e9 },
@@ -125,9 +124,9 @@ export const SPECTRUM = {
   wxTelemetry:     { name: 'weather-station telemetry link (VHF)', f: 169.4e6 },
 
   // ===== seaside additions =====
-  aisAtoN:         { name: 'AIS aid-to-navigation broadcast (VHF)', f: 161.975e6 },
+  aisAtoN:         { name: 'AIS aid-to-navigation broadcast (VHF)', f: 161.975e6 },   // AIS 1 (ch. 87B); AIS 2 = 162.025 MHz (ITU-R M.1371-5, ITU RR App. 18)
   vhf16:           { name: 'marine VHF channel 16 voice', f: 156.8e6 },
-  sbandRadar:      { name: 'ship S-band navigation radar (2.9–3.1 GHz)', f: 3.05e9 },
+  sbandRadar:      { name: 'ship S-band navigation radar (2.9–3.1 GHz)', f: 3.05e9 },   // 2900–3100 MHz maritime radionavigation (ITU RR Art. 5); IEC 62388 S-band ship radar
   racon:           { name: 'radar beacon (racon) reply', f: 9.4e9 },
   radarClutter:    { name: 'radar echoes off turbine blades (X-band)', f: 9.4e9 },
   navGreen:        { name: 'green navigation light', lam: 520e-9 },
