@@ -144,13 +144,13 @@ export const SPECTRUM = {
   lteIoT:          { name: 'LTE-M modem (scooters, bus screen)', f: 800e6 },
   tetra:           { name: 'TETRA emergency-services net (380–400 MHz, 77 cm)', f: 390e6 },
   airportASR:      { name: 'airport surveillance radar (ATC primary radar, S-band 2.7–2.9 GHz)', f: 2.8e9 },
-  // DAB+: one continuous COFDM multiplex per block, VHF Band III 174–240 MHz (ETSI EN 300 401); 220 MHz ≈ block 11D/12A
+  // DAB+: one continuous COFDM multiplex per block, VHF Band III 174–240 MHz (ETSI EN 300 401); 220 MHz falls in block 11C (centre 220.352 MHz; ITU-R BS.1660)
   dab:             { name: 'DAB+ digital radio (Band III, continuous OFDM)', f: 220e6 },
   // 50 Hz mains (EN 50160). λ = 6000 km, so anyone within λ/2π ≈ 950 km sits in the quasi-static near field: the line
-  // radiates essentially nothing, and its E/B field falls to background within tens of metres (WHO EHC 238, 2007).
+  // radiates essentially nothing, and its E/B field falls to background within tens to about a hundred metres (WHO EHC 238, 2007).
   // Stylised: drawn as a faint radio glow on the line, which it is not.
   powerHum:        { name: '50 Hz power-line near field (quasi-static, not radiated)', f: 50, stylised: true },
-  // corona discharge on HV conductors and fittings: broadband impulsive noise, strongest below ~30 MHz and worse in
+  // corona discharge on HV conductors and fittings: broadband impulsive noise, strongest at LF/MF (CISPR TR 18 measures at 0.5 MHz), falling off through HF, worse in
   // rain, fog and wet snow (CISPR TR 18-1; EPRI "Transmission Line Reference Book, 345 kV and Above", ch. 7)
   coronaRF:        { name: 'power-line corona noise (broadband HF/VHF)', f: 10e6 },
   // sliding-contact arcs between pantograph and contact wire: broadband impulsive noise from ~100 kHz to a few hundred
@@ -176,7 +176,7 @@ export const SPECTRUM = {
   lidar905:        { name: '905 nm LiDAR pulses', lam: 905e-9 },
   // condensed vapour (steam from a leaking district-heating line, cooling-tower drift): liquid droplets are near-black
   // bodies at 8–14 µm, so the plume shows in thermal IR — the warm, dry air around it does not (air is transparent there)
-  steam:           { name: 'condensed vapour plume: water droplets (~300–320 K)', lam: 9e-6 },
+  steam:           { name: 'condensed vapour plume: water droplets (~300–320 K)', lam: 9.3e-6 },
   // the same droplets (µm–tens of µm, ≫ λ) scatter all visible wavelengths alike (Mie regime: Bohren & Huffman,
   // "Absorption and Scattering of Light by Small Particles", 1983): a pale white plume in the lamplight
   dropletScatter:  { name: 'lamplight scattered by condensed-vapour droplets (white)', lam: 550e-9 },

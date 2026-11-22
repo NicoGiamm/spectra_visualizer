@@ -197,7 +197,7 @@ export const tram = () => event({ name: 'Tram: pantograph arcing', t0: 11, t1: 5
     } },
   where() { return this.p; } });
 
-export const powerlines = () => event({ name: 'Power line: 50 Hz hum & corona', t0: 0, t1: 60, bands: ['radio'], freq: ['powerHum', 'coronaRF'], tags: ['stylised'], note: 'The high-voltage line across the far park carries 50 Hz — a 6000 km wavelength, so it barely radiates: its field is a quasi-static near field that falls to background within tens of metres of the line. Stylised: the faint steady glow on the line stands for that field, which you could never pick up from here. What a radio does hear from the line is the crackle of corona discharge off the conductors and crossarms (worse in rain or fog).',
+export const powerlines = () => event({ name: 'Power line: 50 Hz hum & corona', t0: 0, t1: 60, bands: ['radio'], freq: ['powerHum', 'coronaRF'], tags: ['stylised'], note: 'The high-voltage line across the far park carries 50 Hz — a 6000 km wavelength, so it barely radiates: its field is a quasi-static near field that falls to background within tens to about a hundred metres of the line. Stylised: the faint steady glow on the line stands for that field, which you could never pick up from here. What a radio does hear from the line is the crackle of corona discharge off the conductors and crossarms (worse in rain or fog).',
   init() {
     this.a = [];
     for (const x of PYLONS) { this.a.push(new V3(x, PYLON_H - 4, POWER_Z - 7)); this.a.push(new V3(x, PYLON_H - 10, POWER_Z + 9)); }

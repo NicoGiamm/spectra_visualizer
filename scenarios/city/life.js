@@ -33,7 +33,7 @@ export const cams = () => event({ name: 'Security cameras: 850 nm rings', t0: 12
     }); },
   where: () => null });
 
-// Rooftop cooling towers (the blocks' air-conditioning): their saturated exhaust partly condenses in the humid night
+// Rooftop cooling towers (the office blocks' air-conditioning): their saturated exhaust partly condenses in the humid night
 // air. Droplets, not warm air, are what a thermal camera and the eye both see — air is transparent at 8–14 µm (M2
 // verdict) — so the plume is drawn in IR and as a pale wisp in visible, and nothing is drawn for dry warm exhaust.
 export const hvac = () => event({ name: 'HVAC cooling-tower plumes', t0: 14, t1: 60, bands: ['vis', 'ir'], freq: ['steam', 'dropletScatter'], note: 'The air-conditioning cooling towers on the roofs shed the day\'s heat by evaporating water. On a humid summer night their saturated exhaust partly condenses into a plume over the roof edge: pale in the lamplight, warm in thermal IR because the droplets emit. The dry warm air of an ordinary AC fan would be invisible to both.',
