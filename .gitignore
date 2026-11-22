@@ -231,3 +231,6 @@ shots/
 .claude/worktrees/
 .claude/logs/
 !.claude/lib/
+
+
+index.html

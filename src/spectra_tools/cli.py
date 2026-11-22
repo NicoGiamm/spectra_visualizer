@@ -11,7 +11,8 @@ from typing import Annotated
 from cyclopts import App, Parameter
 
 from . import DIST, ROOT
-from .build import build as build_scenarios, landing
+from .build import build as build_scenarios
+from .build import landing
 from .scenarios import discover
 
 app = App(name="spectra", help="Serve, bundle and screenshot Spectra Visualizer scenarios.")
@@ -117,13 +118,30 @@ def shot(
     from .shot import shot as take
 
     dest = out or Path(f"shots/{scenario}-t{t if t is not None else 0:g}.png")
-    raise SystemExit(take(scenario, dest, t=t, yaw=yaw, pitch=pitch, bands=bands, labels=labels,
-                          size=size, budget=budget, verbose=verbose, detector=detector))
+    raise SystemExit(
+        take(
+            scenario,
+            dest,
+            t=t,
+            yaw=yaw,
+            pitch=pitch,
+            bands=bands,
+            labels=labels,
+            size=size,
+            budget=budget,
+            verbose=verbose,
+            detector=detector,
+        )
+    )
 
 
 @app.command
-def timeline(*scenarios: str, step: float = 0.5, detector: str = "both",
-             json_out: Annotated[bool, Parameter(name="--json")] = False):
+def timeline(
+    *scenarios: str,
+    step: float = 0.5,
+    detector: str = "both",
+    json_out: Annotated[bool, Parameter(name="--json")] = False,
+):
     """Run scenarios headless and print an event gantt plus per-band activity over the 0–60 script.
 
     Parameters

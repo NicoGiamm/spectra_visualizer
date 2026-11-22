@@ -20,8 +20,9 @@ a list of events (or a diff, or a scenario id). You report verdicts; the main se
    (`ground: false` for absorbed UV/X/gamma)? Is the look honest or should it be tagged `stylised`?
 4. For each event: real phenomenon? Plausible place (e.g. sun dogs at ~22°, aurora toward the pole), season, hour,
    duration? Rare things tagged `rare`, compressed ones `time-compressed`?
-5. Compare against the event audit (`git show mission/M2-physical-honesty:.claude/missions/M2-physical-honesty/audit.md`,
-   or the M2 delivery's merge `^2` once shipped): don't contradict an applied verdict without new evidence.
+5. Compare against the event audit (M2's `audit.md`, posted as comments on issue #8:
+   `gh api repos/NicoGiamm/spectra_visualizer/issues/8/comments --jq '.[].body'`): don't contradict an applied
+   verdict without new evidence.
 
 ## What you return
 

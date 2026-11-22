@@ -114,10 +114,16 @@ vec3 surfBands(vec3 W, vec3 N, float inVis){   // inVis = 1 for the faint overla
   }
   if(uSOnM > 0.){                                                     // MICROWAVE
     float Tb = B.x*(T + 273.) + (1. - B.x)*50., x = clamp((Tb - 120.)/180., 0., 1.);
-    vec2 g = floor(W.xz*2.5 + W.y*1.3); float sp = step(.9 - .25*x, h21(g + floor(uSurfTime*10.)))*near;   // crackle only up close
-    vec3 c = mix(vec3(1.,.42,0.), vec3(1.,.85,.2), h21(g*1.7));
-    float tx = txField(uTxM, W, N, 22., 0.), hit = hitField(W);
-    col += uSOnM*c*(x*x*.12 + sp*x*.3 + tx*(.35 + .9*sp)) + uSOnM*vec3(1.,.93,.75)*hit*1.4;
+    // crackle only up close, in cells of ~0.2° (like the emitter crackle): power-of-two world cells so they don't swim
+    float cs = exp2(floor(log2(max(dist*.0035, .03)))); vec3 gc = mod(floor(W/cs), 512.);
+    vec2 g = gc.xz + gc.y*17.31; float sp = step(.96 - .06*x, h21(g + floor(uSurfTime*10.)))*near;
+    vec3 c = mix(vec3(1.,.42,0.), vec3(1.,.85,.2), h21(g*1.7));        // per-cell tint on the sparks only
+    float tx = txField(uTxM, W, N, 22., 0.), txs = tx/(1. + tx), hit = hitField(W);
+    // instrument view with IR on: the thermal palette carries the surfaces, so the smooth Tb/tx wash nearly goes and
+    // the sparks halve; ray-hit flashes (and the Em/Rib/EmField emitters, drawn elsewhere) stay at full brightness.
+    // The faint visible-light overlay keeps its old mean tint (tx unsaturated, no IR toning).
+    float wash = mix((1. - .85*uSOnI)*(x*x*.12 + txs*.22), x*x*.12 + tx*.35, inVis);
+    col += uSOnM*(vec3(1.,.6,.1)*wash + (1. - .5*uSOnI)*c*sp*(x*.3 + txs*.9)) + uSOnM*vec3(1.,.93,.75)*hit*1.4;
   }
   if(uSOnR > 0.){                                                     // RADIO
     col += uSOnR*vec3(1.,.31,.85)*B.w*txField(uTxR, W, N, 700., 9.)*1.1;

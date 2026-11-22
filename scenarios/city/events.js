@@ -6,8 +6,9 @@ import { S } from 'spectra/core/state.js';
 import { event } from 'spectra/core/events.js';
 import { Em, Rib, EmField } from 'spectra/render/sources.js';
 import { solid } from 'spectra/render/instrument.js';
-import { addTx } from 'spectra/render/surface.js';
-import { BUILD, LAMPS, FLATS, PARK_Z, MAST } from './world.js';
+import { addTx, spectral } from 'spectra/render/surface.js';
+import { night, moonlit } from 'spectra/world/atmosphere.js';
+import { BUILD, LAMPS, FLATS, PARK_Z, MAST, PAINT, LIGHT, POOL_FADE } from './world.js';
 
 // Microwave fields are drawn in one fixed orange crackle; multiply it by the per-instance colour so channels can
 // be told apart (white = unchanged). Patched locally so the engine shader stays untouched.
@@ -20,6 +21,7 @@ export const pulse = (x, w) => Math.max(0, 1 - Math.abs(x) / w);   // triangular
 // deterministic burst schedule: 1 while t is within `len` after a tick of period `per` (phase ph)
 export const burst = (t, per, ph, len) => { const u = ((t + ph) % per + per) % per; return u < len ? 1 - u / len : 0; };
 export const inWin = e => S.t >= e.t0 && S.t <= e.t1;   // for update()s that have no envelope of their own
+const LAMP_LUX = 260;   // lamp intensity scale of the streetLight() term (tuned by eye: asphalt under a lamp mid-dark, no bloom)
 export const litNow = t => .06 + .5 * sm(6, 24, t);      // fraction of lit windows (shared with the window shader)
 
 export const windows = () => event({ name: 'Lit windows & heat island', t0: 0, t1: 60, bands: ['vis', 'ir'], freq: ['incandescent', 'ledWhite', 'thermal290'], note: 'Windows and shop fronts light up; on a thermal camera the facades leak heat around the window frames while the glass mirrors the cold sky.',
@@ -29,29 +31,42 @@ export const windows = () => event({ name: 'Lit windows & heat island', t0: 0, t
   where: () => null });
 
 // Half of the avenue has been re-lamped with white LEDs (no infrared); the rest are old high-pressure sodium lamps
-// that strike pink-red, warm up to orange over several minutes and radiate strongly at 819 nm.
-export const streetLights = () => event({ name: 'Street lights', t0: 8, t1: 60, bands: ['vis', 'ir'], freq: ['na589', 'na819', 'ledWhite'], note: 'A mix of new white LED lamps (they switch on instantly, no infrared) and old sodium lamps (slow orange warm-up, strong near-infrared line at 819 nm).',
-  init() { this.v = new EmField('vis', LAMPS.length); this.i = new EmField('ir', LAMPS.length); this.c = new THREE.Color(); },
-  update() { const { t, T } = S; let sum = 0;
+// that strike a dim bluish-white, warm up to orange over several minutes and radiate strongly at 819 nm.
+export const streetLights = () => event({ name: 'Street lights', t0: 8, t1: 60, bands: ['vis', 'ir'], freq: ['na589', 'na819', 'ledWhite'], tags: ['time-compressed'], note: 'A mix of new white LED lamps (they switch on instantly, no infrared) and old high-pressure sodium lamps: they strike with a dim bluish-white glow and warm up to orange (minutes in reality, compressed here), with a strong near-infrared line at 819 nm.',
+  init() { this.v = new EmField('vis', LAMPS.length); this.i = new EmField('ir', LAMPS.length); this.c = new THREE.Color(); this.lc = LAMPS.map(() => new THREE.Color()); },
+  update() { const { t, T } = S, cam = S.camera.position; let sum = 0;
     LAMPS.forEach((l, k) => {
       const t0 = 9 + l.k * 4;
-      if (l.led) { const on = t > t0 ? 1 : 0; sum += on; this.v.color(k, '#eef3ff'); this.v.set(k, l.p, 2.1, on * 1.15); return; }
-      const warm = sm(t0, t0 + 6, t), strike = t > t0 ? 1 : 0, fl = t < t0 + .8 ? .6 + .4 * Math.sin(T * 40 + k) : 1;
+      if (l.led) { const on = t > t0 ? 1 : 0; sum += on; this.v.color(k, '#eef3ff'); this.v.set(k, l.p, 2.1, on * 1.15); this.lc[k].setRGB(.9, .95, 1).multiplyScalar(on); return; }
+      const warm = sm(t0, t0 + 6, t), strike = t > t0 ? 1 : 0, fl = t < t0 + .8 ? .6 + .4 * Math.sin(T * 40 + k) : 1, I = strike * fl * (.25 + .85 * warm);
       sum += warm;
-      this.v.color(k, this.c.setRGB(1, .3 + .42 * warm, .2 + .15 * warm));    // pink-red strike -> orange
-      this.v.set(k, l.p, 2.4, strike * fl * (.25 + .85 * warm)); this.i.set(k, l.p, 3.2, strike * warm * .3);
+      this.v.color(k, this.c.setRGB(.7 + .3 * warm, .75 - .03 * warm, 1 - .65 * warm));    // HPS: dim bluish-white strike -> orange (pink-red is LPS)
+      this.v.set(k, l.p, 2.4, I); this.i.set(k, l.p, 3.2, strike * warm * .3);
+      this.lc[k].copy(this.c).multiplyScalar(I / 1.1);
     });
-    const n = sum / Math.max(1, LAMPS.length); LAMPS.poolMat.color.setScalar(.8 * n); },
+    const n = sum / Math.max(1, LAMPS.length); LAMPS.poolMat.color.setScalar(.8 * n);
+    // the nearest lamps light the street surfaces per pixel (world.js streetLight); they hand over to the pool mesh
+    // over the same distance band the pools fade in, so nothing pops
+    const near = LAMPS.map((l, k) => ({ k, d: l.p.distanceTo(cam) })).sort((a, b) => a.d - b.d);
+    LIGHT.uLampP.value.forEach((v, i) => {
+      const q = near[i], c = LIGHT.uLampC.value[i]; if (!q) { c.set(0, 0, 0, 0); return; }
+      const w = LAMP_LUX * (1 - sm(POOL_FADE[0], POOL_FADE[1], q.d)), lc = this.lc[q.k];
+      v.set(LAMPS[q.k].p.x, LAMPS[q.k].p.y, LAMPS[q.k].p.z, 1); c.set(lc.r * w, lc.g * w, lc.b * w, w > 0 && lc.r + lc.g + lc.b > 0 ? 1 : 0);
+    });
+    // diffuse fill of the lit city at night (sky glow off the cloud deck, facades across the street), then moonlight
+    const ng = night(), ml = moonlit();
+    LIGHT.uCityAmb.value.setRGB(.08 * ng + .025 * ml, .066 * ng + .03 * ml, .054 * ng + .042 * ml); },
   where: () => null });
 
 // Mobile mast on a rooftop on the south side of the avenue, just before the park.
-export const cellTower = () => event({ name: '5G mast', t0: 0, t1: 60, bands: ['micro', 'vis'], freq: ['nr35', 'lte800', 'navRed'], note: 'Sector antennas on a rooftop beam microwave to every phone in the street; red light for aircraft.',
+export const cellTower = () => event({ name: '5G mast', t0: 0, t1: 60, bands: ['micro', 'vis'], freq: ['nr35', 'lte800', 'navRed'], note: 'Sector antennas on a rooftop beam microwave to every phone in the street. The red obstruction light is there because the mast stands under the approach to the airport beyond the park — ordinary rooftop masts don\'t carry one.',
   init() {
     this.big = new Em('micro'); this.pe = MAST.panels.map(() => new Em('micro')); this.red = new Em('vis', '#ff2020');
     addTx('micro', () => ({ p: MAST.panels[0], power: .6 }));      // paints the facades below in the microwave surface term
   },
   update() { const { T } = S;
-    this.big.set(MAST.top, 38, .55); this.pe.forEach((e, k) => e.set(MAST.panels[k], 5, .5 + .5 * Math.max(0, Math.sin(T * 3 + k * 2.1))));
+    this.big.set(MAST.top, Math.min(38, MAST.top.distanceTo(S.camera.position) * .1), .55);   // no metre-wide crackle cells up close
+    this.pe.forEach((e, k) => e.set(MAST.panels[k], 5, .5 + .5 * Math.max(0, Math.sin(T * 3 + k * 2.1))));
     this.red.set(MAST.top, 2.2, T % 1.6 < .5 ? 1.3 : .05); },
   where() { return MAST.top; } });
 
@@ -68,7 +83,7 @@ export const wifi = () => event({ name: 'Wi-Fi routers', t0: 0, t1: 60, bands: [
     FLATS.forEach((q, k) => {
       const home = q.shop ? sm(0, 2, t) : (q.k < lit / .56 ? 1 : 0);
       const b = Math.max(0, Math.sin(t * 2 * q.r + q.ph)) ** 8 * home, d = q.p.distanceTo(cam);
-      this.f.set(k, q.p, q.shop ? 1.6 : 1.3, .12 + b * .55);
+      this.f.set(k, q.p, Math.min(q.shop ? 1.6 : 1.3, d * .1), .12 + b * .55);   // near ones shrink like the haze: a cell stays ~0.2°
       if (b > .3 && d < 45) near.push({ p: q.p, power: .25 * b, d });
     });
     near.sort((a, b) => a.d - b.d); this.near = near.slice(0, 3); },
@@ -86,7 +101,7 @@ export const traffic = () => event({ name: 'Traffic', t0: 0, t1: 60, bands: ['vi
     }
     const n = this.cars.length, m = new THREE.MeshStandardMaterial({ roughness: .4, metalness: .5 });   // bodies and cabins: one instanced draw
     const g = new THREE.InstancedMesh(mergeBoxes(geoB, geoC), m, n); g.instanceMatrix.setUsage(THREE.DynamicDrawUsage); g.frustumCulled = false;
-    this.cars.forEach((c, i) => g.setColorAt(i, c.col)); S.scene.add(solid(g)); this.body = g;
+    this.cars.forEach((c, i) => g.setColorAt(i, c.col)); S.scene.add(spectral(g, PAINT, { weight: 0 })); this.body = g;
     this.hidden = new THREE.Matrix4().makeScale(0, 0, 0);   // one instanced field per light type for all cars
     this.hl = new EmField('vis', n * 2, '#fff4dc'); this.tl = new EmField('vis', n * 2, '#ff2a1a'); this.hot = new EmField('ir', n, null, 1);
     this.rad = new EmField('micro', n); this.tpms = new EmField('micro', n);

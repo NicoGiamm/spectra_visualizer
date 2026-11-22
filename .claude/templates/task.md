@@ -1,13 +1,5 @@
----
-id: {id}
-title: {title}
-status: backlog
-labels: [{labels}]
-started:
-completed:
----
-
-# {id} — {title}
+<!-- spectra:task {id} -->
+**Mission:** #{parent} · **Status:** backlog · **Started:** — · **Completed:** —
 
 ## Goal
 
@@ -15,7 +7,8 @@ completed:
 
 ## Plan
 
-files: <paths this task touches, comma-separated>
+files: <paths this task touches, comma-separated; a directory covers everything under it>
+Depends on: —
 
 - <step>
 
