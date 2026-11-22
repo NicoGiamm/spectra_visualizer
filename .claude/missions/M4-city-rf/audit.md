@@ -22,3 +22,13 @@ Sources cited by the auditor: Direct TPMS (en.wikipedia.org/wiki/Direct_TPMS; ti
 Pawson & Bader 2014 (pubmed 29210222); UWE lamp/insect study; Swann & Digi-Key on 850/940 nm glow; NIST ASD
 (Ne, Na, Hg, Cu I lines); NNDC ENSDF (K-40, Tl-208, Bi-214); ECC Decision (08)05 (TETRA); ITU RR 2.7–2.9 GHz;
 ETSI EN 300 220, EN 301 091; CISPR 15, CISPR TR 18-1 (from reference knowledge, not fetched).
+
+## Second audit — M4's new and changed processes (2026-11-22, physics-auditor, ship gate)
+
+Scope: `dropletScatter` (new), `airArcUV` (new), `arcUV` 340 → 324.7 nm, `arcLight` label, `powerHum` stylised,
+`steam` redefined, `dab` steady, `smpsEMI`, the T4 citation comments; HVAC cooling-tower plumes, police blue/blue.
+VERDICT: ok — values, bands, notes and tags correct; timeline 0 warnings Orbit + Ground.
+Fixed in bd28987: DAB comment block 11D/12A → 11C (220.352 MHz, ITU-R BS.1660); coronaRF strongest at LF/MF
+(CISPR TR 18); powerHum/power-line field to background within tens to ~100 m; steam λ 9 → 9.3 µm; HVAC note "office
+blocks". Not taken: shortening the HVAC plume rise to ~6 m (summer plumes are short) — kept at 12±3 m so they clear
+the parapets and are visible from the walk (T5); the auditor rates 12 m "generous", not wrong.
