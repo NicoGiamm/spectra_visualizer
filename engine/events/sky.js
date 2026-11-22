@@ -392,11 +392,11 @@ export const moonHalo = o => event({ name: 'Moon halo', t0: 48, t1: 60, bands: [
 // First planet and stars: each pops out when the twilight sky falls below its brightness. Naked-eye limiting magnitude
 // vs the Sun's depression δ, roughly: −2 at δ ≈ 2.5–3°, 0 at δ ≈ 4.5–5°, +1 at δ ≈ 6–7° (Schaefer 1993, "Astronomy and
 // the limits of vision", Vistas Astron. 36, 311 — twilight sky brightness vs the eye's threshold); on this timeline
-// δ = 0.55 t − 4, so Jupiter at t ≈ 12, mag-0 stars at t ≈ 16, mag-1 stars at t ≈ 18–20. Positions: a mid-northern
-// summer evening (the noctilucent-cloud season) facing west — Arcturus high in the south-west, Spica low SSW,
-// Regulus west, Pollux low WNW; the planet sits on the ecliptic above the sunset (Jupiter's place changes every year,
-// so it stands for "a bright planet there"). They sink slowly with the sky like Venus (el only; the star-field shader
-// is fixed). Light pollution: Jupiter and mag-0 stars show in a city, mag-1 stars dimmed by ENV.starDim. Venus is its
+// δ = 0.55 t − 4, so Jupiter at t ≈ 12, Arcturus at t ≈ 16, Spica at t ≈ 18.5, Denebola (mag 2, δ 8°) at t ≈ 22. Positions:
+// one late-July evening at ~45°N facing west (the noctilucent-cloud season) — Arcturus high WSW, Spica low SW,
+// Denebola west (Regulus and Pollux have set); the planet sits on the ecliptic above the sunset (Jupiter's place changes every year,
+// so it stands for "a bright planet there"). They sink with the western sky, ~0.5°/unit like the Sun (el only; the
+// star-field shader is fixed). Light pollution: Jupiter and mag-0 stars show in a city, mag-1 stars dimmed by ENV.starDim. Venus is its
 // own event; the faint field comes from the night-sky shader. Jupiter's decametric radio storms (Io-modulated,
 // 10–40 MHz) are bursty and reach ground antennas above the ionospheric cutoff.
 const FIRST_LIGHTS = [   // az, el at t0, magnitude, depression where it pops out (deg), colour
