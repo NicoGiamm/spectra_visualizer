@@ -28,8 +28,10 @@ spectral surfaces (the landscape itself per band) in `engine/render/surface.js`.
    bodies: deer `Rib('ir', null, 4, 1)` + head `Em('ir', null, 1)`, bats, gulls, airliner/ship/car exhausts. Static
    hot sources keep the thermal palette.
 4. **Instrument view** (Visible off): `solid(obj, instrMat?)` registers solids (default dark material); `visOnly()`
-   for sprites that exist only in visible light. Terrain uses `topoMat` (contours) or `gridMat(cell)` for flat ground;
-   both have `uWarm` for an IR heat glow near the viewer.
+   for sprites that exist only in visible light. Terrain, ground and buildings go through `spectral(mesh, preset,
+   { lines: 'topo' | 'grid', … })` (engine/render/surface.js): the surface presets give the per-band look in the
+   instrument view and the faint overlay with Visible on (M1). The older `topoMat` / `gridMat` / `uWarm` in
+   engine/render/instrument.js are no longer used by any scenario — don't build on them.
 5. **Per-instance values passed to fragment shaders must be `flat varying`** — interpolated seeds + hashes = pixel
    noise.
 6. **Pulsar has two opposite arms**, each with one faded sweep ghost; more reads as a windmill.

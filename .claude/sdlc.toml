@@ -1,6 +1,7 @@
-# .claude/sdlc.toml — the SDLC adapter values of this repository: the ONE home of names, paths and the
-# mission/task standard. Read by `.claude/lib/sdlc.py` (mission-tracker and ship clis) and the git_guard hook.
-# The flow they implement is `.claude/sdlc.md`; the conventions are `.claude/rules/missions.md`.
+# .claude/sdlc.toml — the SDLC adapter values of this repository: the ONE home of names, paths, the GitHub board
+# and the mission/task standard. Read by `.claude/lib/sdlc.py` (mission-tracker and ship clis) and the git_guard
+# hook. The flow they implement is `.claude/sdlc.md`; the conventions are `.claude/rules/missions.md`.
+# Planning lives in GitHub Issues + project "Spectralmap" — user decision 2026-11-22.
 
 [repo]
 main_branch = "main"            # the only long-lived branch: missions branch off it and merge back into it
@@ -9,26 +10,56 @@ main_branch = "main"            # the only long-lived branch: missions branch of
 mission_prefix = "mission/"     # mission/M<N>-<slug>, off main, one per mission
 worktrees_dir = ".claude/worktrees"  # worktree of a branch = <worktrees_dir>/<branch with / -> ->
 
+[github]
+repo = "NicoGiamm/spectra_visualizer"  # missions = parent issues, tasks = their sub-issues
+project_owner = "NicoGiamm"
+project_number = 4                     # https://github.com/users/NicoGiamm/projects/4 "Spectralmap"
+project_id = "PVT_kwHOBn2oaM4BsoQ8"    # node id (field/option ids are looked up by name at run time)
+status_field = "Status"                # single-select: Todo / In Progress / Done
+test_label = "test"                    # throw-away harness tests: invisible unless SPECTRA_TEST_ISSUES=1
+
+[github.labels]
+mission = "mission"
+task = "task"
+
+[github.project_status.mission]        # body Status -> project Status (delivered = issue closed as completed)
+proposed = "Todo"
+planned = "Todo"
+active = "In Progress"
+delivered = "Done"
+
+[github.project_status.task]           # done = issue closed as completed; the others open
+backlog = "Todo"
+in-progress = "In Progress"
+done = "Done"
+
 [store]
-missions_dir = ".claude/missions"    # M<N>-<slug>/mission.md + tasks/T<N>-<slug>.md — ONLY on mission branches, never on main
 reserved_numbers = [0, 6]            # M0/M6: phases of the retired improvement plan, done before missions existed
-templates_dir = ".claude/templates"  # mission.md, task.md
-ref_pattern = 'refs M\d+(/T\d+)?'    # every commit on a mission branch carries `(refs M<N>/T<N>)`
+templates_dir = ".claude/templates"  # mission.md, task.md: issue-body templates
+legacy_planning_dir = ".claude/missions"  # the retired file store: stale on old branches, ignored, never merged into main
+ref_pattern = 'refs M\d+(/T\d+)?'    # every commit on a mission branch carries `(refs M<N>/T<k>)` (+ optional `#<issue>`)
 no_mission_token = "[no-mission]"    # a commit straight on main, only when the user says so
 
 [ship]
 state_dir = ".claude/logs"      # review-M<N>.json verdict records, in the main checkout (git-ignored)
 merge = "--no-ff"               # a delivery is one merge commit on main: `git log --first-parent main`
 timeline_gate = ["uv", "run", "spectra", "timeline"]  # must print 0 warning(s) in the worktree before a merge
+quality_gate = [                # each must exit 0 in the worktree before a merge (config: pyproject [tool.ruff], [tool.ty])
+  ["uv", "run", "ruff", "format", "--check", "."],
+  ["uv", "run", "ruff", "check", "."],
+  ["uv", "run", "ty", "check"],
+]
 
-[standard.mission]
-statuses = ["proposed", "planned", "active"]  # delivered = merged + branch deleted (no status)
-required_meta = ["id", "title", "status", "branch", "created"]
+[standard.mission]                   # issue `M<N> — <title>`, body `<!-- spectra:mission M<N> -->` + header line
+statuses = ["proposed", "planned", "active", "delivered"]  # `delivered (<sha>)` = merged, issue closed
+header = ["Branch", "Status", "Created"]
 sections = ["Problem", "Scope", "Delivery", "Current state", "Key decisions", "Tasks", "Log"]
+optional_sections = ["Reference files"]  # M4's migrated audit, posted as comments
+placeholder_free = ["Problem", "Scope", "Delivery"]  # once approved
 
-[standard.task]
+[standard.task]                      # sub-issue `M<N>/T<k> — <title>`, body `<!-- spectra:task M<N>/T<k> -->` + header
 statuses = ["backlog", "in-progress", "done"]
-labels = ["needs-verification", "needs-decision", "blocked", "gap", "bug"]
-required_meta = ["id", "title", "status", "labels"]
+labels = ["needs-verification", "needs-decision", "blocked", "gap", "bug"]  # besides `task`
+header = ["Mission", "Status", "Started", "Completed"]
 sections = ["Goal", "Plan", "Acceptance", "Outcome"]
 optional_sections = ["Notes"]   # allowed between Acceptance and Outcome

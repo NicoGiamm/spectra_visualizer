@@ -21,7 +21,9 @@
       "Bash(uv run .claude/skills/ship/cli.py deliver *)",
       "Bash(uv run .claude/skills/ship/cli.py align *)",
       "EnterWorktree",
-      "ExitWorktree"
+      "ExitWorktree",
+      "Bash(uv run ruff *)",
+      "Bash(uv run ty *)"
     ],
     "ask": [
       "Bash(git push *)",
@@ -88,6 +90,16 @@
             "type": "command",
             "command": "uv run --no-project \"$CLAUDE_PROJECT_DIR/.claude/hooks/check_js.py\"",
             "timeout": 20
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --no-project \"$CLAUDE_PROJECT_DIR/.claude/hooks/python_quality.py\"",
+            "timeout": 120
           }
         ]
       }
