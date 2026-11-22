@@ -25,9 +25,13 @@ place-specific ones in `scenarios/<id>/events.js`. Every event declares the phys
 3. **`where` must be a method, not an arrow, when it reads `this`** (ES modules: arrow `this` is undefined).
    `where: () => null` is fine.
 4. **Every event lists its physical processes in `freq: [...]`** — keys of `SPECTRUM` in `engine/core/spectrum.js`
-   (f / λ / E; bands are derived, `ground: false` = absorbed by the atmosphere, `stylised: true` = not real as drawn).
-   **Add new processes there rather than guessing a band**; never invent a frequency — cite the source in a comment.
-   Optional `tags: ['rare' | 'time-compressed' | 'stylised']`. `spectra timeline` must stay at 0 warnings.
+   (exactly one of `f` Hz / `lam` m / `E` eV; the band is derived by `bandOf()`, `ground: false` = absorbed by the
+   atmosphere, `stylised: true` = not real as drawn). **Add new processes there rather than guessing a band**; never
+   invent a frequency — cite the source in a comment. Optional `tags: ['rare' | 'time-compressed' | 'stylised' |
+   'common']` (panel badges, `engine/ui/style.css`). A `ground: false` process needs its source built with origin
+   `'high'`/`'space'` (render rule 1). `spectra timeline` must stay at 0 warnings: it flags unknown keys, an event
+   with no `freq`, a declared band without a process, a process band not declared, a drawn band not declared, and in
+   Ground mode an absorbed band still drawn or a reachable band hidden.
 5. **Seeded `R` order: append new events after the original list** in each scenario's `events()`; `init()`s draw
    from `R` in list order, so inserting one in the middle reshuffles every layout after it (fixed in 0b4d29e). A
    replacement may take a removed event's slot only if it makes the same number of `R()` draws (see the comment in
@@ -46,4 +50,5 @@ place-specific ones in `scenarios/<id>/events.js`. Every event declares the phys
   and re-runs the physics check in Ground mode — both must stay at 0 warnings.
 - The night is deliberately "one improbable night" (supernova + GRB + FRB + comet): such events carry
   `rare` / `time-compressed` tags rather than being removed (open question Q2, undecided).
-- The per-event physics verdicts live in `audit.md` of mission M2 (on its branch: `git show mission/M2-physical-honesty:.claude/missions/M2-physical-honesty/audit.md`); apply them, don't re-derive.
+- The per-event physics verdicts (M2's `audit.md`, historical) are a comment on the M2 issue (#8,
+  `gh issue view 8 --comments`); the M2 branch is gone. Apply them, don't re-derive.

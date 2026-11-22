@@ -28,6 +28,13 @@ paths:
    fix the message.
 6. **`timeline` reads the page's `?dump` JSON** (`<script id="spectra-dump">`, via `--dump-dom`); changing the dump
    shape in `engine/app.js` means changing `timeline.py` in the same commit.
+7. **What `spectra timeline` reports** (default `--detector both`): the full report in Orbit mode — event gantt with
+   band letters, draw calls of the scene pass at t 5/30/55, source counts, per-band meter fill `1 - exp(-act/norm)`
+   per script second with typical (median while lit), peak and seconds `>0.9` (a note lists bands above 0.9 for
+   more than 20 s), events active, the Orbit physics check — then the physics check re-run in Ground mode. `--json`
+   prints the raw dumps.
+   It exits 1 on a console message or a missing report, **not on physics warnings** — read the `N warning(s)` lines
+   (the `ship merge` timeline gate counts them).
 
 ## Non-derivable facts
 
