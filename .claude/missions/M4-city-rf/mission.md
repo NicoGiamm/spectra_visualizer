@@ -23,7 +23,7 @@ The city was nearly empty in radio and microwave; real cities are dense with Wi-
 
 ## Current state
 
-All 8 tasks done and verified (2026-11-21/22). T1–T5 were implemented on main before missions existed (a9adb2f, 5e7b36b, 82e40cf, 5a36c6d) and are now verified against their Acceptance with the M4 physics audit (audit.md) applied; T7/T8 fixed the visible-light and instrument-view look; T6 tuned meters, draw calls (97/266/266, budget ~400) and the canyon walk pace. Timeline 0 warnings in Orbit and Ground for all three scenarios. Ship gate: first review (head 4516fe3) partial — fixed in 18b1f6b (robot emitters behind the viewer, mast light note); a physics-auditor pass on the new/changed SPECTRUM processes (dropletScatter, airArcUV, arcUV, powerHum, steam, T4 entries) is still due before merging.
+All 8 tasks done and verified (2026-11-21/22). T1–T5 were implemented on main before missions existed (a9adb2f, 5e7b36b, 82e40cf, 5a36c6d) and are now verified against their Acceptance with the M4 physics audit (audit.md) applied; T7/T8 fixed the visible-light and instrument-view look; T6 tuned meters, draw calls (97/266/266, budget ~400) and the canyon walk pace. Timeline 0 warnings in Orbit and Ground for all three scenarios. Ship gate: first review (head 4516fe3) partial — fixed in 18b1f6b (robot emitters behind the viewer, mast light note); the physics-auditor pass on the new/changed SPECTRUM processes (dropletScatter, airArcUV, arcUV, powerHum, steam, T4 entries) is done — verdict ok, its fixes in bd28987, recorded in audit.md ("Second audit"); second review (head a2f17ce) cleared the code, asked only for this record update.
 
 ## Key decisions
 
