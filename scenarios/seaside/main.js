@@ -22,5 +22,6 @@ run({
     sky.purpleLight(), sky.zodiacalLight(), local.seaMist(),
     // M5/T2 maritime life, appended (they draw from R after everything above)
     local.fishingBoats(), local.vhf16(), local.buoys(), local.windFarm(), local.bonfire(),
+    local.seaInterferometer(),
   ],
 });

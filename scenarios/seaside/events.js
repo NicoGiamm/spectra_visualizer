@@ -8,7 +8,7 @@ import { deg, dirAE, skyP, onSky } from 'spectra/core/geom.js';
 import { Em, Rib, EmField } from 'spectra/render/sources.js';
 import { solid } from 'spectra/render/instrument.js';
 import { SUN_AZ, sunEl } from 'spectra/world/atmosphere.js';
-import { coastZ, heightAt, SEA, STAND, ENVSEA, COAST_STATION } from './world.js';
+import { coastZ, heightAt, SEA, STAND, ENVSEA, COAST_STATION, CLIFF_ANT } from './world.js';
 import { spectralGroup, addTx } from 'spectra/render/surface.js';
 
 // The last sliver of Sun flashes green as it drops under a sharp sea horizon (sunEl crosses 0 at t≈7.3).
@@ -293,3 +293,11 @@ export const bonfire = () => event({ name: 'Beach bonfire', t0: 28, t1: 60, band
       const lt = ((t + k * .7) % 3) / 3; if (lt < .08) this.ph.set(k, hand, .8, I * .6 * (1 - lt / .08)); });   // LTE ping
     const sp = this.pp[0].p, bt = (T * 3) % 1; this.ph.set(PEOPLE, new V3(sp.x + .4, sp.y + .2, sp.z), .5, I * (bt < .5 ? .3 : .15)); },   // A2DP stream: steady 2.4 GHz traffic
   where() { return FIRE.clone().add(new V3(0, 1.5, 0)); } });
+
+// The cliff-top Yagi listens to the radio sky directly and via the sea: a Lloyd's-mirror interferometer (the fringes
+// are drawn by the sea shader in world.js, see LLOYD_LAMBDA). The antenna only receives, so the event draws no source
+// of its own; it names what the radio sea shows. Sources' meter activity comes from their own events.
+export const seaInterferometer = () => event({ name: 'Sea interferometer', t0: 0, t1: 60, bands: ['radio'], freq: ['lloydFringe'],
+  note: 'The antenna on the cliff hears each radio source twice, straight from the sky and reflected off the sea. The two paths interfere, so the signal swells and fades as a source rises or sets: Lloyd\'s mirror, the trick Australian radio astronomers used from sea cliffs in the late 1940s to pin down the first radio sources. On the radio sea, the bars under the setting Sun are those fringes.',
+  init() {}, update() {},
+  where: () => CLIFF_ANT.clone().add(new V3(0, 7, 0)) });
