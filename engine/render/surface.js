@@ -20,14 +20,14 @@ import * as THREE from 'three';
 import { V3, sm } from '../core/util.js';
 import { S } from '../core/state.js';
 import { COMMON } from './shaders.js';
-import { solid } from './instrument.js';
+import { solid, SURF_BASE } from './instrument.js';
 
 export const OVERLAY = { value: .12 };
 const MAX_TX = 8, MAX_HIT = 12;
 const vec4s = () => Array.from({ length: MAX_TX }, () => new THREE.Vector4());
 export const SURF_U = {
   uSOnR: { value: 0 }, uSOnM: { value: 0 }, uSOnI: { value: 0 }, uSOnU: { value: 0 }, uSOnG: { value: 0 },
-  uOverlay: OVERLAY, uSurfT: { value: 0 }, uUVsky: { value: 0 }, uSurfTime: S.TIME,
+  uOverlay: OVERLAY, uBase: SURF_BASE, uRadioDiffuse: { value: 1 }, uSurfT: { value: 0 }, uUVsky: { value: 0 }, uSurfTime: S.TIME,
   uTxR: { value: vec4s() }, uTxM: { value: vec4s() },
   uHitM: { value: Array.from({ length: MAX_HIT }, () => new THREE.Vector4()) },
 };
@@ -126,7 +126,7 @@ varying vec4 vSurfA; varying vec4 vSurfB; varying vec4 vSurfC;
 #else
 uniform vec4 uSurfA, uSurfB, uSurfC;
 #endif
-uniform float uSOnR, uSOnM, uSOnI, uSOnU, uSOnG, uOverlay, uSurfT, uUVsky, uSurfTime;
+uniform float uSOnR, uSOnM, uSOnI, uSOnU, uSOnG, uOverlay, uBase, uRadioDiffuse, uSurfT, uUVsky, uSurfTime;
 uniform vec4 uTxR[${MAX_TX}], uTxM[${MAX_TX}], uHitM[${MAX_HIT}];
 // ray hit flashes: a spot (~2 m) on the hit face, brighter in the middle
 float hitField(vec3 W){
@@ -173,7 +173,7 @@ vec3 surfBands(vec3 W, vec3 N, float inVis){   // inVis = 1 for the faint overla
     col += uSOnM*(vec3(1.,.6,.1)*wash + (1. - .5*uSOnI)*c*sp*(x*.3 + txs*.9)) + uSOnM*vec3(1.,.93,.75)*hit*1.4;
   }
   if(uSOnR > 0.){                                                     // RADIO
-    col += uSOnR*vec3(1.,.31,.85)*B.w*txField(uTxR, W, N, 700., 9.)*1.1;
+    col += uSOnR*uRadioDiffuse*vec3(1.,.31,.85)*B.w*txField(uTxR, W, N, 700., 9.)*1.1;
   }
   if(uSOnU > 0.){                                                     // ULTRAVIOLET
     col += uSOnU*vec3(.62,.3,1.)*B.y*uUVsky*(.35 + .65*max(N.y, 0.))*1.3;
@@ -206,7 +206,7 @@ function instrumentMaterial(props, { lines = 'none', cell = 25, extraDecl = '', 
         ${lines === 'topo' ? `float q = W.y/20., f = fract(q); line = (1. - smoothstep(0., fwidth(q)*1.2, min(f, 1. - f)))*(1. - smoothstep(300., 5500., dist));` : ''}
         ${lines === 'grid' ? `vec2 q = W.xz/${cell.toFixed(1)}, f = abs(fract(q) - .5), w = fwidth(q)*1.2;
           line = max(smoothstep(.5 - w.x, .5, f.x), smoothstep(.5 - w.y, .5, f.y))*(1. - smoothstep(.12, .35, max(w.x, w.y)))*(1. - smoothstep(200., 4000., dist));` : ''}
-        vec3 c = vec3(.006,.007,.014) + vec3(.16,.2,.42)*line*.8 + surfBands(W, N, 0.);
+        vec3 c = uBase*(vec3(.006,.007,.014) + vec3(.16,.2,.42)*line*.8) + surfBands(W, N, 0.);
         ${instrExtra}
         gl_FragColor = vec4(c, 1.);
       }`,

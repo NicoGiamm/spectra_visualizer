@@ -15,6 +15,14 @@ export function solid(obj, instr) {
   return obj;
 }
 export function visOnly(obj) { VIS_ONLY.push(obj); return obj; }
+// The detector view's dark base and structure lines are a display aid, not emission: the spectral eye's band
+// layers (engine/render/compose.js) turn them off (black) so a layer holds only what the band really sees.
+const darkCol = darkMat.color.clone(), lineCol = lineMat.color.clone();
+export function setInstrumentBase(on) {
+  darkMat.color.copy(on ? darkCol : new THREE.Color(0)); lineMat.color.copy(on ? lineCol : new THREE.Color(0));
+  SURF_BASE.value = on ? 1 : 0;
+}
+export const SURF_BASE = { value: 1 };   // read by the surface instrument materials (engine/render/surface.js uBase)
 
 let visMode = true;
 export function applyVisMode(vis) {

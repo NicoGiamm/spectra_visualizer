@@ -164,7 +164,7 @@ vec3 seaBands(vec3 W, vec3 N, vec3 V, vec3 Rf, float dist, float foam, float inV
     col += uSOnM*vec3(1.,.55,.08)*cl*.15;
   }
   if(uSOnR > 0.){                                   // RADIO: transmitters paint the water; the sea mirrors the radio sky
-    col += uSOnR*vec3(1.,.31,.85)*.9*txField(uTxR, W, N, 700., 9.)*1.1;
+    col += uSOnR*uRadioDiffuse*vec3(1.,.31,.85)*.9*txField(uTxR, W, N, 700., 9.)*1.1;
     // Sea interferometer: each source's mirror image is as bright as the cliff antenna's fringe at the source's
     // elevation; below it, a column at the source's azimuth maps the antenna's lobe pattern against the elevation the
     // flat sea reflects there (depression = elevation), so the image slides through the lobes as the source moves.
@@ -213,7 +213,7 @@ function seaMaterial(instr) {
 #ifdef SEA_INSTR
       vec2 q = W.xz/40., f = abs(fract(q) - .5), w = fwidth(q)*1.2;
       float line = max(smoothstep(.5 - w.x, .5, f.x), smoothstep(.5 - w.y, .5, f.y))*(1. - smoothstep(.12, .35, max(w.x, w.y)))*(1. - smoothstep(200., 4000., dist));
-      gl_FragColor = vec4(vec3(.006,.007,.014) + vec3(.16,.2,.42)*line*.8 + seaBands(W, N, V, Rf, dist, foam, 0.), 1.);
+      gl_FragColor = vec4(uBase*(vec3(.006,.007,.014) + vec3(.16,.2,.42)*line*.8) + seaBands(W, N, V, Rf, dist, foam, 0.), 1.);
 #else
       float fres = .02 + .98*pow(1. - clamp(dot(-V, N), 0., 1.), 5.);   // clamp: pow(<0) is NaN on GPUs
       vec3 skyc = mix(uHor, uSky, smoothstep(0., .35, Rf.y));
