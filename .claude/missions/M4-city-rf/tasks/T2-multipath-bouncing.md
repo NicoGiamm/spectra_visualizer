@@ -2,7 +2,7 @@
 id: M4/T2
 title: Multipath bouncing
 status: done
-labels: [needs-verification]
+labels: []
 started: 2026-11-21
 completed: 2026-11-21
 ---

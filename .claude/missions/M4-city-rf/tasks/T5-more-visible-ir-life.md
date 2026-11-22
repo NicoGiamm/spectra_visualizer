@@ -2,7 +2,7 @@
 id: M4/T5
 title: More visible/IR life
 status: done
-labels: [needs-verification]
+labels: []
 started: 2026-11-21
 completed: 2026-11-21
 ---
