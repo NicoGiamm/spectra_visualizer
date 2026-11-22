@@ -88,7 +88,7 @@ export const PRESET = {
   asphalt:  P(38, 17, 30, .95, .88, .05, .3, .5),
   // μ ~2200 [Oke]. eIR .93 [EL]; eMW .88 [UMF]; uvAlb .1 (0.07–0.10) [FG]; gamma .4 (typical concrete ~0.42 of granite) [RP112]
   concrete: P(32, 16, 30, .93, .88, .1, .4, .6),
-  // brick/plaster walls with heated interiors behind them (Teq kept high by the interior — STAND-IN). eIR .9
+  // brick/plaster walls with heated interiors behind them (Teq kept high and tau held up by the interior — STAND-IN). eIR .9
   // (brick 0.90–0.93) [EL]; eMW .85 [UMF]; uvAlb .08 — STAND-IN (like concrete, a bit darker); gamma .5 (brick ~0.65, plaster far lower: a mix) [RP112]
   facade:   P(26, 19, 40, .9, .85, .08, .5, .8),
   // μ ~380 [Oke] (below sand and soil, so it cools faster than both); eIR .9 (0.90–0.95) [EL]; eMW .9 [UMF]; uvAlb .05 — STAND-IN (dark organic surface, like soil [FG]);
