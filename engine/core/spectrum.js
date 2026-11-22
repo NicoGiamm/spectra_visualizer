@@ -82,8 +82,8 @@ export const SPECTRUM = {
   luciferin:       { name: 'firefly bioluminescence', lam: 560e-9 },
   dinoflagellate:  { name: 'plankton bioluminescence', lam: 475e-9 },
   // --- radio & microwave technology ---
-  fm:              { name: 'FM broadcast', f: 100e6 },
-  airband:         { name: 'VHF airband voice', f: 125e6 },
+  fm:              { name: 'FM broadcast', f: 100e6 },                 // 87.5–108 MHz broadcast band (ITU RR Art. 5, Region 1)
+  airband:         { name: 'VHF airband voice', f: 125e6 },            // 118–137 MHz AM voice (ITU RR Art. 5; ICAO Annex 10 Vol. V)
   ais:             { name: 'AIS ship transponder (VHF)', f: 162e6 },
   satBeacon:       { name: 'satellite VHF beacon', f: 145e6 },
   radiobeacon:     { name: 'marine radiobeacon', f: 300e3 },
@@ -144,19 +144,42 @@ export const SPECTRUM = {
   lteIoT:          { name: 'LTE-M modem (scooters, bus screen)', f: 800e6 },
   tetra:           { name: 'TETRA emergency-services net (380–400 MHz, 77 cm)', f: 390e6 },
   airportASR:      { name: 'airport surveillance radar (ATC primary radar, S-band 2.7–2.9 GHz)', f: 2.8e9 },
-  dab:             { name: 'DAB+ digital radio (Band III)', f: 220e6 },
-  powerHum:        { name: '50 Hz power-line field (ELF)', f: 50 },
+  // DAB+: one continuous COFDM multiplex per block, VHF Band III 174–240 MHz (ETSI EN 300 401); 220 MHz falls in block 11C (centre 220.352 MHz; ITU-R BS.1660)
+  dab:             { name: 'DAB+ digital radio (Band III, continuous OFDM)', f: 220e6 },
+  // 50 Hz mains (EN 50160). λ = 6000 km, so anyone within λ/2π ≈ 950 km sits in the quasi-static near field: the line
+  // radiates essentially nothing, and its E/B field falls to background within tens to about a hundred metres (WHO EHC 238, 2007).
+  // Stylised: drawn as a faint radio glow on the line, which it is not.
+  powerHum:        { name: '50 Hz power-line near field (quasi-static, not radiated)', f: 50, stylised: true },
+  // corona discharge on HV conductors and fittings: broadband impulsive noise, strongest at LF/MF (CISPR TR 18 measures at 0.5 MHz), falling off through HF, worse in
+  // rain, fog and wet snow (CISPR TR 18-1; EPRI "Transmission Line Reference Book, 345 kV and Above", ch. 7)
   coronaRF:        { name: 'power-line corona noise (broadband HF/VHF)', f: 10e6 },
+  // sliding-contact arcs between pantograph and contact wire: broadband impulsive noise from ~100 kHz to a few hundred
+  // MHz, the reason railways have their own EMC standard (EN 50121-2); 30 MHz stands in for the band
   arcRF:           { name: 'pantograph arcing (broadband radio)', f: 30e6 },
-  arcLight:        { name: 'copper arc light (blue-white)', lam: 450e-9 },
-  arcUV:           { name: 'arc UVA emission', lam: 340e-9 },
-  smpsEMI:         { name: 'LED-driver switching interference', f: 30e6 },
+  // a short arc in air: N₂ second-positive bands (337–434 nm), N II/O II ion lines and the electrode metal's lines (Cu I
+  // 510–522 nm for a copper wire) add up to blue-white; 450 nm stands for the visible mix (line data: NIST ASD)
+  arcLight:        { name: 'electric arc in air: N₂ and metal lines, blue-white', lam: 450e-9 },
+  // Cu I resonance line 324.75 nm (3d¹⁰4s ²S½ – 3d¹⁰4p ²P°3/2; NIST ASD), the strongest UV line of a copper arc
+  arcUV:           { name: 'arc UV: Cu I resonance line 324.7 nm', lam: 324.7e-9 },
+  // N₂ second-positive system (C³Πu → B³Πg), 0–0 band head at 337.1 nm — the strongest UV emission of any spark in air
+  // (the nitrogen-laser line; Lofthus & Krupenie, J. Phys. Chem. Ref. Data 6, 113, 1977). Bug-zapper grids are steel
+  // or zinc-plated, not copper, so their spark's UV is the air's own, not arcUV's Cu I line
+  airArcUV:        { name: 'spark in air: N₂ second-positive band 337.1 nm', lam: 337.1e-9 },
+  // LED drivers switch at 20 kHz–1 MHz; the fast edges' harmonics are conducted and radiated up into the HF/VHF range
+  // (CISPR 15 sets limits for lighting from 9 kHz to 300 MHz); 30 MHz stands in for that harmonic comb. The visible
+  // flicker of a cheap driver is the rectified mains ripple at 100 Hz, a different thing.
+  smpsEMI:         { name: 'LED-driver switching interference (kHz–MHz switching harmonics)', f: 30e6 },
   neon:            { name: 'neon discharge 640 nm', lam: 640.2e-9 },
   ledBlue:         { name: 'blue LED light bar', lam: 465e-9 },
   ledAmber:        { name: 'amber LED indicator', lam: 590e-9 },
   ir850:           { name: '850 nm IR illuminator', lam: 850e-9 },
   lidar905:        { name: '905 nm LiDAR pulses', lam: 905e-9 },
-  steam:           { name: 'warm moist exhaust/steam (~320 K)', lam: 9e-6 },
+  // condensed vapour (steam from a leaking district-heating line, cooling-tower drift): liquid droplets are near-black
+  // bodies at 8–14 µm, so the plume shows in thermal IR — the warm, dry air around it does not (air is transparent there)
+  steam:           { name: 'condensed vapour plume: water droplets (~300–320 K)', lam: 9.3e-6 },
+  // the same droplets (µm–tens of µm, ≫ λ) scatter all visible wavelengths alike (Mie regime: Bohren & Huffman,
+  // "Absorption and Scattering of Light by Small Particles", 1983): a pale white plume in the lamplight
+  dropletScatter:  { name: 'lamplight scattered by condensed-vapour droplets (white)', lam: 550e-9 },
   // natural radioactivity of building stone (K-40 line; Tl-208 from the thorium chain; Bi-214 from the uranium/radon chain)
   k40Gamma:        { name: 'K-40 gamma line (1.46 MeV, granite & brick)', E: 1.461e6 },
   tl208Gamma:      { name: 'Tl-208 gamma line (2.61 MeV, thorium chain)', E: 2.614e6 },

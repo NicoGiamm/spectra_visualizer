@@ -4,7 +4,7 @@
 // lawns cool fast, facades leak heat around their windows and the glass mirrors the cold sky in IR.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { V3, sm, R, noise2, hash2 } from 'spectra/core/util.js';
+import { V3, sm, R, noise2, hash2, PLAY } from 'spectra/core/util.js';
 import { S } from 'spectra/core/state.js';
 import { solid, visOnly } from 'spectra/render/instrument.js';
 import { spectral } from 'spectra/render/surface.js';
@@ -13,6 +13,9 @@ import { softTex } from 'spectra/render/textures.js';
 
 export const ROAD = 8, WALK = 4.5;                 // half-width of the carriageway, sidewalk width
 export const PARK_Z = -15;                         // the canyon ends here; park to the west
+// walk: script time at which the viewer reaches the park edge, z there (the old script-time walk's value, so the park
+// stretch is unchanged), and the real seconds it takes to get there (the canyon is walked at an even real pace)
+const WALK_TC = 41.3, WALK_ZC = 80 - 2.3 * WALK_TC + .75 * (WALK_TC - 41), WALK_RC = PLAY.real(WALK_TC);
 export const FACE_X = ROAD + WALK + 1;             // street-front facades stand at x = ±FACE_X
 export const SIDEWALK_X = ROAD + WALK * .55;       // where the viewer walks (north side, +x)
 export const TRAM_Z = PARK_Z - 7;                  // tram line on the cross street at the park edge
@@ -37,6 +40,34 @@ export const POWER_Z = PARK_Z - 650, PYLON_H = 38;
 
 // shared window uniforms: fraction of windows lit, shop fronts lit (visible light)
 export const BUILD = { lit: { value: 0 }, shop: { value: 0 } };
+
+// Visible-light street lighting of the street surfaces (asphalt, sidewalks, kerbs, facades, parked cars). The
+// scene's own lights are only the shared sky (hemi + moon), which leaves these dark surfaces black at night; real
+// point lights would add a lighting loop to every material in the scene, so the nearest LAMP_N lamps are uploaded
+// as uniforms by the streetLights event and lit here: 1/d², Lambert, full-cutoff optics (nothing above ~80° from
+// nadir), most of the flux thrown to the street side (the facades behind the pole get ~30 %). Farther lamps keep the
+// cheap merged light-pool mesh. uCityAmb is the diffuse fill of a lit city at night (sky glow off the low cloud deck,
+// windows and signs across the street, later the moon), so walls never go black.
+export const LAMP_N = 16, POOL_FADE = [62, 88];          // per-pixel lamps, then the pool mesh beyond 62–88 m
+export const LIGHT = {
+  uLampP: { value: Array.from({ length: LAMP_N }, () => new THREE.Vector4()) },   // xyz = lamp head
+  uLampC: { value: Array.from({ length: LAMP_N }, () => new THREE.Vector4()) },   // rgb = colour × intensity, w > 0 = live
+  uCityAmb: { value: new THREE.Color(0, 0, 0) },
+};
+const LAMP_GLSL = `
+uniform vec4 uLampP[${LAMP_N}], uLampC[${LAMP_N}]; uniform vec3 uCityAmb;
+vec3 streetLight(vec3 W, vec3 N){
+  vec3 e = uCityAmb*(.55 + .45*max(N.y, 0.));
+  for(int i = 0; i < ${LAMP_N}; i++){ if(uLampC[i].w <= 0.) continue;
+    vec3 L = uLampP[i].xyz - W; float d2 = dot(L, L); L *= inversesqrt(max(d2, 1e-4));
+    float house = smoothstep(4.5, 7., (W.x - uLampP[i].x)*sign(uLampP[i].x));   // past the sidewalk: house-side shield
+    e += uLampC[i].rgb*max(dot(N, L), 0.)*smoothstep(.12, .45, L.y)*(1. - .7*house)/(d2 + 4.); }
+  return e;
+}
+`;
+// added after the standard lighting, before fog and tone mapping (diffuseColor = albedo incl. instance colour)
+// soft knee l/(1+l): a pale car roof right under a lamp stays under the bloom threshold (.9) instead of flaring
+const LIT = { extraDecl: LAMP_GLSL, visExtra: 'vec3 sl = diffuseColor.rgb*streetLight(W, N); gl_FragColor.rgb += sl/(1. + sl);', uniforms: LIGHT };
 
 // local surface presets (same shape as PRESET): metal poles/rails/units, car paint, painted road marks
 const P = (T0, Teq, tau, eIR, eMW, uvAlb, gamma, rRadio, gloss = 0) => ({ A: [T0, Teq, tau ? 1 / tau : 0, eIR], B: [eMW, uvAlb, gamma, rRadio], C: [gloss, 0, 0, 0] });
@@ -63,6 +94,8 @@ vec3 winParts(vec3 wp, vec3 n, out vec2 cell){
   float ring = step(.12,fr.x)*step(fr.x,.88)*step(.14,fr.y)*step(fr.y,.86) - pane;
   return vec3(pane, ring, smoothstep(.1, .35, max(fw.x, fw.y)));
 }
+// position inside the window bay (0..1), same grid as winParts
+vec2 winFr(vec3 wp, vec3 n){ vec2 f = abs(n.x) > .5 ? vec2(wp.z, wp.y) : vec2(wp.x, wp.y); return fract(f/vec2(2.7, 3.4)); }
 // street-facing ground floor of the front blocks: shop windows
 float shopFront(vec3 wp, vec3 n, out float sc){
   sc = floor(wp.z/6.) + step(0., wp.x)*131.;
@@ -76,14 +109,24 @@ function buildingMaterial() {
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .85, metalness: .05 });
   mat.onBeforeCompile = sh => {
     sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-      { vec2 cell; vec3 wp = winParts(vSurfW, vSurfN, cell); float h = h21(cell);
-        vec3 wc = mix(vec3(1.,.66,.32), vec3(.7,.82,1.), step(.72, h21(cell*1.31 + 3.)))*(.8 + .6*h21(cell*2.7));
+      { vec2 cell; vec3 wp = winParts(vSurfW, vSurfN, cell); float h = h21(cell);   // same cell seeds as the IR heat leaks
+        // interior light per window: warm incandescent / warm-white LED / cool LED or a TV, some only a lamp at the
+        // back (dim); peak linear values stay ~.4 so ACES keeps the hue and the bloom threshold (.9) is never reached
+        float hk = h21(cell*1.31 + 3.), hb = h21(cell*2.7), hd = h21(cell*4.1 + 7.), hc = h21(cell*3.3 + 1.);
+        vec3 wc = hk < .45 ? vec3(1.,.55,.22) : hk < .75 ? vec3(1.,.7,.42) : vec3(.6,.74,1.);
+        wc *= (.17 + .2*hb)*(hd < .25 ? .3 : 1.);
+        vec2 fr = winFr(vSurfW, vSurfN); float u = (fr.x - .2)/.6, v = (fr.y - .22)/.56;
+        float cw = step(.4, hc)*(.12 + .3*hc);                          // curtains drawn in from both sides
+        float curt = step(u, cw) + step(1. - cw, u);
+        wc *= mix(.8 + .3*v, .3, curt)*mix(vec3(1.), vec3(1.,.7,.45), curt);   // brighter under the ceiling; fabric warms and dims
         float face = step(abs(vSurfN.y), .5)*step(3.2, vSurfW.y);
-        totalEmissiveRadiance += mix(wp.x*step(h, uLit)*wc*.62, face*.12*uLit*vec3(.92,.7,.5), wp.z);   // .62: keeps the hue instead of clipping to flat beige up close
+        totalEmissiveRadiance += mix(wp.x*step(h, uLit)*wc, face*.336*uLit*vec3(.9,.62,.38)*.2, wp.z);   // far: the pane-area average
         float sc, sf = shopFront(vSurfW, vSurfN, sc);
-        // shop window: mullions every ~1.5 m, a dark stall riser at the bottom, brighter towards the ceiling lights
-        float mul = step(.07, fract(vSurfW.z/1.5 + .5)), rise = smoothstep(.75, .95, vSurfW.y), top = .7 + .3*smoothstep(1., 2.8, vSurfW.y);
-        totalEmissiveRadiance += sf*mul*rise*top*uShop*mix(vec3(1.,.78,.5), vec3(.75,.88,1.), step(.55, h21(vec2(sc, 9.))))*(.22 + .3*h21(vec2(sc, 5.))); }`);
+        // shop window: mullions every ~1.5 m, a dark stall riser at the bottom, brighter towards the ceiling lights;
+        // warm / neutral / cool fittings, a few shops closed with only a night light on
+        float mul = step(.07, fract(vSurfW.z/1.5 + .5)), rise = smoothstep(.75, .95, vSurfW.y), top = .65 + .35*smoothstep(1., 2.8, vSurfW.y);
+        float hs = h21(vec2(sc, 9.)); vec3 scol = hs < .4 ? vec3(1.,.66,.36) : hs < .75 ? vec3(1.,.82,.62) : vec3(.68,.82,1.);
+        totalEmissiveRadiance += sf*mul*rise*top*uShop*scol*(.07 + .11*h21(vec2(sc, 5.)))*(h21(vec2(sc, 11.)) < .2 ? .25 : 1.); }`);
   };
   return mat;
 }
@@ -111,22 +154,22 @@ const TCORE_VS = { vertDecl: 'attribute float aTcore; flat varying float vTcore;
 function ground() {
   const add = (w, d, x, z, color, y, preset, opts) => {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshStandardMaterial({ color, roughness: .95 }));
-    m.rotation.x = -Math.PI / 2; m.position.set(x, y, z); S.scene.add(spectral(m, preset, { lines: 'grid', cell: 12, ...opts })); return m;
+    m.rotation.x = -Math.PI / 2; m.position.set(x, y, z); S.scene.add(spectral(m, preset, { lines: 'grid', cell: 12, ...LIT, ...opts })); return m;
   };
   add(40000, 40000, 0, 0, 0x0d0e0f, -.02, 'concrete', { weight: .25 });                 // general ground
-  add(ROAD * 2, 1800, 0, -100, 0x111214, .01, 'asphalt', { weight: .35 });              // the avenue runs on through the park
-  add(900, 8, 0, TRAM_Z, 0x121315, .012, 'asphalt', { weight: .05 });                   // cross street with the tram line
+  add(ROAD * 2, 1800, 0, -100, 0x26272a, .01, 'asphalt', { weight: .35 });              // the avenue runs on through the park (aged asphalt: dark grey)
+  add(900, 8, 0, TRAM_Z, 0x26272a, .012, 'asphalt', { weight: .05 });                   // cross street with the tram line
   const walks = new THREE.Mesh(mergeGeometries([-1, 1].map(s => { const g = new THREE.PlaneGeometry(WALK, 1800); g.rotateX(-Math.PI / 2); g.translate(s * (ROAD + WALK / 2), .03, -100); return g; })),
     new THREE.MeshStandardMaterial({ color: 0x2a2826, roughness: .95 }));
-  S.scene.add(spectral(walks, 'concrete', { lines: 'grid', cell: 3, weight: .2 }));     // sidewalks / park paths: one draw
+  S.scene.add(spectral(walks, 'concrete', { lines: 'grid', cell: 3, weight: .2, ...LIT }));     // sidewalks / park paths: one draw
   add(1200, 1000, 0, PARK_Z - 500, 0x0b1408, 0, 'meadow', { weight: .45 });             // park lawn
   const marks = [];                                                                     // centre line + crossing: one merged mesh
   for (let z = -900; z < 700; z += 9) { const g = new THREE.PlaneGeometry(.18, 3.2); g.rotateX(-Math.PI / 2); g.translate(0, .02, z); marks.push(g); }
   for (let x = -ROAD + .5; x < ROAD; x += 1.2) { const g = new THREE.PlaneGeometry(.6, 3.5); g.rotateX(-Math.PI / 2); g.translate(x, .021, PARK_Z - 2); marks.push(g); }
-  S.scene.add(spectral(new THREE.Mesh(mergeGeometries(marks), new THREE.MeshStandardMaterial({ color: 0x8a8478, roughness: .95 })), MARK, { lines: 'grid', cell: 12, weight: 0 }));
+  S.scene.add(spectral(new THREE.Mesh(mergeGeometries(marks), new THREE.MeshStandardMaterial({ color: 0x8a8478, roughness: .95 })), MARK, { lines: 'grid', cell: 12, weight: 0, ...LIT }));
   // granite kerbs along both sides of the avenue (one merged mesh)
   const kerbs = [-1, 1].map(s => { const g = new THREE.BoxGeometry(.3, .14, 1100); g.translate(s * (ROAD + .15), .07, -200); return g; });
-  S.scene.add(spectral(new THREE.Mesh(mergeGeometries(kerbs), new THREE.MeshStandardMaterial({ color: 0x5a5856, roughness: .8 })), GRANITE, { weight: .03 }));
+  S.scene.add(spectral(new THREE.Mesh(mergeGeometries(kerbs), new THREE.MeshStandardMaterial({ color: 0x5a5856, roughness: .8 })), GRANITE, { weight: .03, ...LIT }));
   for (const s of [-1, 1]) KERBS.push({ x: s * (ROAD + .15), z0: -750, z1: 350 });
 }
 
@@ -162,7 +205,7 @@ function buildings() {
   box.setAttribute('aTcore', new THREE.InstancedBufferAttribute(tc, 1));
   const mesh = new THREE.InstancedMesh(box, buildingMaterial(), M.length);
   M.forEach((m, i) => { mesh.setMatrixAt(i, m); mesh.setColorAt(i, C[i]); });
-  S.scene.add(spectral(mesh, 'facade', { weight: .8, extraDecl: WIN_GLSL, instrExtra: WIN_IR, uniforms: { uLit: BUILD.lit, uShop: BUILD.shop }, ...TCORE_VS }));
+  S.scene.add(spectral(mesh, 'facade', { weight: .8, extraDecl: WIN_GLSL + LAMP_GLSL, visExtra: LIT.visExtra, instrExtra: WIN_IR, uniforms: { uLit: BUILD.lit, uShop: BUILD.shop, ...LIGHT }, ...TCORE_VS }));
   return front;
 }
 
@@ -244,6 +287,11 @@ function lamps(metal) {
   // the avenue was half re-lamped with LEDs; the park paths still have the old sodium lamps
   for (let z = PARK_Z + 6; z < 420; z += 24) { place(ROAD + .6, z, 1, .55); place(-ROAD - .6, z + 12, -1, .55); }
   for (let z = PARK_Z - 18; z > PARK_Z - 700; z -= 30) { place(ROAD + .6, z, 1, .15); place(-ROAD - .6, z - 15, -1, .15); }
+  // far field only: within ~70 m the per-pixel streetLight() term (nearest LAMP_N lamps) lights the ground instead
+  poolMat.onBeforeCompile = sh => {
+    sh.vertexShader = 'varying vec3 vPoolW;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvPoolW = (modelMatrix*vec4(position, 1.)).xyz;');
+    sh.fragmentShader = 'varying vec3 vPoolW;\n' + sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>\ndiffuseColor.rgb *= smoothstep(${POOL_FADE[0].toFixed(1)}, ${POOL_FADE[1].toFixed(1)}, distance(vPoolW, cameraPosition));`);
+  };
   S.scene.add(visOnly(new THREE.Mesh(mergeGeometries(pools), poolMat)));
   LAMPS.poolMat = poolMat;
 }
@@ -331,7 +379,7 @@ function parkedCars() {
   }
   const mesh = new THREE.InstancedMesh(mergeGeometries([b, c]), new THREE.MeshStandardMaterial({ roughness: .35, metalness: .6 }), M.length);
   M.forEach((m, i) => { mesh.setMatrixAt(i, m); mesh.setColorAt(i, C[i]); });
-  S.scene.add(spectral(mesh, PAINT, { weight: .05 }));
+  S.scene.add(spectral(mesh, PAINT, { weight: .05, ...LIT }));
 }
 
 export function build() {
@@ -342,10 +390,12 @@ export function build() {
     new THREE.MeshStandardMaterial({ color: 0x1b1c1e, roughness: .5, metalness: .5 })), METAL, { weight: .02 }));
   return {
     groundAt: () => 0,
-    // 80 m -> -15 m down the street canyon at an unhurried pace (t < 41), then slower into the park (-45 m at t = 60)
+    // 80 m -> -15 m down the street canyon at an even pace in *real* time (~1.8 m/s: the opening is fast-forwarded,
+    // see PLAY, and a script-time pace ran the first 46 m at 4-4.6 m/s), reaching the park edge at the same script
+    // moment as before (t ~41.3); then slower into the park (-45 m at t = 60), as before
     walk(t, camera) {
-      const z = 80 - 2.3 * t + .75 * Math.max(0, t - 41), bob = Math.sin(t * 9.5) * .03;
-      camera.position.set(SIDEWALK_X, 1.7 + bob, z);
+      const z = t < WALK_TC ? 80 + (WALK_ZC - 80) * PLAY.real(t) / WALK_RC : WALK_ZC - 1.55 * (t - WALK_TC);
+      camera.position.set(SIDEWALK_X, 1.7 + Math.sin(PLAY.real(t) * 4.75) * .03, z);   // head bob at a steady step rate
     },
   };
 }
