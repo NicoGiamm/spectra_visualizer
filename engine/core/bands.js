@@ -20,14 +20,18 @@ export const PRESETS = {
 
 // Instrument gain: multiplies the rendered intensity of every Em/Rib source per band,
 // so invisible-band sources stay readable against the night.
-export const GAIN = { radio: 1.9, micro: 2.0, ir: 1.6, vis: 1, uv: 1.9, xray: 2.1, gamma: 1.9 };
+// Radio was raised (1.9 -> 2.2, M7/T1) once the M1 radio surfaces (pink terrain, microwave flecks) shared the
+// Radio telescope view: the radio cones, sferics and links read against them again; ir already blooms at
+// campfires and street lamps, and uv/xray/gamma sources fill the dark High energy view, so those stay.
+export const GAIN = { radio: 2.2, micro: 2.0, ir: 1.6, vis: 1, uv: 1.9, xray: 2.1, gamma: 1.9 };
 
 // Meter normalisation (activity that fills a bar). Scenarios may override via `meterNorm`.
-// Radio and gamma are high because the radio cones and branching air showers carry many sources.
-// micro/ir/vis were retuned once the surfaces joined the meters (plan 1.3): ~ the 90th percentile of the trail's
-// activity (the busiest of trail/seaside) lands just below 0.9 in hud.js's 1 - exp(-act/norm), so the bars
-// only touch the top at peaks. Check with `uv run spectra timeline` ("meters above 0.9 for >20 s").
-export const METER_NORM = { radio: 5.5, micro: 4.2, ir: 10, vis: 18, uv: 2.1, xray: 1.7, gamma: 3.4 };
+// Rule (M7/T1, with the M1 surfaces and M7/T4 presets in): in hud.js's 1 - exp(-act/norm) each bar peaks at
+// ~0.9–0.97 in its busiest scenario and stays above 0.9 for at most a few script seconds, so peaks still read as
+// peaks. Trail and seaside share these; X-ray is sky-only and equal everywhere. Gamma is burst-driven (air showers,
+// thunderstorm flashes, the GRB): its norm is set by the bursts, so the quiet baseline sits low on purpose.
+// Check with `uv run spectra timeline` (peak and ">0.9" columns).
+export const METER_NORM = { radio: 5.5, micro: 4.8, ir: 10, vis: 24, uv: 2.4, xray: 1, gamma: 7 };
 
 // Atmospheric transmission to an observer on the ground, per band and per source origin:
 //   'ground' — reaches a ground detector (near sources, and tropospheric emission such as Cherenkov light),
