@@ -139,7 +139,13 @@ export const SPECTRUM = {
   deckLight:       { name: 'metal-halide deck floodlights', lam: 560e-9 },
   mistScatter:     { name: 'moonlight scattered by sea-mist droplets', lam: 550e-9 },
   mistThermal:     { name: 'thermal emission of cool mist (~285 K)', lam: 10.2e-6 },
+  // Sea-cliff interferometers at Dover Heights, Sydney: 200 MHz (McCready, Pawsey & Payne-Scott 1947, the Sun) and
+  // 100 MHz (Bolton & Stanley 1948, Cygnus A)
   lloydFringe:     { name: 'sea-cliff interferometer fringes (Lloyd\'s mirror, 200 MHz)', f: 200e6 },
+  lloydFringe100:  { name: 'sea-cliff interferometer fringes (Lloyd\'s mirror, 100 MHz)', f: 100e6 },
+  // Bluetooth Classic (BR/EDR) audio streaming, A2DP profile: 79 × 1 MHz channels 2.402–2.480 GHz, frequency-hopping
+  // (Bluetooth Core Specification v5.3, Vol. 2 Part A)
+  bluetoothA2DP:   { name: 'Bluetooth Classic audio stream (A2DP)', f: 2.44e9 },
 
   // ===== city additions =====
   keyFob:          { name: 'car key fob (433.92 MHz)', f: 433.92e6 },

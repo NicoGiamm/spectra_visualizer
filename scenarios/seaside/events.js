@@ -89,7 +89,7 @@ export const lighthouse = () => event({ name: 'Lighthouse', t0: 9, t1: 60, bands
 
 // A container ship crossing the horizon: nav lights, X-band and S-band radar sweeps (microwave; SOLAS ships ≥ 3000 GT
 // typically carry both), AIS bursts (VHF radio), the deck crew's phones (LTE + Bluetooth, microwave), hot funnel.
-export const ship = () => event({ name: 'Container ship', t0: 4, t1: 52, bands: ['vis', 'micro', 'radio', 'ir'], freq: ['navRed', 'incandescent', 'xbandRadar', 'sbandRadar', 'ais', 'lte', 'bluetooth', 'thermal700'], tags: ['time-compressed'],
+export const ship = () => event({ name: 'Container ship', t0: 4, t1: 52, bands: ['vis', 'micro', 'radio', 'ir'], freq: ['navRed', 'incandescent', 'xbandRadar', 'sbandRadar', 'ais', 'lte', 'bluetooth', 'thermal700'], tags: ['time-compressed', 'stylised'],
   note: 'Masthead and side lights, two rotating radars (X-band 9.4 GHz for detail, S-band 3 GHz that sees through rain and spray), AIS position bursts on VHF (the coast station on the headland logs each packet), the deck crew\'s phones pinging the network (more often than an idle phone would) and a hot exhaust funnel. Its X-band sweep paints the headland cliffs that face it, as on its radar screen.',
   init() {
     const hull = new THREE.MeshStandardMaterial({ color: 0x15100f, roughness: .8 }), G = new THREE.Group();
@@ -151,9 +151,10 @@ const FLEET = [];
 // Night fishing boats leaving the harbour after dark. Lights per COLREGs 1972 Rule 26 (IMO): a vessel trawling shows
 // all-round green over white, any other vessel fishing all-round red over white; working decks are lit by metal-halide
 // floodlights (lampara/purse-seine boats also use them to draw fish up). Their diesel exhausts are warm in IR.
-const BOATS = 5, BOAT_L = 4;   // light slots per boat: two floods, the upper all-round light, the white one below it
+const BOATS = 5, BOAT_L = 7;   // light slots per boat: two floods, the upper all-round light, the white one below it,
+                               // port (red) and starboard (green) sidelights, sternlight
 export const fishingBoats = () => event({ name: 'Fishing boats', t0: 16, t1: 60, bands: ['vis', 'ir'], freq: ['deckLight', 'navGreen', 'navRed', 'navWhiteLED', 'thermal700'],
-  note: 'Small boats head out for the night: floodlit decks, and the fishing lights of the rules of the road (green over white for a trawler, red over white for any other fishing boat). Their diesel exhausts show warm on a thermal camera.',
+  note: 'Small boats working the grounds through the night: floodlit decks, and the fishing lights of the rules of the road (green over white for a trawler, red over white for any other fishing boat), plus side and stern lights while they make way at trawling speed. Their diesel exhausts show warm on a thermal camera.',
   init() {
     const hull = new THREE.BoxGeometry(18, 3, 5); hull.translate(0, 1, 0);
     const house = new THREE.BoxGeometry(5, 4, 4); house.translate(-4, 4.5, 0);
@@ -161,9 +162,10 @@ export const fishingBoats = () => event({ name: 'Fishing boats', t0: 16, t1: 60,
     this.mesh = new THREE.InstancedMesh(mergeGeometries([hull, house, mast].map(g => g.toNonIndexed())), new THREE.MeshStandardMaterial({ color: 0x14110f, roughness: .85 }), BOATS);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); S.scene.add(solid(this.mesh)); this.mesh.visible = false; this.zero = new THREE.Matrix4().makeScale(0, 0, 0);
     this.b = Array.from({ length: BOATS }, (_, k) => { const az = 248 + R() * 50, d = 1200 + R() * 3000, p = dirAE(az, 0).multiplyScalar(d).add(STAND); p.y = 0;
-      return { p, hd: R() * 6.28, sp: 4 + R() * 6, ta: 17 + k * 3.5 + R() * 2, trawl: k % 2 === 0, ph: R() * 6 }; });
+      return { p, hd: R() * 6.28, sp: 1 + R() * 1, ta: 17 + k * 3.5 + R() * 2, trawl: k % 2 === 0, ph: R() * 6 }; });
     this.L = new EmField('vis', BOATS * BOAT_L); this.ex = new EmField('ir', BOATS, null, 1); this.tmp = new THREE.Object3D();
-    this.b.forEach((b, k) => { this.L.color(k * BOAT_L, '#eef2ff').color(k * BOAT_L + 1, '#eef2ff').color(k * BOAT_L + 2, b.trawl ? '#38ff7a' : '#ff2a2a').color(k * BOAT_L + 3, '#ffffff');
+    this.b.forEach((b, k) => { this.L.color(k * BOAT_L, '#eef2ff').color(k * BOAT_L + 1, '#eef2ff').color(k * BOAT_L + 2, b.trawl ? '#38ff7a' : '#ff2a2a').color(k * BOAT_L + 3, '#ffffff')
+        .color(k * BOAT_L + 4, '#ff2a2a').color(k * BOAT_L + 5, '#38ff7a').color(k * BOAT_L + 6, '#ffffff');
       FLEET.push({ p: new V3(), on: 0 }); });
   },
   update() { const { t, T } = S; let any = false; this.p = null;
@@ -173,6 +175,9 @@ export const fishingBoats = () => event({ name: 'Fishing boats', t0: 16, t1: 60,
       const at = (f, y) => p.clone().addScaledVector(fw, f).add(new V3(0, y, 0)), s = p.distanceTo(STAND) / 3000;   // keep the lights readable far out
       this.L.set(k * BOAT_L, at(3, 6), 34 * s, on * .5).set(k * BOAT_L + 1, at(-7, 6), 28 * s, on * .4);
       this.L.set(k * BOAT_L + 2, at(-4, 13), 18 * s, on * .45).set(k * BOAT_L + 3, at(-4, 9.5), 18 * s, on * .4);
+      const side = new V3(-fw.z, 0, fw.x);                                       // starboard; Rule 26(b)(iii)/(c)(iii) when making way
+      this.L.set(k * BOAT_L + 4, at(1, 5).addScaledVector(side, -2.6), 10 * s, on * .3).set(k * BOAT_L + 5, at(1, 5).addScaledVector(side, 2.6), 10 * s, on * .3)
+        .set(k * BOAT_L + 6, at(-9, 3.5), 10 * s, on * .3);
       this.ex.set(k, at(-6, 8), 16 * s, on * .45); FLEET[k].p.copy(at(-4, 12)); if (!this.p) this.p = FLEET[k].p; });
     this.mesh.visible = any; this.mesh.instanceMatrix.needsUpdate = true; },
   where() { return this.p; } });
@@ -262,7 +267,7 @@ export const windFarm = () => event({ name: 'Offshore wind farm', t0: 0, t1: 60,
 // ping LTE and one streams music to a Bluetooth speaker (continuous 2.4 GHz traffic), screens lit now and then.
 const FIRE = (() => { const x = -14, z = -9; return new V3(x, heightAt(x, z), z); })();
 const PEOPLE = 5;
-export const bonfire = () => event({ name: 'Beach bonfire', t0: 28, t1: 60, bands: ['vis', 'ir', 'micro'], freq: ['flame', 'thermal1200', 'groundHeat', 'thermal310', 'lte', 'bluetooth', 'ledWhite'],
+export const bonfire = () => event({ name: 'Beach bonfire', t0: 28, t1: 60, bands: ['vis', 'ir', 'micro'], freq: ['flame', 'thermal1200', 'groundHeat', 'thermal310', 'lte', 'bluetoothA2DP', 'ledWhite'],
   note: 'Friends light a driftwood fire on the sand: flame light by eye, a blazing hot core in infrared and warm sand spreading around the pit. The people are warm silhouettes on a thermal camera; their phones ping the network and one plays music to a Bluetooth speaker.',
   init() {
     const parts = []; for (let k = 0; k < 6; k++) { const l = new THREE.CylinderGeometry(.08, .11, 1.3, 6); l.rotateX(Math.PI / 2 - .55); l.rotateY(k * 1.05); l.translate(FIRE.x, FIRE.y + .25, FIRE.z); parts.push(l); }
@@ -297,7 +302,7 @@ export const bonfire = () => event({ name: 'Beach bonfire', t0: 28, t1: 60, band
 // The cliff-top Yagi listens to the radio sky directly and via the sea: a Lloyd's-mirror interferometer (the fringes
 // are drawn by the sea shader in world.js, see LLOYD_LAMBDA). The antenna only receives, so the event draws no source
 // of its own; it names what the radio sea shows. Sources' meter activity comes from their own events.
-export const seaInterferometer = () => event({ name: 'Sea interferometer', t0: 0, t1: 60, bands: ['radio'], freq: ['lloydFringe'],
-  note: 'The antenna on the cliff hears each radio source twice, straight from the sky and reflected off the sea. The two paths interfere, so the signal swells and fades as a source rises or sets: Lloyd\'s mirror, the trick Australian radio astronomers used from sea cliffs in the late 1940s to pin down the first radio sources. On the radio sea, the bars under the setting Sun are those fringes.',
+export const seaInterferometer = () => event({ name: 'Sea interferometer', t0: 0, t1: 60, bands: ['radio'], freq: ['lloydFringe', 'lloydFringe100'], tags: ['stylised', 'time-compressed'],
+  note: 'The antenna on the cliff hears each radio source twice, straight from the sky and reflected off the sea. The two paths interfere, so the signal swells and fades as a source rises or sets: Lloyd\'s mirror, the trick Australian radio astronomers used from sea cliffs in the late 1940s to pin down the first radio sources. On the radio sea, the bars under the setting Sun picture those fringes (the pattern is in the antenna\'s output, not on the water); a rising tide sweeps them for the fixed sources, faster than a real tide.',
   init() {}, update() {},
   where: () => CLIFF_ANT.clone().add(new V3(0, 7, 0)) });

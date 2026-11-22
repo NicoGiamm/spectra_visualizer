@@ -5,6 +5,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { V3, clamp, lerp, sm, kf, env, R, noise2, fbm2, ridged2 } from 'spectra/core/util.js';
 import { S } from 'spectra/core/state.js';
 import { dirAE } from 'spectra/core/geom.js';
+import { SPECTRUM, wavelength } from 'spectra/core/spectrum.js';
 import { solid } from 'spectra/render/instrument.js';
 import { spectral, PRESET, mixSurf, surfaceUniforms, SURF_FRAG_DECL, SURF_VERT_DECL } from 'spectra/render/surface.js';
 import { heightfield } from 'spectra/world/heightfield.js';
@@ -58,9 +59,9 @@ const PULSAR_D = dirAE(242, 52);   // must match sky.pulsar()'s spin axis
 // directly and via its sea reflection; the extra path is 2h·sin e and the reflection flips the phase by π (horizontal
 // polarisation, grazing incidence), so the received power goes as 1 − cos(4πh·sin e/λ) — lobes spaced Δ(sin e) = λ/2h,
 // a null on the horizon, and fringes that sweep as a source rises or sets. Wavelengths: 1.5 m (200 MHz, SPECTRUM
-// lloydFringe; McCready, Pawsey & Payne-Scott 1947, the Sun from Dee Why) and 3 m (100 MHz; Bolton & Stanley 1948,
+// lloydFringe; McCready, Pawsey & Payne-Scott 1947, the Sun from Dover Heights) and 3 m (100 MHz; Bolton & Stanley 1948,
 // Cygnus A from Dover Heights). Bolton & Slee 1953 used the same method at 100 MHz from Dover Heights.
-const LLOYD_LAMBDA = [1.5, 3];                                     // m
+const LLOYD_LAMBDA = [wavelength(SPECTRUM.lloydFringe), wavelength(SPECTRUM.lloydFringe100)];   // m: 1.5, 3
 const tide = t => .5 - .5 * Math.cos(Math.PI * t / 60);           // m, a flood tide of 1 m over the evening (time-compressed)
 export const airTemp = t => 12 + 10 * Math.exp(-t / 20);         // °C, falls through the evening
 // Radar echo of a surface at W: a bright line where the beam is now, then a fading wake as the antenna turns on
@@ -156,7 +157,7 @@ vec3 seaBands(vec3 W, vec3 N, vec3 V, vec3 Rf, float dist, float foam, float inV
     // flat sea reflects there (depression = elevation), so the image slides through the lobes as the source moves.
     vec3 R0 = reflect(V, vec3(0., 1., 0.)); vec2 Fp = lloyd(R0.y); float img = 0.;
     float lobes = .6*Fp.x + .4*Fp.y;                // 200 MHz lobes beating against the 100 MHz ones
-    for(int i = 0; i < 3; i++){ if(uRS[i].w <= 0.) continue;
+    for(int i = 0; i < 3; i++){ if(uRS[i].w <= 0. || uRS[i].y <= 0.) continue;   // a set source has no direct path and no reflection
       vec3 s = uRS[i].xyz; vec2 Fs = lloyd(s.y);
       float fr = .6*Fs.x + .4*Fs.y;                 // what the cliff antenna records from this source now
       float az = pow(max(dot(normalize(R0.xz), normalize(s.xz)), 0.), 900.)*exp(-abs(R0.y - s.y)*3.);
