@@ -38,5 +38,7 @@ run({
     sky.sunDogs(), sky.crepuscularRays(), sky.purpleLight(),
     sky.noctilucentClouds({ note: 'Silver-blue ripples at 80 km, still sunlit long after sunset: one of the few night-sky sights bright enough to beat the city glow. Their UV never reaches the ground.' }),
     street.buses(), street.cyclists(), street.swifts(), street.bats(), street.rooftopBar(), street.blackLight(), street.stoneGamma(), street.drone(),
+    // M8/T3 twilight opening, appended last (seeded R): first planet & stars, a fireball, a launch plume (none draws from R); all bright enough for the city glow — mag-1 stars dimmed by it, the faint field already is
+    sky.firstStars(), sky.fireball(), sky.rocketPlume(),
   ],
 });

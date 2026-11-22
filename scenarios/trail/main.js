@@ -23,5 +23,7 @@ run({
     // zodiacalScatter slot with the same 18 R() draws; the removed thermalUpdraft/fireWhirl drew none)
     local.cellMast(), local.weatherStation(), local.mountainStream(), local.gnss(), local.cows(), local.sunWarmedSlope(),
     local.farHikers(), local.sparkDraft(), sky.purpleLight(), sky.zodiacalLight(), local.valleyFog(),
+    // M8/T3 twilight opening, appended last (seeded R): first planet & stars, a fireball, a launch plume (none draws from R)
+    sky.firstStars(), sky.fireball(), sky.rocketPlume(),
   ],
 });
