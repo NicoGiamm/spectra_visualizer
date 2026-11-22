@@ -29,9 +29,22 @@ export function heightAt(x, z) {
 }
 
 // Local surface presets (same shape as engine PRESET): { A: [T0, Teq, 1/tau, eIR], B: [eMW, uvAlb, gamma, rRadio], C: [gloss, 0, 0, 0] }
-//   wet sand: tracks the water temperature, eMW ~0.6 (water in the pores), glossy (mirrors the sky at grazing angles)
-//   granite: slow to cool, highest natural gamma (K-40, U, Th in feldspar and zircon)
-//   beach sand: heavy-mineral grains (monazite, zircon) give it a gamma glow second only to granite
+// Source keys ([Sal], [EL], [UMF], [FG], [WHO], [UN], [Oke], [Wilheit]) are listed above PRESET in engine/render/surface.js;
+// T0/Teq/tau and rRadio are scene STAND-INS there too (time-compressed, only their order is physical).
+//   wet sand: tracks the water temperature (μ 2550, slower than dry sand) [Oke] — faster than the granite despite μ:
+//     swash and evaporation tie it to the sea's temperature, not its admittance; eIR .96 [EL]; eMW .6 (water in the pores,
+//     moist soil 0.6–0.7) [UMF]; uvAlb .1 (wet sand darker than dry) [FG]; glossy (mirrors the sky at grazing angles)
+//   beach sand: 35 °C at sunset, radiates fast (μ 620) [Oke]; eIR .92 (quartz reststrahlen) [Sal, EL]; eMW .9 [UMF];
+//     uvAlb .24 (dry bright sand, 0.24 at 400 nm) [FG]
+//   sand gamma .7 / wet sand .55 — DELIBERATE scenario assumption: a granitic coast whose sand carries feldspar and a
+//     heavy-mineral (monazite, zircon) placer fraction. Plain quartz beach sand is only ~0.2–0.3 of granite [UN], while
+//     monazite sands (Kerala, Guarapari) reach many times granite — so "second only to granite" sits inside the real
+//     spread but is a choice, not a typical value.
+//   dune (marram grass): cools fast like the engine's meadow; eIR .97 [EL, MOD]; eMW .92 [UMF]; uvAlb .05 (grass over
+//     pale sand, between 0.017 vegetation and sand) [FG]; gamma .45 (dune sand under sparse grass) — STAND-IN
+//   granite: slow to cool (μ ~2200) [Oke], gamma reference = 1 (K-40, U, Th in feldspar and zircon) [UN]; eIR .9 [Sal, EL];
+//     eMW .88 [UMF]; uvAlb .12 — STAND-IN as the engine's rock
+//   sea: the engine's water preset (eMW .45 calm sea [Wilheit])
 export const SURF = {
   wetSand: { A: [23, 16, 1 / 30, .96], B: [.6, .1, .55, .5], C: [.5, 0, 0, 0] },
   sand:    { A: [35, 8, 1 / 22, .92], B: [.9, .24, .7, .3], C: [0, 0, 0, 0] },   // 35 °C at sunset, crosses the sea's 18 °C near t=22

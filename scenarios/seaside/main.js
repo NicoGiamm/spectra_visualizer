@@ -9,6 +9,10 @@ run({
   title: 'Seaside',
   loading: 'Filling the bay…',
   hint: 'Drag to look out over the bay (a quarter sphere ahead) · scroll to zoom · click a band or press 1–7 to filter · space = play/pause · lasts 2 minutes',
+  // Microwave only (M7/T1): the ship's and fishing boats' X-band radars, the wind farm and the sea interferometer
+  // put twice the trail's 90th-percentile micro activity on the bar (peak ~27 vs ~12); with the shared 4.8 it sat
+  // pinned for ~16 s. 9 puts its peak at ~0.95.
+  meterNorm: { micro: 9 },
   build,
   events: () => [
     sky.sunset(), local.greenFlash(), sky.sunDogs(), sky.crepuscularRays(), local.warmSand(), local.gulls(),

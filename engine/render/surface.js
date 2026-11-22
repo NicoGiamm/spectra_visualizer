@@ -33,20 +33,67 @@ export const SURF_U = {
 };
 
 // ---------------------------------------------------------------- presets (documented reference values)
+// Sources, one per column (short keys used in the row comments):
+//   eIR   broadband 8–14 µm emissivity: [Sal] Salisbury & D'Aria 1992, Remote Sens. Environ. 42:83; [EL] ASTER /
+//         ECOSTRESS spectral library (Baldridge et al. 2009; Meerdink et al. 2019); [MOD] MODIS UCSB emissivity
+//         library (Wan & Snyder); snow: Hori et al. 2006, Remote Sens. Environ. 100:486; water: Masuda et al. 1988.
+//   eMW   passive microwave emissivity ~10–37 GHz near nadir: [UMF] Ulaby, Moore & Fung, Microwave Remote Sensing
+//         vol. III (1986), and Ulaby & Long 2014; calm sea: Wilheit 1979; dry snow: Mätzler 1994 (volume scattering
+//         lowers it at 37 GHz); a metal is a near-perfect reflector (Kirchhoff: e = 1 − R ≈ 0).
+//   uvAlb UV albedo, UV-B → UV-A (the dusk skylight is mostly UV-A): [FG] Feister & Grewe 1995, Photochem. Photobiol.
+//         62:736 (vegetation 0.016–0.017, bare soil 0.04–0.05, concrete 0.07–0.10 in UV-B; dry bright beach sand
+//         0.14 at 300 nm → 0.24 at 400 nm); [WHO] Global Solar UV Index guide 2002 (fresh snow up to 0.8, dry beach
+//         sand ~0.15, sea foam ~0.25, water/grass/soil below 0.1); fresh snow 0.9+ in UV-B: Blumthaler & Ambach 1988.
+//   gamma terrestrial gamma dose rate relative to granite (= 1): [UN] UNSCEAR 2000 Annex B, D = 0.0417·K + 0.462·U +
+//         0.604·Th nGy/h per Bq/kg; granite K ~1200, U ~60, Th ~80 Bq/kg → ~125 nGy/h; world-median soil (K 400,
+//         U 35, Th 30) → ~50 nGy/h ≈ 0.4; [RP112] EC Radiation Protection 112 (1999): concrete ~0.4, brick ~0.6 of
+//         granite. Water and snow shield the ground (cosmic + K-40 in sea water only).
+//   T0/Teq/tau surface temperature at sunset, clear-sky night equilibrium (mid-latitude summer evening) and cooling
+//         time — STAND-INS chosen per scene, time-compressed to script-seconds; only their ORDER is physical, from the
+//         thermal admittance μ (J m⁻² s⁻½ K⁻¹) in [Oke] Oke 1987, Boundary Layer Climates, Table 2.1 / urban table:
+//         fresh snow 130, wood ~380, dry sandy soil 620, brick ~1070, asphalt ~1200, still water 1545 (mixing makes
+//         the sea effectively infinite), wet sand 2550, concrete ~2200, stone/granite ~2200. Vegetation cools fastest
+//         despite its water: the canopy is thermally decoupled from the soil (dew); forest canopies trap longwave.
+//   rRadio radio reflectivity — STAND-IN (relative, stylised): conductors and sea water high, dry ground low.
 const P = (T0, Teq, tau, eIR, eMW, uvAlb, gamma, rRadio, gloss = 0) => ({ A: [T0, Teq, tau ? 1 / tau : 0, eIR], B: [eMW, uvAlb, gamma, rRadio], C: [gloss, 0, 0, 0] });
 export const PRESET = {
-  water:    P(18, 18, 0, .98, .45, .06, .05, .9, 1),    // sea surface: warm all night, cold in microwave
-  wetSand:  P(24, 15, 22, .96, .6, .12, .5, .5, .5),
-  sand:     P(34, 9, 18, .92, .9, .22, .6, .3),          // dry sand: hot at sunset, radiates fast (heavy minerals: some gamma)
-  rock:     P(33, 13, 40, .9, .88, .12, 1, .5),          // granite: slow to cool, highest natural gamma
-  snow:     P(-2, -6, 20, .99, .7, .85, .1, .3, .2),     // fresh snow: UV albedo ~0.85
-  meadow:   P(24, 7, 10, .97, .92, .03, .3, .2),         // grass: cools fast under a clear sky (dew)
-  forest:   P(21, 12, 25, .97, .93, .03, .25, .3),       // canopy keeps warmth longer
-  dirt:     P(28, 10, 15, .94, .9, .08, .4, .3),
-  asphalt:  P(38, 17, 30, .95, .88, .05, .3, .5),        // stores the day's heat
-  concrete: P(32, 16, 30, .93, .88, .1, .5, .6),
-  facade:   P(26, 19, 40, .9, .85, .08, .5, .8),         // walls with heated interiors behind them
-  wood:     P(22, 14, 25, .9, .9, .05, .1, .3),
+  // sea surface: warm all night (no cooling), cold in microwave. eIR .98 [Masuda, EL]; eMW .45 calm sea [Wilheit, UMF];
+  // uvAlb .06 [WHO, FG: water < 0.1]; gamma .05 (sea water shields, K-40 only) [UN]
+  water:    P(18, 18, 0, .98, .45, .06, .05, .9, 1),
+  // eIR .96 (pore water) [EL]; eMW .6 (moist soil 0.6–0.7) [UMF]; uvAlb .12 (wet sand darker than dry) [FG];
+  // gamma .25 like ordinary quartz sand [UN]; slower than dry sand (μ 2550 vs 620) [Oke], but an exception to the μ
+  // order against concrete/rock: swash and evaporation tie it to the sea's temperature (Teq near the sea's 18 °C)
+  wetSand:  P(24, 15, 22, .96, .6, .12, .25, .5, .5),
+  // dry quartz sand: hot at sunset, radiates fast (μ 620) [Oke]. eIR .92 (quartz reststrahlen dip at 8–9.5 µm) [Sal, EL];
+  // eMW .9 [UMF]; uvAlb .22 (UV-A end of 0.14–0.24) [FG]; gamma .3 — quartz is nearly inert, typical beach sand
+  // 20–40 nGy/h [UN]; heavy-mineral (monazite/zircon) sands are higher — see the seaside's local preset
+  sand:     P(34, 9, 18, .92, .9, .22, .3, .3),
+  // granite: slow to cool (μ ~2200) [Oke], the reference for gamma (= 1) [UN]. eIR .9 [Sal, EL]; eMW .88 [UMF];
+  // uvAlb .12 — STAND-IN (no UV albedo measurement for granite found; a bit above concrete's 0.07–0.10 [FG] for pale granite)
+  rock:     P(33, 13, 40, .9, .88, .12, 1, .5),
+  // fresh snow: lowest thermal admittance (μ 130) → cools fastest [Oke]; eIR .99 [Hori]; eMW .7 dry snow at 37 GHz
+  // [Mätzler]; uvAlb .85 [WHO, Blumthaler & Ambach]; gamma .1 (snowpack shields the ground) [UN]
+  snow:     P(-2, -6, 10, .99, .7, .85, .1, .3, .2),
+  // grass: cools fast under a clear sky (canopy decoupled, dew). eIR .97 [EL, MOD]; eMW .92 [UMF]; uvAlb .03 [FG];
+  // gamma .3 — soil beneath (~0.4), lowered by soil moisture and the organic layer [UN]
+  meadow:   P(24, 7, 10, .97, .92, .03, .3, .2),
+  // canopy keeps warmth longer (trapped longwave). eIR .97 [EL, MOD]; eMW .93 [UMF]; uvAlb .03 [FG]; gamma .25 (soil
+  // under litter) [UN]
+  forest:   P(21, 12, 25, .97, .93, .03, .25, .3),
+  // bare dry soil / trail. eIR .94 [Sal, MOD]; eMW .9 dry soil [UMF]; uvAlb .08 (UV-A end; 0.04–0.05 in UV-B) [FG];
+  // gamma .4 world-median soil [UN]; μ ~600–1000 [Oke] ≥ dry sand's 620, so it cools no faster than sand
+  dirt:     P(28, 10, 20, .94, .9, .08, .4, .3),
+  // stores the day's heat (μ ~1200) [Oke]. eIR .95 [EL]; eMW .88 urban surfaces [UMF]; uvAlb .05 [WHO];
+  // gamma .3 — STAND-IN (aggregate-dependent, below concrete; RP112 tabulates no asphalt row)
+  asphalt:  P(38, 17, 30, .95, .88, .05, .3, .5),
+  // μ ~2200 [Oke]. eIR .93 [EL]; eMW .88 [UMF]; uvAlb .1 (0.07–0.10) [FG]; gamma .4 (typical concrete ~0.42 of granite) [RP112]
+  concrete: P(32, 16, 30, .93, .88, .1, .4, .6),
+  // brick/plaster walls with heated interiors behind them (Teq kept high and tau held up by the interior — STAND-IN). eIR .9
+  // (brick 0.90–0.93) [EL]; eMW .85 [UMF]; uvAlb .08 — STAND-IN (like concrete, a bit darker); gamma .5 (brick ~0.65, plaster far lower: a mix) [RP112]
+  facade:   P(26, 19, 40, .9, .85, .08, .5, .8),
+  // μ ~380 [Oke] (below sand and soil, so it cools faster than both); eIR .9 (0.90–0.95) [EL]; eMW .9 [UMF]; uvAlb .05 — STAND-IN (dark organic surface, like soil [FG]);
+  // gamma .1 (K-40 only) [UN]
+  wood:     P(22, 14, 12, .9, .9, .05, .1, .3),
 };
 export function mixSurf(parts) {   // [[preset, weight], ...] -> blended {A, B, C}
   const out = { A: [0, 0, 0, 0], B: [0, 0, 0, 0], C: [0, 0, 0, 0] }; let W = 0;

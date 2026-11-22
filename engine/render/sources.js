@@ -21,6 +21,27 @@ function ghost(src, pos) {
 }
 const quadGeo = new THREE.PlaneGeometry(1, 1);
 
+// LOD: changes only how far sources are drawn, never what emits or when. A source still adds to S.act (meters)
+// and leaves its ghost; only the draw is skipped. `size` is a world-space quad width (QUAD_VS adds it in view
+// space), so its on-screen width is size * pxK / depth — sky objects on the D-radius sphere are sized for that
+// and keep their pixels. Em/EmField quads narrower than minPx are not drawn (sub-pixel quads hit no pixel
+// centre and shade nothing); Rib points closer than ribPx on screen to the last kept point are dropped (uv and
+// width still follow the full path). skipped: per-frame counters, read by ?dump.
+export const LOD = { minPx: 1, ribPx: 1.5, skipped: { em: 0, field: 0, ribPts: 0 }, total: { em: 0, field: 0, ribPts: 0 } };
+let pxK = 1;
+const _fwd = new V3(), _rel = new V3();
+function lodFrame() {
+  const c = S.camera, h = S.renderer ? S.renderer.domElement.height : 0;
+  pxK = h > 0 ? h * c.zoom / (2 * Math.tan(THREE.MathUtils.degToRad(c.fov) / 2)) : Infinity;
+  for (const k in LOD.skipped) LOD.skipped[k] = LOD.total[k] = 0;
+}
+// pixels per world unit at pos's view depth; Infinity at or behind the near plane (left to the GPU)
+function pxPerUnit(pos) {
+  const c = S.camera; _fwd.set(0, 0, -1).applyQuaternion(c.quaternion);
+  const z = _rel.subVectors(pos, c.position).dot(_fwd);
+  return z > c.near ? pxK / z : Infinity;
+}
+
 // real = 1 picks the realistic IR look for moving warm bodies (animals, engines)
 export function bandMat(band, color, ribbon, real) {
   return new THREE.ShaderMaterial({
@@ -37,7 +58,8 @@ export class Em {
   set(pos, size, I) {
     if (!(I > .01)) return this;
     if (absorbed(this.band, this.origin)) { ghost(this, pos); return this; }
-    S.act[this.band] += I;
+    S.act[this.band] += I; LOD.total.em++;
+    if (size * pxPerUnit(pos) < LOD.minPx) { LOD.skipped.em++; this.m.visible = false; return this; }
     const u = this.m.material.uniforms; this.m.position.copy(pos); u.uSize.value = size; u.uI.value = I * GAIN[this.band];
     this.m.visible = S.on[this.band]; return this;
   }
@@ -61,17 +83,23 @@ export class Rib {
     const n = Math.min(pts.length, this.max), pos = this.m.geometry.attributes.position, uv = this.m.geometry.attributes.uv;
     let total = 0; const cum = [0];
     for (let i = 1; i < n; i++) { total += pts[i].distanceTo(pts[i - 1]); cum.push(total); }
+    // LOD: keep the ends and every point at least ribPx (on screen) from the last kept one
+    const keep = [0];
+    for (let i = 1; i < n - 1; i++) if ((cum[i] - cum[keep[keep.length - 1]]) * pxPerUnit(pts[i]) >= LOD.ribPx) keep.push(i);
+    keep.push(n - 1);
+    const m = keep.length; LOD.total.ribPts += n; LOD.skipped.ribPts += n - m;
     const tg = new V3(), vw = new V3(), sd = new V3();
-    for (let i = 0; i < n; i++) {
-      tg.subVectors(pts[Math.min(n - 1, i + 1)], pts[Math.max(0, i - 1)]);
+    for (let k = 0; k < m; k++) {
+      const i = keep[k];
+      tg.subVectors(pts[keep[Math.min(m - 1, k + 1)]], pts[keep[Math.max(0, k - 1)]]);
       vw.subVectors(S.camera.position, pts[i]);
       sd.crossVectors(tg, vw).normalize().multiplyScalar(lerp(w0, w1, i / (n - 1)) / 2);
-      pos.setXYZ(i * 2, pts[i].x + sd.x, pts[i].y + sd.y, pts[i].z + sd.z);
-      pos.setXYZ(i * 2 + 1, pts[i].x - sd.x, pts[i].y - sd.y, pts[i].z - sd.z);
-      const u = total ? cum[i] / total : 0; uv.setXY(i * 2, u, 1); uv.setXY(i * 2 + 1, u, -1);
+      pos.setXYZ(k * 2, pts[i].x + sd.x, pts[i].y + sd.y, pts[i].z + sd.z);
+      pos.setXYZ(k * 2 + 1, pts[i].x - sd.x, pts[i].y - sd.y, pts[i].z - sd.z);
+      const u = total ? cum[i] / total : 0; uv.setXY(k * 2, u, 1); uv.setXY(k * 2 + 1, u, -1);
     }
     pos.needsUpdate = uv.needsUpdate = true;
-    this.m.geometry.setDrawRange(0, (n - 1) * 6);
+    this.m.geometry.setDrawRange(0, (m - 1) * 6);
     const U = this.m.material.uniforms; U.uI.value = I * GAIN[this.band]; U.uFade.value = fade; U.uLen.value = total / Math.max(1e-3, (w0 + w1) / 2);
     this.m.visible = S.on[this.band]; return this;
   }
@@ -111,7 +139,8 @@ export class EmField {
   set(i, pos, size, I) {
     if (!(I > .01)) return this;
     if (absorbed(this.band, this.origin)) { ghost(this, pos); return this; }
-    S.act[this.band] += I;
+    S.act[this.band] += I; LOD.total.field++;
+    if (size * pxPerUnit(pos) < LOD.minPx) { LOD.skipped.field++; if (this.aI.array[i]) { this.aI.array[i] = 0; this.aI.needsUpdate = true; } return this; }
     this.aPos.setXYZ(i, pos.x, pos.y, pos.z); this.aSize.array[i] = size; this.aI.array[i] = I * GAIN[this.band];
     this.aPos.needsUpdate = this.aSize.needsUpdate = this.aI.needsUpdate = true;
     this.dirty = true; this.m.visible = S.on[this.band]; return this;
@@ -123,4 +152,4 @@ export class EmField {
   }
 }
 
-export function hideAllSources() { S.ghosts.clear(); EMS.forEach(e => e.m.visible = false); RIBS.forEach(r => r.m.visible = false); FIELDS.forEach(f => f.clear()); }
+export function hideAllSources() { lodFrame(); S.ghosts.clear(); EMS.forEach(e => e.m.visible = false); RIBS.forEach(r => r.m.visible = false); FIELDS.forEach(f => f.clear()); }

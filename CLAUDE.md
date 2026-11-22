@@ -11,7 +11,7 @@ modules, no build step) runs **scenarios** (`scenarios/<id>/`); Python tooling (
 |---|---|
 | `uv run spectra serve` | dev server (ES modules don't load over `file://`) |
 | `uv run spectra build [ids…]` | `dist/<id>.html` single files + landing page |
-| `uv run spectra timeline [ids…]` | event gantt, band activity, draw calls, **physics check — keep it at 0 warnings** |
+| `uv run spectra timeline [ids…]` | event gantt, meter fill (peak, s > 0.9), draw calls at t 5/30/55, **physics check in Orbit and Ground — keep it at 0 warnings** |
 | `uv run spectra shot <id> -t 30 [--bands ir,micro] [--yaw .3 --pitch .5] -o <png>` | headless render; exits 1 on any console/shader message |
 
 There is no test suite: `timeline` + `shot` are the tests (`/verify-scene` runs both and inspects the PNGs).
@@ -42,8 +42,10 @@ one worktree under `.claude/worktrees/`. The lifecycle — propose → user appr
 - **Physics first, stylisation second.** The look per band is stylised; *what* emits, how much and when follows
   real physics. Every event lists its processes in `freq: [...]` (keys of `SPECTRUM`, `engine/core/spectrum.js`);
   add a sourced process there rather than guessing a band; tag what is `stylised`, `rare` or `time-compressed`.
-- **Sources vs surfaces.** Glowing things use `Em` / `Rib` / `EmField` (band looks live in GLSL); the landscape's
-  own emission comes from surface presets (`engine/render/surface.js`). One table per fact, no scattered literals.
+- **Sources vs surfaces.** Glowing things use `Em` / `Rib` / `EmField` (crowds: one instanced draw); a source
+  emitted above the absorbing air takes origin `'high'`/`'space'` (`TRANSMIT`, `engine/core/bands.js`) so Ground
+  mode hides it. The landscape's own emission comes from `PRESET`s (`engine/render/surface.js`, `A`/`B`/`C`
+  packing); every value cites a source key from that file's header or says STAND-IN. One table per fact.
 - **Seeded randomness.** Layout and `init()` draw from `R` (`engine/core/util.js`) in list order — new events go
   after the existing list; `Math.random` only for visual-only jitter.
 - **One shared sky.** Front is azimuth 270 (west) everywhere, view clamp yaw ±1.35 / pitch −0.1…1.5; one timeline

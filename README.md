@@ -94,6 +94,60 @@ Two layers make each band: **sources** (things that glow: a phone, a meteor, a r
 microwave emissivity, UV albedo, natural gamma activity and radio reflectivity, so the ground shows the spectrum
 too).
 
+### Spectral surfaces
+
+The landscape's own emission comes from the `PRESET` table in `engine/render/surface.js`: `water`, `wetSand`,
+`sand`, `rock`, `snow`, `meadow`, `forest`, `dirt`, `asphalt`, `concrete`, `facade` and `wood`. Each preset packs
+its physics into three vectors that reach the shaders as uniforms or per-vertex attributes:
+
+| Vector | Fields |
+|---|---|
+| `A` | `T0` (°C at sunset), `Teq` (°C night equilibrium), `1/tau` (cooling rate per script second), `eIR` (8–14 µm emissivity) |
+| `B` | `eMW` (microwave emissivity), `uvAlb` (UV albedo), `gamma` (terrestrial activity, granite = 1), `rRadio` (radio reflectivity) |
+| `C` | `gloss` (0 matte … 1 water/glass: emissivity drops at grazing angles) |
+
+Every value cites a source, by the short keys listed above the table (`[Sal]`, `[EL]`, `[UMF]`, `[FG]`, `[WHO]`,
+`[UN]`, `[RP112]`, `[Oke]`), or is marked STAND-IN. The temperatures and cooling times are stand-ins chosen per
+scene and compressed into script time; only their order follows the measured thermal admittance. Scenes can keep
+their own tables in the same shape and with the same keys (the seaside's heavy-mineral sand, the city's metal and
+paint).
+
+`spectral(mesh, preset, { lines: 'topo' | 'grid', weight, … })` makes a mesh spectral. The preset is a name, an
+`{A, B, C}` object (`mixSurf()` blends several) or `'attr'` for a terrain that carries its blend per vertex.
+`spectralGroup()` does the same for every mesh in a group. With Visible on, the surface layer is added faintly
+over the normal look; with Visible off, it is all that's left of the landscape. Each band shows:
+
+| Band | What the ground shows |
+|---|---|
+| Infrared | the radiated temperature `T(t) = Teq + (T0 − Teq)·exp(−t/tau)`: sand and meadows cool fast, rock and asphalt slowly, water barely at all (the beach's thermal crossover); wet and glossy surfaces at grazing angles mirror the cold sky |
+| Microwave | brightness temperature `eMW·T + (1 − eMW)·50 K`, so calm water reads cold and land warm, lit up by microwave transmitters (routers, masts) and by short flashes where a ray hits a surface (multipath) |
+| Radio | light from radio transmitters only: falls off as 1/r², Lambertian, with moving dashes |
+| UV | `uvAlb` × the UV skylight left after sunset: snow and sand glow at dusk, grass doesn't |
+| Gamma | sparse scintillation speckle in proportion to activity: granite sparkles, the sea is almost silent |
+| X-ray | nothing: the ground is dark in X-rays |
+
+Surfaces also feed the band meters with the same formulas the shaders use, scaled by each surface's `weight`.
+
+### The spectrum table
+
+`SPECTRUM` in `engine/core/spectrum.js` lists every physical process the scenes show: a key, a name, and one of
+frequency `f` (Hz), wavelength `lam` (m) or photon energy `E` (eV). The band is derived from those numbers and is
+never typed by hand. `ground: false` marks a process the atmosphere absorbs before it reaches an observer on the
+ground. `stylised: true` marks one that isn't real as drawn. Events list their processes as `freq: [...]` keys,
+and the panel shows each one's frequency and wavelength when you hover a band chip. An event can also carry
+`tags`, which the panel shows as badges: `rare`, `time-compressed`, `stylised` (and `common`).
+
+### Detector: Orbit and Ground
+
+**Orbit** is the default: everything is drawn, as a satellite above the atmosphere would see it. **Ground**
+(the HUD button, or `?detector=ground`) shows what reaches a detector on the ground. Every source has an origin:
+`'ground'` (the default, for near sources), `'high'` (emitted inside the atmosphere above the absorbing layers:
+meteors, aurora, air-shower secondaries) or `'space'`. `TRANSMIT` in `engine/core/bands.js` gives the
+transmission per band and origin. Far-UV, X-rays and gamma rays from `'high'` or `'space'` don't get through. In
+Ground mode such a source isn't drawn and adds nothing to the meters. Instead it leaves a dashed **ghost marker**
+at its position, labelled with what was absorbed and at what altitude (e.g. "X-ray absorbed ~40 km"), and the
+panel says which of the event's bands are absorbed and why.
+
 ### The tooling
 
 ```bash
@@ -108,9 +162,18 @@ uv run spectra timeline city          # event gantt, per-band activity, draw cal
 Python code is formatted and linted with [ruff](https://docs.astral.sh/ruff/) and type-checked with
 [ty](https://docs.astral.sh/ty/): `uv run ruff format . && uv run ruff check . && uv run ty check`.
 
-`spectra timeline` runs a scene headless and checks that every event's declared bands match the physical
-processes it lists and the bands it actually draws, in both detector modes. There is no conventional test
-suite: the timeline check and headless screenshots are the tests.
+`spectra timeline` runs a scene headless over the 0–60 script and prints:
+
+- an event gantt with each event's bands;
+- per-band meter fill (`1 − exp(−activity / norm)`, as the HUD draws it), with its typical value, its peak and the
+  script seconds it spends above 0.9;
+- draw calls at t = 5, 30 and 55;
+- a physics check: every event's declared bands must match the bands of the processes it lists and the bands it
+  actually draws. The check runs in Orbit mode and again in Ground mode, where an absorbed band drawn from the
+  ground is also flagged.
+
+There is no conventional test suite: the timeline check (kept at 0 warnings) and headless screenshots are the
+tests.
 
 ### Writing a scene or an event
 

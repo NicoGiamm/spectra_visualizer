@@ -17,9 +17,9 @@ run({
   fog: .00022,
   // Retuned in Orbit (the default detector) so each bar's 90th percentile sits near 0.85: the city really has an
   // order of magnitude more near emitters in micro (routers, phones, TPMS, haze), ir (bodies, exhausts, warm
-  // facades) and vis (windows, lamps, signs). Gamma: the granite-kerb blips are city-only and pinned the default
-  // 3.4 for 20 s. Radio, UV and X-ray keep the shared defaults (the city adds little there or it is sky-driven).
-  meterNorm: { micro: 45, ir: 48, vis: 140, gamma: 5 },
+  // facades) and vis (windows, lamps, signs). Gamma, radio, UV and X-ray use the shared defaults (M7/T1: the
+  // default gamma norm 7 already holds the granite-kerb baseline plus the bursts, peak ~0.97).
+  meterNorm: { micro: 45, ir: 48, vis: 140 },
   build,
   events: () => [
     sky.sunset(), local.windows(), local.streetLights(), local.cellTower(), local.wifi(), local.traffic(),
