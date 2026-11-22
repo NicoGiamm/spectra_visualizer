@@ -93,8 +93,8 @@ export const comet = o => event({ name: 'Comet', t0: 24, t1: 48, bands: ['vis', 
 // s = −R⊕ sin e + √((R⊕ sin e)² + 2R⊕h + h²) for elevation e, the Sun at (SUN_AZ, sunEl()). The shadow is a cylinder
 // (no umbral cone: at LEO distances it narrows by < 0.5 %) of radius R⊕ + 20 km — sunlight grazing the lowest ~20 km
 // is absorbed and refracted away, the usual "effective screening height" — with a ±25 km soft edge for the penumbra
-// and the reddened rim. Straight overhead this reduces to the textbook h_shadow ≈ R⊕(1/cos δ − 1) for a Sun δ below
-// the horizon: 98 km at δ 10°, 330 km at δ 18°, 410 km at δ 20°. Toward the west (the cone faces the Sun's side)
+// and the reddened rim. Straight overhead the shadow height is (R⊕ + 20 km)/cos δ − R⊕ for a Sun δ below the horizon
+// (the textbook R⊕(1/cos δ − 1) plus the screening layer): 119 km at δ 10°, 349 km at δ 18°, 430 km at δ 20°. Toward the west (the cone faces the Sun's side)
 // points stay lit longer, so on this timeline a 420 km satellite in the cone is lit until t ≈ 46 (δ ≈ 21°) and the
 // 82 km noctilucent layer at 5° elevation goes dark at δ ≈ 13°.
 const R_EARTH = 6371;
@@ -111,11 +111,10 @@ const depression = () => -sunEl();                                              
 // the west-facing cone it stays sunlit for the whole pass (sunlitAt: shadow entry only after t ≈ 46, δ ≈ 21°); the
 // fade is computed, so a later retime shows the shadow entry mid-pass. Radio/microwave don't care about the sky.
 const satDir = p => dirAE(fovAz(p), 12 + 46 * Math.sin(Math.PI * p));            // across the FOV cone, culminating at 58°
-export const satellitePass = o => event({ name: 'Satellite pass', t0: 11, t1: 23, bands: ['vis', 'micro', 'radio'], freq: ['sunlight', 'kuDownlink', 'satBeacon'], tags: ['common'], note: 'A bright satellite still in sunlight ~400 km up while the ground is in twilight: reflected sunlight plus a microwave downlink to the ground. It would fade out mid-pass where it enters Earth\'s shadow — here, toward the sunset side, that only happens with the Sun ~21° down.',
-  init() { this.v = new Em('vis'); this.m = new Em('micro'); this.r = new Em('radio'); this.beam = new Rib('micro', null, 24); this.p = null; },
+export const satellitePass = o => event({ name: 'Satellite pass', t0: 11, t1: 23, bands: ['vis', 'radio'], freq: ['sunlight', 'satBeacon'], tags: ['common'], note: 'A bright space station still in sunlight ~400 km up while the ground is in twilight: reflected sunlight, and its amateur-radio downlink on 145.8 MHz that a handheld can pick up (its microwave links go up to relay satellites, not down to you). It would fade out mid-pass where it enters Earth\'s shadow — here, toward the sunset side, that only happens with the Sun ~21° down.',
+  init() { this.v = new Em('vis'); this.r = new Em('radio'); this.p = null; },   // S/Ku links relayed via TDRSS (geostationary), not to the ground
   update() { const { t } = S, sp = (t - this.t0) / (this.t1 - this.t0); if (sp < 0 || sp > 1) { this.p = null; return; } const I = env(t, this.t0, this.t1, 1), d = satDir(sp), p = onSky(d); this.p = p;
-    this.v.set(p, deg(.22), I * sunlitAt(d, 420) * sm(1, 3, depression())); this.m.set(p, deg(.6), I); this.r.set(p, deg(.6), I * .5);
-    const c = S.camera.position, g = new V3(c.x + 6, 0, c.z - 25); g.y = S.groundAt(g.x, g.z); this.beam.set(linePts(p, g, 24), deg(.25), .25, I * .5); },
+    this.v.set(p, deg(.22), I * sunlitAt(d, 420) * sm(1, 3, depression())); this.r.set(p, deg(.6), I * .5); },
   where() { return this.p; } }, o);
 
 // A freshly launched Starlink train (~300 km, still orbit-raising; mag ~2–3 each) needs a darker sky than the ISS:
@@ -401,15 +400,15 @@ export const moonHalo = o => event({ name: 'Moon halo', t0: 48, t1: 60, bands: [
 // own event; the faint field comes from the night-sky shader. Jupiter's decametric radio storms (Io-modulated,
 // 10–40 MHz) are bursty and reach ground antennas above the ionospheric cutoff.
 const FIRST_LIGHTS = [   // az, el at t0, magnitude, depression where it pops out (deg), colour
-  [258, 28, -2.3, 2.6, '#fff4dc'],   // Jupiter
-  [226, 55, -0.05, 4.6, '#ffd2a0'],  // Arcturus (K1.5 III, orange)
-  [216, 24, 0.98, 6.2, '#cfe0ff'],   // Spica (B1, blue-white)
-  [272, 23, 1.35, 6.6, '#e0e8ff'],   // Regulus
-  [298, 16, 1.14, 6.9, '#ffe2b8'],   // Pollux, low: extinction delays it
+  // one consistent sky: a late-July evening at ~45°N facing west, the Sun ~4–6° down (alt/az from J2000 RA/Dec)
+  [258, 15, -2.3, 2.6, '#fff4dc'],   // Jupiter, on the evening ecliptic (el ≈ 15° at az 258)
+  [240, 51, -0.05, 4.6, '#ffd2a0'],  // Arcturus (K1.5 III, orange)
+  [231, 19, 0.98, 6.2, '#cfe0ff'],   // Spica (B1, blue-white)
+  [266, 25, 2.14, 8.0, '#eef2ff'],   // Denebola (A3 V), the Lion's tail — Regulus and Pollux have set by now
 ];
-export const firstStars = o => event({ name: 'First planet & stars', t0: 11, t1: 60, bands: ['vis', 'radio'], freq: ['sunlight', 'starlight', 'jupiterDAM'], tags: ['common'], note: 'As the Sun sinks 3–7° below the horizon the sky drops below one point of light after another: Jupiter first (mag −2), then Arcturus (mag 0), then Spica, Regulus and Pollux (mag 1). Jupiter\'s decametric radio storms (10–40 MHz) crackle on and off.',
+export const firstStars = o => event({ name: 'First planet & stars', t0: 11, t1: 60, bands: ['vis', 'radio'], freq: ['sunlight', 'starlight', 'jupiterDAM'], tags: ['common'], note: 'As the Sun sinks 3–7° below the horizon the sky drops below one point of light after another: Jupiter first (mag −2), then Arcturus (mag 0), then Spica (mag 1) and, as twilight deepens, Denebola (mag 2). Jupiter\'s decametric radio storms (10–40 MHz) crackle on and off.',
   init() { this.f = new EmField('vis', FIRST_LIGHTS.length); FIRST_LIGHTS.forEach((s, i) => this.f.color(i, s[4])); this.r = new Em('radio'); this.p = null; },
-  dir(i) { const [az, el] = FIRST_LIGHTS[i]; return dirAE(az, el - .3 * Math.cos((az - 270) * DEG) * Math.max(0, S.t - this.t0)); },
+  dir(i) { const [az, el] = FIRST_LIGHTS[i]; return dirAE(az, el - .5 * Math.cos((az - 270) * DEG) * Math.max(0, S.t - this.t0)); },   // western sky sinks with the Sun (~0.55°/unit)
   update() { const { t, T } = S, I = env(t, this.t0, this.t1, 1), dep = depression(), dim = ENV.starDim ?? 1;
     FIRST_LIGHTS.forEach(([, , mag, d0], i) => { const lp = mag < -1 ? 1 : mag < .5 ? .6 + .4 * dim : dim, tw = mag < -1 ? 1 : .85 + .15 * Math.sin(T * (7 + i * 2.3) + i);
       this.f.set(i, onSky(this.dir(i)), deg(mag < -1 ? .42 : .3 - .05 * mag), I * sm(d0, d0 + 1.3, dep) * lp * tw * (1.1 - .3 * mag)); });
@@ -438,7 +437,7 @@ export const fireball = o => event({ name: 'Twilight fireball', t0: 14, t1: 18.5
 // Twilight launch plume ("jellyfish"): an upper stage climbing through 100–300 km from a launch site beyond the
 // horizon is in sunlight while the ground lies in twilight; its exhaust expands into a huge glowing bell in near-vacuum.
 // Seen when the Sun is ~3–12° down (dark enough sky, plume above Earth's shadow — sunlitAt(·, 150 km)). Reflected
-// sunlight only: the engines' own IR is not visible from hundreds of km. Needs a launch in that window and direction,
+// sunlight only (the exhaust's IR, which orbital sensors do see, is omitted). Needs a launch in that window and direction,
 // hence `rare`. Rises from the south-west low horizon; climb 5 script-s, then the bell spreads and fades.
 const plumeDir = f => dirAE(230 + 20 * f, 2 + 26 * Math.sin(f * Math.PI / 2));
 export const rocketPlume = o => event({ name: 'Rocket-launch twilight plume', t0: 15, t1: 23, bands: ['vis'], freq: ['sunlight'], tags: ['rare'], note: 'A rocket launched from far beyond the horizon climbs out of Earth\'s shadow: its exhaust, 100–300 km up, catches sunlight and swells into a glowing blue-white bell while the ground is already in twilight.',
