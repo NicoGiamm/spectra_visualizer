@@ -1,9 +1,9 @@
 """PreToolUse(Bash): enforce the branching model of .claude/sdlc.md (values from .claude/sdlc.toml).
 
 On main:            no commit except one carrying the no-mission token (only when the user said so); no merge /
-                    rebase / cherry-pick / revert / reset --hard — missions reach main only through `ship merge`,
-                    and .claude/missions/ never does (it lives only on mission branches).
-On mission/M<N>-*:  every commit message carries `refs M<N>[/T<k>]` of that mission.
+                    rebase / cherry-pick / revert / reset --hard — missions reach main only through `ship merge`.
+On mission/M<N>-*:  every commit message carries `refs M<N>[/T<k>]` of that mission (an extra `#<issue>` is fine).
+The plan itself lives in GitHub issues (no mission folder): this hook only looks at branch names and messages.
 Anywhere:           no force push.
 Exit 2 blocks the call and sends the reason to Claude. The clis run git themselves (not through this hook).
 """
@@ -27,7 +27,6 @@ proj = os.environ.get("CLAUDE_PROJECT_DIR") or data.get("cwd") or os.getcwd()
 cfg = {
     "main": "main",
     "prefix": "mission/",
-    "missions": ".claude/missions",
     "ref": r"refs M\d+(/T\d+)?",
     "token": "[no-mission]",
 }
@@ -36,7 +35,6 @@ try:
     cfg.update(
         main=raw["repo"]["main_branch"],
         prefix=raw["branches"]["mission_prefix"],
-        missions=raw["store"]["missions_dir"],
         ref=raw["store"]["ref_pattern"],
         token=raw["store"]["no_mission_token"],
     )

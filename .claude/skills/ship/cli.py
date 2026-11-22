@@ -2,10 +2,12 @@
 # requires-python = ">=3.11"
 # dependencies = ["cyclopts>=4"]
 # ///
-"""ship — deliver a mission branch into main: reviewer gate, align, timeline gate, merge commit, cleanup.
+"""ship — deliver a mission branch into main: check + reviewer gate, align, timeline gate, merge commit, cleanup.
 
-Run as `uv run .claude/skills/ship/cli.py <command> M<N>` from any checkout.
-Exit codes: 0 ok · 1 failed (conflict, red gate, git error) · 3 refused (a gate said no).
+Run as `uv run .claude/skills/ship/cli.py <command> M<N>` from any checkout. The mission and its tasks are
+GitHub issues (`.claude/lib/sdlc.py`); after the merge commit the mission issue is marked delivered, closed and
+set Done on the project (verified by re-reading).
+Exit codes: 0 ok · 1 failed (conflict, red gate, git/GitHub error) · 3 refused (a gate said no).
 `merge` and `cleanup` run only after the user's OK in words.
 """
 
@@ -28,6 +30,8 @@ app = App(name="ship", help="Deliver a mission branch into main (never without a
 
 def _open(ref: str) -> sdlc.Mission:
     m, _ = sdlc.find(ref)
+    if m.status == "delivered":
+        raise Refused(f"{m.ref} is already {m.meta.get('Status')}: {m.issue.url}")
     if not m.worktree:
         raise Refused(f"{m.ref} has no open worktree (status {m.status}); `mission-tracker start {m.ref}`")
     return m
@@ -53,13 +57,17 @@ def status(ref: str) -> None:
     h = sdlc.head(m.wt)
     v = sdlc.last_verdict(m.num)
     open_ = [t.ref for t in m.tasks if t.status != "done"]
-    print(f"{m.ref} {m.branch} @ {h[:8]}: +{a}/-{b} vs {cfg.main}, dirty {len(sdlc.dirty(m.wt))}")
+    errs = sdlc.check_mission(m)
+    print(f"{m.ref} (#{m.issue.number}) {m.branch} @ {h[:8]}: +{a}/-{b} vs {cfg.main}, dirty {len(sdlc.dirty(m.wt))}")
     print(f"tasks open: {open_ or 'none'}")
+    print(f"check: {len(errs)} finding(s)" + "".join(f"\n- {e}" for e in errs))
     print(
         f"verdict: {v['verdict'] + ' for ' + v['head'][:8] if v else 'none'}{' (stale: head moved)' if v and v['head'] != h else ''}"
     )
     nxt = (
-        "align"
+        "fix the board (`mission-tracker check " + m.ref + "`)"
+        if errs
+        else "align"
         if b
         else (
             "finish tasks"
@@ -76,7 +84,7 @@ def status(ref: str) -> None:
 
 @app.command
 def align(ref: str) -> None:
-    """Merge the current main into MISSION's branch, keeping the mission folder (main never has it). Conflicts: exit 1."""
+    """Merge the current main into MISSION's branch. A stale legacy planning folder on the branch is kept as is. Conflicts: exit 1."""
     cfg = sdlc.config()
     m = _open(ref)
     wt = m.wt
@@ -85,10 +93,12 @@ def align(ref: str) -> None:
     pre = sdlc.head(wt)
     sdlc.run(["git", "merge", "--no-ff", "--no-commit", cfg.main], cwd=wt, check=False)
     unmerged = [f for f in sdlc.git("diff", "--name-only", "--diff-filter=U", cwd=wt).splitlines() if f]
-    # main deletes .claude/missions/ in every mission merge: the branch's own copy always wins
-    sdlc.git("checkout", pre, "--", m.rel_dir, cwd=wt)
-    sdlc.git("add", "-A", "--", m.rel_dir, cwd=wt)
-    other = [f for f in unmerged if not f.startswith(m.rel_dir + "/")]
+    # an old branch may still carry the retired .claude/missions/: keep its own copy, never fight main over it
+    legacy = cfg.legacy_rel
+    if sdlc.git("ls-tree", "--name-only", pre, "--", legacy, cwd=wt):
+        sdlc.git("checkout", pre, "--", legacy, cwd=wt)
+        sdlc.git("add", "-A", "--", legacy, cwd=wt)
+    other = [f for f in unmerged if not f.startswith(legacy + "/")]
     if other:
         raise Failed(
             f"conflicts merging {cfg.main} into {m.branch}: {other}\nresolve in {wt}, then "
@@ -101,14 +111,16 @@ def align(ref: str) -> None:
 
 @app.command
 def review_brief(ref: str, *, out: Path | None = None) -> None:
-    """Print the reviewer's brief: mission, tasks (Goal/Plan/Acceptance/Outcome), diff range, files, rules, head."""
+    """Print the reviewer's brief: mission, tasks (Goal/Plan/Acceptance/Outcome) from GitHub, diff range, files, rules, head."""
     cfg = sdlc.config()
     m = _open(ref)
+    sdlc.require_consistent(m)
     base = sdlc.git("merge-base", cfg.main, m.branch, cwd=m.wt)
     h = sdlc.head(m.wt)
     files = [f for f in sdlc.git("diff", "--name-only", f"{base}..{h}", cwd=m.wt).splitlines() if f]
     lines = [
-        f"# Review brief — {m.ref}: {m.meta.get('title')}",
+        f"# Review brief — {m.ref}: {m.title}",
+        f"mission issue: #{m.issue.number} {m.issue.url}",
         f"worktree: {m.wt}",
         f"diff range: {base[:12]}..{h[:12]}   (reviewed head: {h})",
         "",
@@ -117,9 +129,11 @@ def review_brief(ref: str, *, out: Path | None = None) -> None:
         "## Tasks",
     ]
     for t in m.tasks:
-        lines.append(f"### {t.ref} [{t.status}] {t.meta.get('title')}")
-        for s in ("Goal", "Plan", "Acceptance", "Outcome"):
-            lines.append(f"**{s}**\n{sdlc.get_section(t.body, s)}\n")
+        lines.append(f"### {t.ref} [{t.status}] {t.title}  (#{t.issue.number}, {t.issue.state.lower()})")
+        for s in ("Goal", "Plan", "Acceptance", "Notes", "Outcome"):
+            text = sdlc.get_section(t.body, s)
+            if text or s != "Notes":
+                lines.append(f"**{s}**\n{text}\n")
     lines += [
         "## Changed files",
         *[f"- {f}" for f in files],
@@ -174,6 +188,7 @@ def merge(ref: str, *, partial: bool = False, keep: bool = False) -> None:
         raise Refused(
             f"no reviewer `ok` for head {h[:8]} (last: {v['verdict'] + ' @ ' + v['head'][:8] if v else 'none'}): review-brief -> reviewer -> deliver"
         )
+    sdlc.require_consistent(m)
     open_ = [t.ref for t in m.tasks if t.status != "done"]
     if open_ and not partial:
         raise Refused(f"open tasks {open_}: finish them, or --partial if the user wants a partial delivery")
@@ -187,36 +202,80 @@ def merge(ref: str, *, partial: bool = False, keep: bool = False) -> None:
         raise Failed(f"timeline gate: {warns} warning(s) (or no report) in {wt}:\n{gate[-1500:]}")
     if sdlc.git("diff", "--cached", "--name-only", cwd=root):
         raise Refused("the main checkout has staged changes: they would ride along in the merge commit")
-    title = m.meta.get("title", "")
+    title = m.title
     done = [t for t in m.tasks if t.status == "done"]
     out = sdlc.run(["git", "merge", cfg.raw["ship"]["merge"], "--no-commit", m.branch], cwd=root, check=False)
     if sdlc.rc(["git", "rev-parse", "-q", "--verify", "MERGE_HEAD"], root):
         raise Failed(f"git did not start the merge in {root} (local changes in the way?):\n{out}")
     unmerged = [f for f in sdlc.git("diff", "--name-only", "--diff-filter=U", cwd=root).splitlines() if f]
-    if [f for f in unmerged if not f.startswith(cfg.missions_rel + "/")]:
+    if [f for f in unmerged if not f.startswith(cfg.legacy_rel + "/")]:
         sdlc.git("merge", "--abort", cwd=root, check=False)
         raise Failed(f"merge conflict in the main checkout (aborted): `ship align {m.ref}` first")
-    # the mission's files never reach main
-    sdlc.git("rm", "-r", "-q", "-f", "--ignore-unmatch", "--", cfg.missions_rel, cwd=root)
+    # planning never reaches main: a stale legacy .claude/missions/ on an old branch is left out
+    sdlc.git("rm", "-r", "-q", "-f", "--ignore-unmatch", "--", cfg.legacy_rel, cwd=root)
     problem = sdlc.get_section(m.body, "Problem").split("\n")[0]
     body = (
         f"{problem}\n\n"
-        + "\n".join(f"- {t.ref} {t.meta.get('title')}" for t in done)
+        + "\n".join(f"- {t.ref} {t.title}" for t in done)
         + f"\n\nReviewer: {v['verdict']} @ {h[:8]}. Timeline: 0 warnings. {'Partial delivery. ' if open_ else ''}"
-        f"Mission record: `git show <this merge>^2:{m.rel_dir}/`"
+        f"Mission record: {m.issue.url}"
     )
     sdlc.git("commit", "-q", "-m", f"Merge mission {m.ref}: {title}\n\n{body}{sdlc.TRAILER}", cwd=root)
     merge_sha = sdlc.git("rev-parse", "--short", "HEAD", cwd=root)
-    print(f"merged {m.branch} into {cfg.main}: {merge_sha} (mission folder left out)")
+    print(f"merged {m.branch} into {cfg.main}: {merge_sha} (legacy planning folder left out)")
+    problem_gh = None
+    try:
+        _record(m, merge_sha, partial=bool(open_), reviewer=f"{v['verdict']} @ {h[:8]}")
+    except Failed as e:
+        problem_gh = e
     if not open_ and not keep:
         _remove(m)
         print(f"{m.ref} delivered; worktree and branch removed")
     else:
-        m = sdlc.ensure_worktree(m)
-        m.log(f"partial delivery to {cfg.main} in {merge_sha}: {', '.join(t.ref for t in done)}")
-        m.save()
-        m.commit(f"Mission {m.ref}: partial delivery {merge_sha} (refs {m.ref})")
         print(f"branch {m.branch} continues; before new work: `ship align {m.ref}`")
+    if problem_gh:
+        raise Failed(
+            f"merged as {merge_sha}, but the GitHub record failed: {problem_gh}\n"
+            f"retry: `ship record {m.ref} --sha {merge_sha}{' --partial' if open_ else ''}`"
+        )
+
+
+def _record(m: sdlc.Mission, sha: str, *, partial: bool, reviewer: str = "") -> None:
+    """Write the delivery into the mission issue: full -> `delivered (<sha>)`, comment, closed + Done (verified)."""
+    cfg = sdlc.config()
+    done = [t.ref for t in m.tasks if t.status == "done"]
+    note = (
+        f"Delivered to `{cfg.main}` in {sha}"
+        + (" (partial)" if partial else "")
+        + f": {', '.join(done) or 'no tasks'}."
+    )
+    if reviewer:
+        note += f" Reviewer: {reviewer}. Timeline gate: 0 warnings."
+    sdlc.comment(m.issue, note)
+    if partial:
+        sdlc.mission_log(m, f"partial delivery to {cfg.main} in {sha}: {', '.join(done)}")
+        sdlc.say(f"{m.ref}: partial delivery {sha} logged on {m.issue.url}")
+        return
+    body = sdlc.set_header(m.body, {"Status": f"delivered ({sha})"})
+    body = sdlc.append_line(body, "Log", f"delivered to {cfg.main} in {sha}")
+    sdlc.close_verified(m.issue, cfg.project_status("mission", "delivered"), body=body)
+    sdlc.say(f"{m.ref}: issue #{m.issue.number} delivered ({sha}), closed, project Done (verified)")
+
+
+@app.command
+def record(ref: str, *, sha: str, partial: bool = False, dry_run: bool = False) -> None:
+    """Re-run the GitHub side of a merge (when `merge` merged but could not update the issue): mark delivered + close."""
+    sdlc.set_dry_run(dry_run)
+    m, _ = sdlc.find(ref)
+    if m.status == "delivered" and not m.issue.open:
+        print(f"{m.ref} is already {m.meta.get('Status')}")
+        return
+    if sdlc.rc(["git", "merge-base", "--is-ancestor", sha, sdlc.config().main], sdlc.config().root):
+        raise Refused(f"{sha} is not on {sdlc.config().main}")
+    open_ = [t.ref for t in m.tasks if t.status != "done"]
+    if open_ and not partial:
+        raise Refused(f"open tasks {open_}: a full delivery needs every task done (or --partial)")
+    _record(m, sha, partial=partial)
 
 
 def _remove(m: sdlc.Mission) -> None:
@@ -240,6 +299,10 @@ def cleanup(ref: str) -> None:
 def main() -> None:
     try:
         app()
+    except SystemExit as e:
+        if sdlc.WOULD_REFUSE and not e.code:  # a dry run walked past a gate: report it as refused
+            sys.exit(3)
+        raise
     except (Refused, Failed) as e:
         print(f"{'REFUSED' if e.code == 3 else 'FAILED'}: {e}", file=sys.stderr)
         sys.exit(e.code)

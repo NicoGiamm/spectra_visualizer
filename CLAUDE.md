@@ -21,17 +21,21 @@ Python (≥ 3.11) runs through `uv`, CLIs use cyclopts, and it stays **ruff**-fo
 
 ## How work is done
 
-Every change is a task of a **mission**: one branch `mission/M<N>-<slug>` + one worktree under `.claude/worktrees/`,
-its plan files (`.claude/missions/…`) living **only on that branch**, never on `main`. The lifecycle — propose →
-user approves → start → per task explore / plan / implement / verify / commit → fresh-context review → user's OK →
-`--no-ff` merge — is defined in `.claude/sdlc.md`.
+Every change is a task of a **mission**. The plan lives in **GitHub Issues** (user decision 2026-11-22): a mission
+is a parent issue `M<N> — <title>` (label `mission`), each task a sub-issue `M<N>/T<k> — <title>` (label `task`),
+all on project 4 "Spectralmap"; no planning files in the repo. The code goes on one branch `mission/M<N>-<slug>` +
+one worktree under `.claude/worktrees/`. The lifecycle — propose → user approves → start → per task explore / plan
+/ implement / verify / commit → fresh-context review → user's OK → `--no-ff` merge — is defined in `.claude/sdlc.md`.
 
-- `/mission-tracker` — `list`, `next`, `propose`, `approve`, `start`, `task M<N>/T<k> [--done --evidence f]`.
+- `/mission-tracker` — `list`, `next`, `show`, `propose`, `add-task`, `approve`, `start`, `task M<N>/T<k> [--done
+  --evidence f]`, `log`, `check [M<N>]`. Issues are created, moved and closed only through it (and `ship merge`);
+  `check` is a gate — `start`, `task`, `ship review-brief` and `ship merge` refuse while a mission has findings.
 - `/verify-scene` — the test suite. `/ship` — review gate and merge into `main`. `/new-event`, `/new-scenario`.
-- Agents: `step-dev` (one task in the worktree, never commits, one at a time), `reviewer` (read-only, before every
-  merge), `physics-auditor` (events and `spectrum.js`).
-- Commits on a mission branch carry `(refs M<N>/T<k>)`; nothing is committed straight on `main` unless the user
-  says so (`[no-mission]`); never push unasked. Hooks enforce this.
+- Agents: `step-dev` (one task per agent in the worktree, never commits; parallel only for tasks the cli accepts as
+  independent — disjoint `files:`, no `Depends on:`), `reviewer` (read-only, before every merge),
+  `physics-auditor` (events and `spectrum.js`).
+- Commits on a mission branch carry `(refs M<N>/T<k>)` (an extra `#<issue>` is fine); nothing is committed straight
+  on `main` unless the user says so (`[no-mission]`); never push unasked. Hooks enforce this.
 
 ## Conventions that hold everywhere
 
@@ -52,5 +56,5 @@ user approves → start → per task explore / plan / implement / verify / commi
 
 Path-scoped rules in `.claude/rules/` load when you open matching files: `render` (shaders, emitters, instrument
 view, surfaces, tuning), `events` (event contract, timing, `freq`), `sky-world` (geometry, atmosphere, terrain),
-`tooling` (the `spectra` CLI, bundler, headless Chrome), `missions` (the planning store). Adapter values for the
+`tooling` (the `spectra` CLI, bundler, headless Chrome), `missions` (the GitHub board: issues, labels, gates). Adapter values for the
 SDLC: `.claude/sdlc.toml`.
