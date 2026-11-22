@@ -63,14 +63,17 @@ const PULSAR_D = dirAE(242, 52);   // must match sky.pulsar()'s spin axis
 const LLOYD_LAMBDA = [1.5, 3];                                     // m
 const tide = t => .5 - .5 * Math.cos(Math.PI * t / 60);           // m, a flood tide of 1 m over the evening (time-compressed)
 export const airTemp = t => 12 + 10 * Math.exp(-t / 20);         // °C, falls through the evening
-// Radar echo of a surface at W: bright where the beam just swept past, fading as the antenna turns on (PPI persistence)
+// Radar echo of a surface at W: a bright line where the beam is now, then a fading wake as the antenna turns on
+// (the persistence of a PPI display, drawn onto the coast it maps). Faces turned toward the antenna return most, faces
+// turned away return nothing (no terrain occlusion is traced). Range: a ship's X-band radar paints high coast out to
+// 20+ nmi, so the fade only trims the far hills.
 const RADAR_GLSL = `
 uniform vec3 uRadP; uniform float uRadA, uRadI;
 float radarEcho(vec3 W, vec3 N){
   if(uRadI <= 0.) return 0.;
   vec3 L = uRadP - W; float r = length(L); L /= r;
   float b = atan(-L.z, -L.x), dA = mod(uRadA - b, 6.2831853);              // how far the antenna has turned since it lit W
-  return uRadI*exp(-dA/.45)*smoothstep(0., .25, dot(N, L) + .1)*(1. - smoothstep(2500., 5200., r));
+  return uRadI*(.5*exp(-dA/.9) + .8*exp(-dA/.04))*smoothstep(0., .25, dot(N, L) + .1)*(1. - smoothstep(4500., 9000., r));
 }`;
 
 function terrain() {
@@ -94,7 +97,7 @@ function terrain() {
     vec3 c = vec3(0.);
     if(uSOnM > 0.){                                   // ship radar echoes off the cliffs (microwave)
       float e = radarEcho(W, N); vec2 gc = floor(W.xz*.12);
-      c += uSOnM*vec3(1.,.55,.08)*e*(.35 + 1.2*step(.55, h21(gc + floor(uSurfTime*12.))));
+      c += uSOnM*vec3(1.,.55,.08)*e*(.2 + step(.55, h21(gc + floor(uSurfTime*12.))));
     }
     if(uSOnI > 0. && uFire.w > 0.){                   // bonfire: hot sand around the pit
       float r = length(W.xz - uFire.xz); c += uSOnI*thermal(clamp(.95 - r*.22, 0., 1.))*uFire.w*exp(-r*r*.12)*.8;
@@ -141,8 +144,10 @@ vec3 seaBands(vec3 W, vec3 N, vec3 V, vec3 Rf, float dist, float foam, float inV
     float cs = max(.4, dist*.012); vec2 g = floor(W.xz/cs);
     float sp = step(.88 - .3*x, h21(g + floor(uSurfTime*10.)))*(1. - inVis);
     col += uSOnM*mix(vec3(1.,.42,0.), vec3(1.,.85,.2), h21(g*1.7))*(x*x*.22 + sp*x*x*.5);
-    float cl = radarEcho(W, vec3(0.,1.,0.))*exp(-length(W - uRadP)/2400.)*step(.55, h21(floor(W.xz*.05) + floor(uSurfTime*12.)));   // radar sea clutter, fading out to the headlands
-    col += uSOnM*vec3(1.,.55,.08)*cl*.6;
+    // radar sea clutter: the sea returns far less than the cliffs at grazing incidence (sigma0 tens of dB below land)
+    // and only within a few km of the antenna
+    float cl = radarEcho(W, vec3(0.,1.,0.))*exp(-length(W - uRadP)/1800.)*step(.55, h21(floor(W.xz*.05) + floor(uSurfTime*12.)));
+    col += uSOnM*vec3(1.,.55,.08)*cl*.15;
   }
   if(uSOnR > 0.){                                   // RADIO: transmitters paint the water; the sea mirrors the radio sky
     col += uSOnR*vec3(1.,.31,.85)*.9*txField(uTxR, W, N, 700., 9.)*1.1;
