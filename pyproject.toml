@@ -3,6 +3,8 @@ name = "spectra-visualizer"
 version = "0.2.0"
 description = "First-person 3D scenes with events emitting across the electromagnetic spectrum; Python tooling to serve, bundle and screenshot them."
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
 dependencies = [
     "cyclopts>=4.25.3",
