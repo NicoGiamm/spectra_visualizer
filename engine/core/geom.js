@@ -5,6 +5,12 @@ import { V3, DEG } from './util.js';
 import { S } from './state.js';
 
 export const D = 8000;
+// Natural field of view for sky events (user decision 2026-11-22): ±60° around the west front and no higher
+// than 60°, so everything in the sky is seen with at most a small turn or a glance up (the default
+// frame shows up to ~35°). Sky events take
+// their azimuths / elevations from it; a moving track stays inside for its whole visible path.
+export const FOV_SKY = { az0: 210, az1: 330, elMax: 60 };
+export const fovAz = u => FOV_SKY.az0 + (FOV_SKY.az1 - FOV_SKY.az0) * u;   // u ∈ [0,1] across the cone, left → right
 export const deg = d => D * d * DEG;                    // angular size (deg) -> world size at D
 export const dirAE = (az, el) => new V3(Math.cos(el * DEG) * Math.cos(az * DEG), Math.sin(el * DEG), Math.cos(el * DEG) * Math.sin(az * DEG));
 export const skyP = (az, el) => dirAE(az, el).multiplyScalar(D).add(S.camera.position);

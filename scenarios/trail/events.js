@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { V3, DEG, lerp, sm, env, R, fbm2 } from 'spectra/core/util.js';
 import { S } from 'spectra/core/state.js';
 import { event } from 'spectra/core/events.js';
-import { deg, skyP, dirAE } from 'spectra/core/geom.js';
+import { deg, skyP, dirAE, FOV_SKY } from 'spectra/core/geom.js';
 import { Em, Rib, EmField } from 'spectra/render/sources.js';
 import { solid, visOnly } from 'spectra/render/instrument.js';
 import { spectralGroup, addTx, SURF_U } from 'spectra/render/surface.js';
@@ -292,7 +292,7 @@ export const weatherStation = () => event({ name: 'Weather-station radio link', 
   where() { return this.top; } });
 
 export const gnss = () => event({ name: 'GPS & Galileo satellites', t0: 0, t1: 60, bands: ['micro'], freq: ['gpsL1', 'galileoE5'], note: 'Navigation satellites 20 000 km up broadcast continuously in the L band (1.2–1.6 GHz, microwave): faint, steady points that barely move over a few hours — the signal your phone uses to place you on the trail.',
-  init() { this.s = Array.from({ length: 9 }, () => ({ az: 208 + R() * 128, el: 14 + R() * 58, d: (R() - .5) * .12 })); this.f = new EmField('micro', this.s.length, '#ffd27a'); },
+  init() { this.s = Array.from({ length: 9 }, () => ({ az: FOV_SKY.az0 + 4 + R() * 112, el: 14 + R() * (FOV_SKY.elMax - 16), d: (R() - .5) * .12 })); this.f = new EmField('micro', this.s.length, '#ffd27a'); },
   update() { const { t } = S;
     this.s.forEach((s, i) => this.f.set(i, skyP(s.az + t * s.d, s.el + t * s.d * .5), deg(.7), .2)); },
   where() { const s = this.s[3]; return skyP(s.az + S.t * s.d, s.el + S.t * s.d * .5); } });

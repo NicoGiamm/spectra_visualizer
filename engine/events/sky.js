@@ -11,7 +11,7 @@ import * as THREE from 'three';
 import { V3, DEG, clamp, lerp, sm, env, kf, R } from '../core/util.js';
 import { S } from '../core/state.js';
 import { event } from '../core/events.js';
-import { D, deg, dirAE, skyP, onSky, basis, ringPts, linePts } from '../core/geom.js';
+import { D, deg, dirAE, skyP, onSky, basis, ringPts, linePts, FOV_SKY, fovAz } from '../core/geom.js';
 import { Em, Rib, EmField } from '../render/sources.js';
 import { visOnly } from '../render/instrument.js';
 import { cloudTex, moonTex, softTex } from '../render/textures.js';
@@ -23,7 +23,7 @@ export const sunset = o => event({ name: 'Sunset', t0: 0, t1: 16, bands: ['vis',
     this.e[0].set(this.p, deg(2.2), I); this.e[1].set(this.p, deg(1.4), I * (1 - sm(0, 12, t))); this.e[2].set(this.p, deg(2), I * .6); this.e[3].set(this.p, deg(1.6), I * .22); },
   where() { return this.p; } }, o);
 
-const planeDir = p => dirAE(190 + 170 * p, 12 + 40 * Math.sin(Math.PI * p));
+const planeDir = p => dirAE(fovAz(p), 12 + 40 * Math.sin(Math.PI * p));          // crosses the FOV cone left → right, peak 52°
 export const airliner = o => event({ name: 'Airliner', t0: 3, t1: 27, bands: ['vis', 'ir', 'radio', 'micro'], freq: ['navRed', 'sunlight', 'thermal700', 'modeS', 'airband', 'wxRadar'], tags: ['common'], note: 'Nav lights & sunlit contrail, hot engines (IR), VHF airband voice bursts (radio), Mode S transponder replies at 1090 MHz and weather radar (microwave).',
   init() { this.trail = new Rib('vis', '#ffffff', 34); this.s = new Em('vis', '#ffffff'); this.b = new Em('vis', '#ff3030'); this.g = new Em('vis', '#40ff60'); this.ir = new Em('ir', null, 1); this.ex = new Rib('ir', null, 4, 1); this.ra = new Em('radio'); this.mi = new Em('micro'); this.wx = new Em('micro'); this.p = null; },
   update() { const { t, T } = S, t0 = this.t0, t1 = this.t1;
@@ -52,11 +52,11 @@ export const milkyWay = o => event({ name: 'Milky Way', t0: 18, t1: 60, bands: [
     const p = onSky(GAL_C); this.ir.set(p, deg(14), mw * .35); this.ra.set(p, deg(2.5), mw * .6); }, where: () => onSky(GAL_C) }, o);
 
 export const meteorShower = o => event({ name: 'Meteor shower', t0: 19, t1: 33, bands: ['vis', 'uv', 'radio'], freq: ['meteorLight', 'meteorUV', 'meteorEcho'], tags: ['time-compressed'], note: 'Streaks of light at ~100 km and radio echoes off the ionized trails; their UV is absorbed before it reaches the ground.',
-  init() { this.m = Array.from({ length: 22 }, () => ({ t0: this.t0 + R() * (this.t1 - this.t0 - 1), az: 205 + R() * 130, el: 38 + R() * 46, daz: (R() - .5) * 46, del: -18 - R() * 24, v: new Rib('vis', '#fff4e0', 2), u: new Rib('uv', null, 2, 0, 'high'), r: new Em('radio') })); },
+  init() { this.m = Array.from({ length: 22 }, () => ({ t0: this.t0 + R() * (this.t1 - this.t0 - 1), az: fovAz(.1 + R() * .8), el: 34 + R() * (FOV_SKY.elMax - 36), daz: (R() - .5) * 24, del: -18 - R() * 24, v: new Rib('vis', '#fff4e0', 2), u: new Rib('uv', null, 2, 0, 'high'), r: new Em('radio') })); },
   update() { const { t } = S; this.m.forEach(m => { const p = (t - m.t0) / 1.5; if (p < 0 || p > 1) return;
     const a = dirAE(m.az, m.el), b = dirAE(m.az + m.daz, m.el + m.del), head = onSky(a.clone().lerp(b, p)), tail = onSky(a.clone().lerp(b, Math.max(0, p - .3))), I = (1 - p) * 1.5;
     m.v.set([tail, head], deg(.24), deg(.24), I, 1); m.u.set([tail, head], deg(.35), deg(.35), I * .5, 1); m.r.set(head, deg(2), 1 - p); }); },
-  where: () => skyP(30, 60) }, o);
+  where: () => skyP(270, 46) }, o);
 
 // Two opposite arms, each with one faded sweep ghost; more arms read as a windmill.
 export const pulsar = o => event({ name: 'Pulsar', t0: 20, t1: 60, bands: ['radio', 'xray', 'vis'], freq: ['pulsarRadio', 'pulsarOptical', 'pulsarXray'], note: 'A spinning neutron star: the radio wind flares out in two opposite cones along the spin axis, ringed by a terminal shock wave. Its X-ray pulses only reach detectors in orbit.',
@@ -67,7 +67,7 @@ export const pulsar = o => event({ name: 'Pulsar', t0: 20, t1: 60, bands: ['radi
     const p = onSky(this.d), pulse = Math.max(0, Math.sin(T * 9)) ** 20, [u, v] = basis(this.d), a = T * 3.1, bl = (dir, f) => onSky(this.d.clone().lerp(dir, f));
     this.v.set(p, deg(.2), I * .5); this.r.set(p, deg(1.3), I * (.3 + pulse)); this.x.set(p, deg(.5), I * .5 * pulse);
     for (let s = 0; s < 2; s++) for (let k = 1; k >= 0; k--) {                     // arm s, k = 0 the arm itself, k = 1 its sweep ghost
-      const arm = this.arm[s * 2 + k], aa = a - k * .34 + s * Math.PI, w = (1 - k * .4) * (s ? .8 : 1), LEN = 7.5 - k * .6, mD = (1.6 + .35 * Math.sin(T * .8 + k * .6)) * (1 - k * .15);
+      const arm = this.arm[s * 2 + k], aa = a - k * .34 + s * Math.PI, w = (1 - k * .4) * (s ? .8 : 1), LEN = 6 - k * .5, mD = (1.6 + .35 * Math.sin(T * .8 + k * .6)) * (1 - k * .15);
       const sv = u.clone().multiplyScalar(Math.cos(aa)).add(v.clone().multiplyScalar(Math.sin(aa))), md = this.d.clone().addScaledVector(sv, LEN * DEG).normalize(), [mu, mv] = basis(md);
       arm.ring.set(ringPts(md, mD, 32), deg(.15), deg(.15), I * w * .22 * (.5 + pulse * .5));                             // the cone mouth
       arm.ray[8].set([p, bl(md, .45), bl(md, .9)], deg(.26), deg(.12), I * w * (.34 + pulse * .2), 1);                   // spine
@@ -88,7 +88,7 @@ export const comet = o => event({ name: 'Comet', t0: 24, t1: 48, bands: ['vis', 
     const h = onSky(H); this.hv.set(h, deg(.45), I * 1.2); this.hi.set(h, deg(.8), I * .5); this.hx.set(h, deg(.8), I * .7); },
   where: () => skyP(276, 24) }, o);
 
-const satDir = p => dirAE(205 + 125 * p, 12 + 55 * Math.sin(Math.PI * p));
+const satDir = p => dirAE(fovAz(p), 12 + 46 * Math.sin(Math.PI * p));            // across the FOV cone, culminating at 58°
 export const satellitePass = o => event({ name: 'Satellite pass', t0: 25, t1: 39, bands: ['vis', 'micro', 'radio'], freq: ['sunlight', 'kuDownlink', 'satBeacon'], tags: ['common'], note: 'Reflected sunlight plus a microwave downlink to the ground.',
   init() { this.v = new Em('vis'); this.m = new Em('micro'); this.r = new Em('radio'); this.beam = new Rib('micro', null, 24); this.p = null; },
   update() { const { t } = S, sp = (t - this.t0) / (this.t1 - this.t0); if (sp < 0 || sp > 1) { this.p = null; return; } const I = env(t, this.t0, this.t1, 1), p = onSky(satDir(sp)); this.p = p;
@@ -103,7 +103,7 @@ export const starlink = o => event({ name: 'Starlink train', t0: 28, t1: 36, ban
   where() { return this.p; } }, o);
 
 export const blackHoleBinary = o => event({ name: 'Black-hole X-ray binary', t0: 30, t1: 60, bands: ['xray', 'radio', 'vis'], freq: ['accretionXray', 'jetSynchrotron', 'companionStar'], note: 'Gas falling into a black hole flickers in X-rays (seen only from orbit); radio jets flare outward in cones along the spin axis.',
-  init() { this.d = dirAE(318, 52); this.v = new Em('vis', '#cfe0ff'); this.x = new Em('xray', null, 0, 'space'); this.halo = new Em('radio');
+  init() { this.d = dirAE(312, 48); this.v = new Em('vis', '#cfe0ff'); this.x = new Em('xray', null, 0, 'space'); this.halo = new Em('radio');
     this.jet = Array.from({ length: 2 }, () => ({ ray: Array.from({ length: 8 }, () => new Rib('radio', null, 3)), mouth: new Rib('radio', null, 33), tip: new Em('radio') })); },
   update() { const { t, T } = S, I = env(t, this.t0, this.t1, 3); if (I <= 0) return;
     const p = onSky(this.d), fl = .35 + .65 * Math.abs(Math.sin(T * 13) * Math.sin(T * 7.1)), [u, v] = basis(this.d), bl = (dir, f) => onSky(this.d.clone().lerp(dir, f));
@@ -146,7 +146,7 @@ const AUR_FS = `float h21(vec2 p){ p = fract(p*vec2(123.34,456.21)); p += dot(p,
     gl_FragColor = vec4(c*prof*ends*along*rays*fold*patches*uI*.75, 1.); }`;
 const ramp = (t, a, b) => t <= a ? 0 : t >= b ? t - (a + b) / 2 : (b - a) * (s => s * s * s - s * s * s * s / 2)((t - a) / (b - a));   // ∫ sm(a, b, t) dt
 
-export const aurora = o => event({ name: 'Aurora', t0: 26, t1: 50, az0: 300, az1: 345, elBot: 3, dist: 7600,
+export const aurora = o => event({ name: 'Aurora', t0: 26, t1: 50, az0: 295, az1: FOV_SKY.az1, elBot: 3, dist: 7600,
   bands: ['vis', 'ir', 'radio', 'uv', 'xray'], freq: ['o5577', 'o6300', 'n2p4278', 'o7774', 'n2FirstPos', 'auroralRadar', 'auroralUV', 'auroralXray'], tags: ['rare', 'time-compressed'],
   note: 'A substorm low over the northern horizon: a faint green arc (557.7 nm) brightens, breaks up into rays and folds with red tops (630 nm), then fades into pulsating patches. Near-IR oxygen/N₂ glow and VHF radar echoes reach the ground; its far-UV and X-rays do not.',
   init() {
@@ -206,10 +206,13 @@ export const moonrise = o => event({ name: 'Moonrise', t0: 33, t1: 60, bands: ['
 // current point toward its target by f = clamp((g - a) / (b - a)), so an unstarted branch sits on its parent.
 // The branching secondaries are drawn in gamma (absorbed high up: origin 'high'); from the ground you get the
 // near-UV Cherenkov flash, N2 fluorescence along the main axis (`chain`, root → deepest node) and a radio pulse.
+// Placement inside FOV_SKY: the shower enters at SHOWER_EL (zenith angle ≥ 30°: inclined showers are common) and the
+// node table's azimuth offsets (built for a near-zenith entry) are drawn × SHOWER_AZK so the fan stays in the cone.
+const SHOWER_EL = FOV_SKY.elMax - 2, SHOWER_AZK = .35;
 export const airShowers = o => event({ name: 'Cosmic-ray air showers', t0: 26, t1: 60, bands: ['gamma', 'uv', 'vis', 'radio'], freq: ['cherenkov', 'showerFluor', 'showerGamma', 'showerRadio'], tags: ['time-compressed'], note: 'A cosmic ray hits the upper air and its particle cascade fans out as it descends. From the ground: a near-UV Cherenkov flash, N₂ fluorescence and a 30–80 MHz radio pulse; the gamma secondaries are absorbed. Real showers last microseconds.',
   init() { this.s = Array.from({ length: 14 }, () => {
-    const az = 210 + R() * 120, nd = [{ n: -1, az: 0, el: 84, j: 0, a: 0, b: 0, lv: 0, w: .55 }], lv1 = 3 + (R() < .55 ? 1 : 0);
-    for (let i = 0; i < lv1; i++) nd.push({ n: 0, az: (i - (lv1 - 1) / 2) * (12 + R() * 9) + (R() - .5) * 6, el: 84 - (13 + R() * 9), j: (R() - .5) * 6, a: .05, b: .35, lv: 1, w: .9 });   // wide fan under the entry
+    const az = fovAz(1 / 6 + R() * 2 / 3), nd = [{ n: -1, az: 0, el: SHOWER_EL, j: 0, a: 0, b: 0, lv: 0, w: .55 }], lv1 = 3 + (R() < .55 ? 1 : 0);
+    for (let i = 0; i < lv1; i++) nd.push({ n: 0, az: (i - (lv1 - 1) / 2) * (12 + R() * 9) + (R() - .5) * 6, el: SHOWER_EL - (13 + R() * 9), j: (R() - .5) * 6, a: .05, b: .35, lv: 1, w: .9 });   // wide fan under the entry
     for (let i = 1; i <= lv1; i++) for (let q = 0, c = 2 + (R() < .35 ? 1 : 0); q < c; q++) { const par = nd[i];   // each main branch forks again
       nd.push({ n: i, az: par.az + (q - .5) * (15 + R() * 11), el: par.el - (13 + R() * 12), j: (R() - .5) * 8, a: .3, b: .68, lv: 2, w: .55 }); }
     for (let i = 1 + lv1; i < nd.length; i++) if (nd[i].lv === 2 && R() < .6) { const par = nd[i];   // twigs off the second level only: depth stops at 3
@@ -222,10 +225,10 @@ export const airShowers = o => event({ name: 'Cosmic-ray air showers', t0: 26, t
   update() { const { t, T } = S; this.s.forEach(s => { const age = t - s.t0; if (age < 0 || age > 3.4) return; const I = sm(0, .35, age) * (1 - sm(2.1, 3.4, age)), g = Math.min(1, age / 2.4);
     const cur = []; let low = null, lowEl = 9e9;
     s.nd.forEach((n, i) => {
-      if (i === 0) { cur.push(onSky(dirAE(s.az, 84))); return; }
+      if (i === 0) { cur.push(onSky(dirAE(s.az, SHOWER_EL))); return; }
       const f = clamp((g - n.a) / Math.max(1e-3, n.b - n.a)), par = cur[n.n];
       if (f <= 0) { cur.push(par); return; }
-      const tgt = onSky(dirAE(s.az + n.az, n.el)), P = par.clone().lerp(tgt, f), mid = par.clone().lerp(P, .5).lerp(onSky(dirAE(s.az + n.az + n.j, n.el)), .16);
+      const tgt = onSky(dirAE(s.az + n.az * SHOWER_AZK, n.el)), P = par.clone().lerp(tgt, f), mid = par.clone().lerp(P, .5).lerp(onSky(dirAE(s.az + (n.az + n.j) * SHOWER_AZK, n.el)), .16);
       cur.push(P); if (n.el < lowEl) { lowEl = n.el; low = P; }
       const fl = .72 + .28 * Math.abs(Math.sin(T * 9 + i * 2.3));
       s.r[i].set([par, mid, P], deg(n.w), deg(n.w * .5), I * (.8 - n.lv * .11) * fl, 1);
@@ -239,8 +242,8 @@ export const airShowers = o => event({ name: 'Cosmic-ray air showers', t0: 26, t
   }); },
   where: () => null }, o);
 
-// opts.az / opts.dist place the storm cell (default: over the southern horizon, 4.5 km away)
-export const thunderstorm = o => event({ name: 'Distant thunderstorm', t0: 30, t1: 50, bands: ['vis', 'radio', 'xray', 'gamma'], freq: ['lightning', 'sferics', 'leaderXray', 'tgf'], note: 'Lightning, VLF radio "sferics", X-rays from the stepped leaders and terrestrial gamma-ray flashes, all detectable from the ground.', az: 205, dist: 4500,
+// opts.az / opts.dist place the storm cell (default: low in the south-west, just inside FOV_SKY, 4.5 km away)
+export const thunderstorm = o => event({ name: 'Distant thunderstorm', t0: 30, t1: 50, bands: ['vis', 'radio', 'xray', 'gamma'], freq: ['lightning', 'sferics', 'leaderXray', 'tgf'], note: 'Lightning, VLF radio "sferics", X-rays from the stepped leaders and terrestrial gamma-ray flashes, all detectable from the ground.', az: FOV_SKY.az0 + 16, dist: 4500,
   init() {
     const a = this.az * DEG; this.x = Math.cos(a) * this.dist; this.z = Math.sin(a) * this.dist; this.gy = S.groundAt(this.x, this.z); this.cy = Math.max(this.gy + 900, 1900);
     this.strikes = Array.from({ length: 8 }, () => { const ox = (R() - .5) * 1500, oz = (R() - .5) * 1500, pts = []; let jx = 0, jz = 0;
@@ -259,9 +262,10 @@ export const thunderstorm = o => event({ name: 'Distant thunderstorm', t0: 30, t
   }, where() { return new V3(this.x, this.cy, this.z); } }, o);
 
 export const fastRadioBurst = o => event({ name: 'Fast radio burst', t0: 38, t1: 45, bands: ['radio'], freq: ['frb'], tags: ['rare'], note: 'A millisecond radio flash from a galaxy billions of light-years away. Plasma along the way disperses it: lower frequencies arrive later, a sweep drawn here as the widening rings.',
-  init() { this.d = dirAE(300, 42); this.e = new Em('radio'); this.r1 = new Rib('radio', null, 49); this.r2 = new Rib('radio', null, 49); },
+  init() { this.d = dirAE(290, 34); this.e = new Em('radio'); this.r1 = new Rib('radio', null, 49); this.r2 = new Rib('radio', null, 49); },
   update() { const { t } = S; if (t < this.t0 || t > this.t0 + 6.2) return; const age = t - this.t0, I = 1 - age / 6.2;
-    this.e.set(onSky(this.d), deg(3.2), I * 1.2); this.r1.set(ringPts(this.d, 2.5 + age * 26), deg(.5), deg(.5), I); this.r2.set(ringPts(this.d, 1.2 + age * 17), deg(.35), deg(.35), I * .7); },
+    this.e.set(onSky(this.d), deg(3.2), I * 1.2); const sw = 1 - Math.exp(-age * .9);   // the dispersion sweep, eased so the rings stay inside the FOV cone (≤ ~25°)
+    this.r1.set(ringPts(this.d, 2.5 + 22.5 * sw), deg(.5), deg(.5), I); this.r2.set(ringPts(this.d, 1.2 + 15 * sw), deg(.35), deg(.35), I * .7); },
   where() { return onSky(this.d); } }, o);
 
 export const supernova = o => event({ name: 'Supernova', t0: 43, t1: 60, bands: ['uv', 'vis', 'xray', 'gamma', 'ir', 'radio'], freq: ['snUV', 'snOptical', 'snXray', 'snGamma', 'snDust', 'snRadio'], tags: ['rare'], note: 'Shock-breakout UV flash, gamma decay lines and an expanding X-ray shell (all seen only from orbit), then the visible peak, new dust (IR) and radio last.',
@@ -273,7 +277,7 @@ export const supernova = o => event({ name: 'Supernova', t0: 43, t1: 60, bands: 
   where() { return onSky(this.d); } }, o);
 
 export const gammaRayBurst = o => event({ name: 'Gamma-ray burst', t0: 48, t1: 60, bands: ['gamma', 'xray', 'vis', 'radio'], freq: ['grbGamma', 'afterglowXray', 'afterglowOptical', 'afterglowRadio'], tags: ['rare'], note: 'A brief gamma flash (only satellites see it), followed by an afterglow at longer wavelengths; rarely the optical afterglow is bright enough for the naked eye.',
-  init() { this.d = dirAE(335, 48); this.g = new Em('gamma', null, 0, 'space'); this.x = new Em('xray', null, 0, 'space'); this.v = new Em('vis', '#cfe0ff'); this.r = new Em('radio'); this.flash = document.getElementById('flash'); },
+  init() { this.d = dirAE(322, 30); this.g = new Em('gamma', null, 0, 'space'); this.x = new Em('xray', null, 0, 'space'); this.v = new Em('vis', '#cfe0ff'); this.r = new Em('radio'); this.flash = document.getElementById('flash'); },
   update() { const { t, T, on } = S, fl = on.gamma && S.detector === 'orbit' && t > 48 && t < 48.6 ? .45 * (1 - (t - 48) / .6) : 0;
     this.flash.style.opacity = fl; if (fl) this.flash.style.background = `hsl(${(T * 400) % 360},100%,55%)`;
     if (t < 48) return; const p = onSky(this.d);
@@ -339,9 +343,9 @@ export const noctilucentClouds = o => event({ name: 'Noctilucent clouds', t0: 42
   init() { this.r = Array.from({ length: 5 }, () => new Rib('vis', '#dce8f8', 25)); this.u = Array.from({ length: 5 }, () => new Rib('uv', null, 25, 0, 'high')); },
   update() { const { t, T } = S, I = sm(42, 50, t);
     for (let k = 0; k < 5; k++) { const e = 26 + k * 3.4, pts = [];
-      for (let j = 0; j <= 24; j++) { const az = 218 + j * 5.6; pts.push(skyP(az, e + Math.sin(az * .11 + T * .45 + k * 1.3) * 1.6)); }
+      for (let j = 0; j <= 24; j++) { const az = 248 + j * 3.4; pts.push(skyP(az, e + Math.sin(az * .11 + T * .45 + k * 1.3) * 1.6)); }
       const sh = .4 + .6 * Math.abs(Math.sin(T * .7 + k * 1.9)); this.r[k].set(pts, deg(.28), deg(.28), I * sh * .18, 1); this.u[k].set(pts, deg(.6), deg(.6), I * sh * .28, 1); } },
-  where: () => skyP(268, 32) }, o);
+  where: () => skyP(290, 32) }, o);
 
 // 22° halo plus the upper tangent arc touching its top: V-shaped "gull wings" while the Moon is low,
 // flattening as it climbs (around 30° and higher they droop toward the circumscribed halo).
