@@ -127,8 +127,9 @@ export const satellitePass = o => event({ name: 'Satellite pass', t0: 12, t1: 16
 // their Ku-band link is telemetry/command with ground stations (SpaceX FCC filings, TT&C in Ku-band).
 export const starlink = o => event({ name: 'Starlink train', t0: 18, t1: 22.5, bands: ['vis', 'micro'], freq: ['sunlight', 'kuDownlink'], note: 'A string of freshly launched satellites, still low (~300 km) and sunlit as twilight deepens, filing past for a quarter of an hour. Still raising their orbits, they serve no one yet: their microwave signal is telemetry to ground stations.',
   init() { this.s = Array.from({ length: 22 }, (_, k) => k); this.v = new EmField('vis', 22, '#f4f6ff'); this.m = new EmField('micro', 22); this.p = null; },
+  // each satellite ~1.2 units (~4 min) across the cone, the train strung out over ~2.7 units (~9 min): q = p·3.8 − k·0.125
   update() { const { t } = S; if (t < this.t0 || t > this.t1) { this.p = null; return; } const p = (t - this.t0) / (this.t1 - this.t0), I = env(t, this.t0, this.t1, 1), vis = I * sm(4, 7, depression());
-    this.s.forEach((s, k) => { const q = p * 1.3 - k * .014; if (q < 0 || q > 1) return; const d = dirAE(210 + 110 * q, 20 + 34 * Math.sin(Math.PI * q)), pos = onSky(d); this.v.set(k, pos, deg(.18), vis * .9 * sunlitAt(d, 300)); if (k % 3 === 0) this.m.set(k, pos, deg(.4), I * .5); if (k === 0) this.p = pos; }); },
+    this.s.forEach((s, k) => { const q = p * 3.8 - k * .125; if (q < 0 || q > 1) return; const d = dirAE(210 + 110 * q, 20 + 34 * Math.sin(Math.PI * q)), pos = onSky(d); this.v.set(k, pos, deg(.18), vis * .9 * sunlitAt(d, 300)); if (k % 3 === 0) this.m.set(k, pos, deg(.4), I * .5); if (k === 0) this.p = pos; }); },
   where() { return this.p; } }, o);
 
 export const blackHoleBinary = o => event({ name: 'Black-hole X-ray binary', t0: 30, t1: 60, bands: ['xray', 'radio', 'vis'], freq: ['accretionXray', 'jetSynchrotron', 'companionStar'], note: 'Gas falling into a black hole flickers in X-rays (seen only from orbit); radio jets flare outward in cones along the spin axis.',
@@ -241,7 +242,8 @@ export const moonrise = o => event({ name: 'Waxing Moon', t0: 0, t1: 60, bands: 
     const mat = this.s.material, b = lerp(1.05, 1.6, sm(4, 20, t)), warm = 1 - sm(3, 12, el);                          // pale in twilight; extinction reddens it low down
     mat.rotation = Math.atan2(sp.dot(v), sp.dot(u)); mat.opacity = I * lerp(.8, 1, sm(4, 20, t));
     this.s.position.copy(this.p); this.s.scale.setScalar(deg(1.1)); mat.color.setRGB(b * (1 + .25 * warm), b * (1 - .08 * warm), b * (1 - .35 * warm));
-    const f = moonFlux(); S.act.vis += I * f; this.h.set(this.p, deg(7), I * f * .45); this.ir.set(this.p, deg(.9), I * .5 * (.3 + .7 * MOON_K)); this.g.set(this.p, deg(1.2), I * .3); },
+    // lunar IR (10 µm) ∝ the sunlit fraction: the ~100 K night side emits ~1e-4 of the sunlit part
+    const f = moonFlux(); S.act.vis += I * f; this.h.set(this.p, deg(7), I * f * .45); this.ir.set(this.p, deg(.9), I * .5 * MOON_K); this.g.set(this.p, deg(1.2), I * .3); },
   where() { return this.p; } }, o);
 
 // Growing structure: node table { n: parent, az, el, j, a, b, lv, w }; a node lerps from its parent's
@@ -414,14 +416,14 @@ export const moonHalo = o => event({ name: 'Moon halo', t0: 48, t1: 60, bands: [
 // vs the Sun's depression δ, roughly: −2 at δ ≈ 2.5–3°, 0 at δ ≈ 4.5–5°, +1 at δ ≈ 6–7° (Schaefer 1993, "Astronomy and
 // the limits of vision", Vistas Astron. 36, 311 — twilight sky brightness vs the eye's threshold); on this timeline
 // δ = 0.55 t − 4, so Jupiter at t ≈ 12, Arcturus at t ≈ 16, Spica at t ≈ 18.5, Denebola (mag 2, δ 8°) at t ≈ 22. Positions:
-// one late-July evening at ~45°N facing west (the noctilucent-cloud season) — Arcturus high WSW, Spica low SW,
+// one summer evening (Sun dec ≈ +17–20°, late July – early August) at ~45°N facing west (the noctilucent-cloud season) — Arcturus high WSW, Spica low SW,
 // Denebola west (Regulus and Pollux have set); the planet sits on the ecliptic above the sunset (Jupiter's place changes every year,
 // so it stands for "a bright planet there"). They sink with the western sky, ~0.5°/unit like the Sun (el only; the
 // star-field shader is fixed). Light pollution: Jupiter and mag-0 stars show in a city, mag-1 stars dimmed by ENV.starDim. Venus is its
 // own event; the faint field comes from the night-sky shader. Jupiter's decametric radio storms (Io-modulated,
 // 10–40 MHz) are bursty and reach ground antennas above the ionospheric cutoff.
 const FIRST_LIGHTS = [   // az, el at t0, magnitude, depression where it pops out (deg), colour
-  // one consistent sky: a late-July evening at ~45°N facing west, the Sun ~4–6° down (alt/az from J2000 RA/Dec)
+  // one consistent sky: a summer evening (late July – early August) at ~45°N facing west, the Sun ~4–6° down (alt/az from J2000 RA/Dec)
   [258, 15, -2.3, 2.6, '#fff4dc'],   // Jupiter, on the evening ecliptic (el ≈ 15° at az 258)
   [240, 51, -0.05, 4.6, '#ffd2a0'],  // Arcturus (K1.5 III, orange)
   [231, 19, 0.98, 6.2, '#cfe0ff'],   // Spica (B1, blue-white)

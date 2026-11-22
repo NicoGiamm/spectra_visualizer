@@ -24,7 +24,8 @@ export const MOON_K = (1 - Math.cos(MOON_ELONG * DEG)) / 2;      // illuminated 
 // Brightness vs phase angle α = 180° − elongation: m(α) = m_full + 0.026|α| + 4e-9 α⁴ (Krisciunas & Schaefer 1991,
 // PASP 103, 1033; cf. Allen's Astrophysical Quantities, lunar phase curve) → 0.061 of full-Moon illuminance here
 // (≈ 0.09 at quarter). Drawn as perceived brightness, Stevens' power law with exponent 1/3 (dark-adapted brightness,
-// Stevens 1957) — linear light would make a 6 % Moon vanish on screen; it still sets every ratio below.
+// Stevens 1957) — linear light would make a 6 % Moon vanish on screen; ratios below are perceived (cube-root) ratios, not linear ones
+// (a full Moon would read only ~2.6× brighter, not 16×) — order and timing stay physical.
 const PA = 180 - MOON_ELONG;
 export const MOON_ILLUM = 10 ** (-.4 * (.026 * PA + 4e-9 * PA ** 4));
 export const moonDir = () => { const t = S.t; return dirAE(211.1 + .824 * t - .00231 * t * t, 28.3 - .345 * t - .00207 * t * t); };

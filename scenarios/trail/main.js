@@ -22,8 +22,8 @@ run({
     // added after the original list so the events above keep their seeded R values (crepuscularRays takes the
     // zodiacalScatter slot with the same 18 R() draws; the removed thermalUpdraft/fireWhirl drew none)
     local.cellMast(), local.weatherStation(), local.mountainStream(), local.gnss(), local.cows(), local.sunWarmedSlope(),
-    local.farHikers(), local.sparkDraft(), sky.purpleLight(), sky.zodiacalLight(), local.valleyFog(),
-    // M8/T3 twilight opening, appended last (seeded R): first planet & stars, a fireball, a launch plume (none draws from R)
+    local.farHikers(), local.sparkDraft(), sky.purpleLight(), /* zodiacalLight dropped (M9): a 41 % Moon is up and the August ecliptic lies flat along the SW horizon; it draws no R() */ local.valleyFog(),
+    // M8/T3 twilight opening, appended last (seeded R): Jupiter & first stars, a fireball, a launch plume (none draws from R)
     sky.firstStars(), sky.fireball(), sky.rocketPlume(),
   ],
 });

@@ -146,7 +146,7 @@ void main(){ vQ = position.xy; vSeed = aS.z;
 const FOG_SHAPE = `float fogA(){ float n = fbm(vec2(vQ.x*2.2 + vSeed*13. + uTime*.012, vQ.y*1.2 + vSeed*5.));
   float top = .05 + .55*n, y = vQ.y;
   return smoothstep(1., .45, abs(vQ.x))*smoothstep(top + .1, top - .5, y)*smoothstep(-1., -.75, y)*(.45 + .55*n)*uAmt; }`;
-export const valleyFog = () => event({ name: 'Valley fog', t0: 30, t1: 60, bands: ['vis', 'ir'], freq: ['fogScatter', 'fogTop'], note: 'Cold air drains into the hollows ahead and its moisture condenses into fog banks. They glow silver once the Moon is up; on a thermal camera they read cold, hiding the warmer ground beneath.',
+export const valleyFog = () => event({ name: 'Valley fog', t0: 30, t1: 60, bands: ['vis', 'ir'], freq: ['fogScatter', 'fogTop'], note: 'Cold air drains into the hollows ahead and its moisture condenses into fog banks. They glow silver once moonlight takes over the darkening sky; on a thermal camera they read cold, hiding the warmer ground beneath.',
   init() {
     const banks = [], c0 = new V3(trailX(-40), 0, -40);
     for (let i = 0; i < 600 && banks.length < 22; i++) {

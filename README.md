@@ -26,7 +26,7 @@ time, rare or stylised is labelled as such in the interface.
 | **City** | Out of a street canyon into a park: traffic, pedestrians with phones, Wi-Fi and 5G with multipath reflections, a tram arcing, LiDAR delivery robots, security cameras with near-IR illuminators, fireworks under a light-polluted sky. |
 
 All three share one sky: sunset and twilight, Venus, an airliner, satellites, the Milky Way and the cosmic
-microwave background, meteors, a pulsar, a comet, aurora, moonrise and halos, cosmic-ray air showers, a
+microwave background, meteors, a pulsar, a comet, aurora, a setting waxing Moon and halos, cosmic-ray air showers, a
 thunderstorm, a fast radio burst, a supernova and a gamma-ray burst.
 
 ## Try it

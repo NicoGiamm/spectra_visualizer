@@ -87,7 +87,7 @@ export const SPECTRUM = {
   fm:              { name: 'FM broadcast', f: 100e6 },                 // 87.5–108 MHz broadcast band (ITU RR Art. 5, Region 1)
   airband:         { name: 'VHF airband voice', f: 125e6 },            // 118–137 MHz AM voice (ITU RR Art. 5; ICAO Annex 10 Vol. V)
   ais:             { name: 'AIS ship transponder (VHF)', f: 162e6 },
-  satBeacon:       { name: 'satellite VHF beacon', f: 145e6 },
+  satBeacon:       { name: 'satellite VHF beacon', f: 145.8e6 },   // ISS ARISS FM downlink 145.800 MHz
   modeS:           { name: 'aircraft transponder (Mode S / ADS-B)', f: 1090e6 },
   wxRadar:         { name: 'airborne weather radar (X-band)', f: 9.3e9 },
   xbandRadar:      { name: 'ship X-band radar', f: 9.4e9 },
