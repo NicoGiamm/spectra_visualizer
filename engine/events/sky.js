@@ -14,8 +14,8 @@ import { event } from '../core/events.js';
 import { D, deg, dirAE, skyP, onSky, basis, ringPts, linePts, FOV_SKY, fovAz } from '../core/geom.js';
 import { Em, Rib, EmField } from '../render/sources.js';
 import { visOnly } from '../render/instrument.js';
-import { cloudTex, moonTex, softTex } from '../render/textures.js';
-import { ENV, SUN_AZ, sunEl, moonDir, night, moonlit, GAL_C, CONTRAIL } from '../world/atmosphere.js';
+import { canvasTex, cloudTex, moonTex, softTex } from '../render/textures.js';
+import { ENV, SUN_AZ, sunEl, moonDir, night, moonlit, moonFlux, MOON_ELONG, MOON_K, GAL_C, CONTRAIL } from '../world/atmosphere.js';
 
 export const sunset = o => event({ name: 'Sunset', t0: 0, t1: 16, bands: ['vis', 'ir', 'uv', 'radio'], freq: ['sunlight', 'solarNIR', 'solarUV', 'solarRadio'], tags: ['common'], note: 'The Sun is bright in every band; its UV fades first as it sets.',
   init() { this.e = [new Em('ir'), new Em('uv'), new Em('radio'), new Em('vis', '#ffb070')]; },
@@ -110,8 +110,11 @@ const depression = () => -sunEl();                                              
 // (M8/T3, was t 25–39): an ISS-class pass (mag ≈ −3, ~420 km) is bright enough to see from δ ≈ 2° (t ≈ 11), and in
 // the west-facing cone it stays sunlit for the whole pass (sunlitAt: shadow entry only after t ≈ 46, δ ≈ 21°); the
 // fade is computed, so a later retime shows the shadow entry mid-pass. Radio/microwave don't care about the sky.
+// Duration (M9/T3): the ISS orbits in 92.7 min at ~420 km; horizon to horizon at most 10.4 min, above ~12° (the
+// cone's track) ~5 min ≈ 1.5 script units (1 unit ≈ 3.4 min) — 3 real seconds. Drawn over 4 units (×~3 slower,
+// tagged `stylised`) so the eye can follow it; the note says so.
 const satDir = p => dirAE(fovAz(p), 12 + 46 * Math.sin(Math.PI * p));            // across the FOV cone, culminating at 58°
-export const satellitePass = o => event({ name: 'Satellite pass', t0: 11, t1: 23, bands: ['vis', 'radio'], freq: ['sunlight', 'satBeacon'], tags: ['common'], note: 'A bright space station still in sunlight ~400 km up while the ground is in twilight: reflected sunlight, and its amateur-radio downlink on 145.8 MHz that a handheld can pick up (its microwave links go up to relay satellites, not down to you). It would fade out mid-pass where it enters Earth\'s shadow — here, toward the sunset side, that only happens with the Sun ~21° down.',
+export const satellitePass = o => event({ name: 'Satellite pass', t0: 12, t1: 16, bands: ['vis', 'radio'], freq: ['sunlight', 'satBeacon'], tags: ['common', 'stylised'], note: 'A bright space station still in sunlight ~400 km up while the ground is in twilight: reflected sunlight, and its amateur-radio downlink on 145.8 MHz that a handheld can pick up (its microwave links go up to relay satellites, not down to you). It would fade out mid-pass where it enters Earth\'s shadow — here, toward the sunset side, that only happens with the Sun ~21° down. Slowed about threefold so you can follow it: a real pass across this part of the sky takes about five minutes.',
   init() { this.v = new Em('vis'); this.r = new Em('radio'); this.p = null; },   // S/Ku links relayed via TDRSS (geostationary), not to the ground
   update() { const { t } = S, sp = (t - this.t0) / (this.t1 - this.t0); if (sp < 0 || sp > 1) { this.p = null; return; } const I = env(t, this.t0, this.t1, 1), d = satDir(sp), p = onSky(d); this.p = p;
     this.v.set(p, deg(.22), I * sunlitAt(d, 420) * sm(1, 3, depression())); this.r.set(p, deg(.6), I * .5); },
@@ -119,10 +122,14 @@ export const satellitePass = o => event({ name: 'Satellite pass', t0: 11, t1: 23
 
 // A freshly launched Starlink train (~300 km, still orbit-raising; mag ~2–3 each) needs a darker sky than the ISS:
 // it shows from δ ≈ 4–7° (t 15–20). Retimed into the opening (M8/T3, was t 28–36); fully sunlit in the cone (sunlitAt).
-export const starlink = o => event({ name: 'Starlink train', t0: 16, t1: 26, bands: ['vis', 'micro'], freq: ['sunlight', 'kuDownlink'], note: 'A string of freshly launched satellites, still low (~300 km) and sunlit as twilight deepens, beaming microwave internet.',
+// Duration (M9/T3): each satellite crosses the cone in ~4 min at ~300 km (90.5 min orbit), and a fresh train strung
+// out over ~10 min files past for longer: ~15 min ≈ 4.5 units. While orbit-raising the satellites serve no users;
+// their Ku-band link is telemetry/command with ground stations (SpaceX FCC filings, TT&C in Ku-band).
+export const starlink = o => event({ name: 'Starlink train', t0: 18, t1: 22.5, bands: ['vis', 'micro'], freq: ['sunlight', 'kuDownlink'], note: 'A string of freshly launched satellites, still low (~300 km) and sunlit as twilight deepens, filing past for a quarter of an hour. Still raising their orbits, they serve no one yet: their microwave signal is telemetry to ground stations.',
   init() { this.s = Array.from({ length: 22 }, (_, k) => k); this.v = new EmField('vis', 22, '#f4f6ff'); this.m = new EmField('micro', 22); this.p = null; },
-  update() { const { t } = S; if (t < this.t0 || t > this.t1) { this.p = null; return; } const p = (t - this.t0) / (this.t1 - this.t0), I = env(t, this.t0, this.t1, 1), vis = I * sm(4, 7, depression());
-    this.s.forEach((s, k) => { const q = p * 1.3 - k * .014; if (q < 0 || q > 1) return; const d = dirAE(210 + 110 * q, 20 + 34 * Math.sin(Math.PI * q)), pos = onSky(d); this.v.set(k, pos, deg(.18), vis * .9 * sunlitAt(d, 300)); if (k % 3 === 0) this.m.set(k, pos, deg(.4), I * .5); if (k === 0) this.p = pos; }); },
+  // each satellite ~1.2 units (~4 min) across the cone, the train strung out over ~3 units (~10 min): q = p·3.8 − k·0.125
+  update() { const { t } = S; if (t < this.t0 || t > this.t1) { this.p = null; return; } const p = (t - this.t0) / (this.t1 - this.t0), I = env(t, this.t0, this.t1, 1), vis = I * sm(4, 7, depression()); this.p = null;   // label: the first satellite still in the cone
+    this.s.forEach((s, k) => { const q = p * 3.8 - k * .125; if (q < 0 || q > 1) return; const d = dirAE(210 + 110 * q, 20 + 34 * Math.sin(Math.PI * q)), pos = onSky(d); this.v.set(k, pos, deg(.18), vis * .9 * sunlitAt(d, 300)); if (k % 3 === 0) this.m.set(k, pos, deg(.4), I * .5); if (!this.p) this.p = pos; }); },
   where() { return this.p; } }, o);
 
 export const blackHoleBinary = o => event({ name: 'Black-hole X-ray binary', t0: 30, t1: 60, bands: ['xray', 'radio', 'vis'], freq: ['accretionXray', 'jetSynchrotron', 'companionStar'], note: 'Gas falling into a black hole flickers in X-rays (seen only from orbit); radio jets flare outward in cones along the spin axis.',
@@ -217,12 +224,26 @@ export const aurora = o => event({ name: 'Aurora', t0: 26, t1: 50, az0: 295, az1
   },
   where() { return this.p; } }, o);
 
-export const moonrise = o => event({ name: 'Moonrise', t0: 33, t1: 60, bands: ['vis', 'ir', 'gamma'], freq: ['sunlight', 'lunarThermal', 'lunarGamma'], tags: ['common'], note: 'Rising ahead of you: reflected sunlight and a warm surface (IR); cosmic rays make the Moon glow in gamma rays, seen only from orbit.',
-  init() { this.s = new THREE.Sprite(new THREE.SpriteMaterial({ map: moonTex(), depthWrite: false, fog: false })); this.s.renderOrder = 3; S.scene.add(visOnly(this.s)); this.h = new Em('vis', '#cfd6ff'); this.ir = new Em('ir'); this.g = new Em('gamma', null, 0, 'space'); },
-  update() { const { t } = S, I = sm(33, 35, t); this.s.visible = S.on.vis && I > 0;
-    if (I <= 0) { this.p = null; return; } this.p = onSky(moonDir());
-    const warm = 1 - sm(36, 50, t); this.s.position.copy(this.p); this.s.scale.setScalar(deg(1.1)); this.s.material.color.setRGB(lerp(2.2, 1.6, 1 - warm), 1.6, lerp(1.0, 1.55, 1 - warm));
-    S.act.vis += I * .5; this.h.set(this.p, deg(7), I * .18); this.ir.set(this.p, deg(.9), I * .5); this.g.set(this.p, deg(1.2), I * .3); },
+// The Moon (M9/T1; factory kept as `moonrise` so the scenario lists don't change): the waxing Moon of atmosphere.js
+// (moonDir, MOON_K, moonFlux), up in the south-west from the start and setting at the end. The phase is a terminator
+// mask on the sprite (lit fraction MOON_K, earthshine on the dark side) rotated each frame so the lit limb faces the
+// drawn Sun; pale against the twilight, reddened by extinction low down, faded over the last 1.5° as it sets.
+// Lunar thermal IR comes from the sunlit part (~390 K at the subsolar point); the cosmic-ray gamma glow from the whole disc.
+const moonPhaseTex = (() => { let tx; return () => tx || (tx = canvasTex(256, (g, s) => {
+  const r = s / 2 - 2, c = s / 2, ce = Math.cos(MOON_ELONG * DEG); g.drawImage(moonTex().image, 0, 0, s, s);
+  g.globalCompositeOperation = 'destination-out'; g.fillStyle = 'rgba(0,0,0,.93)'; g.filter = 'blur(1.5px)'; g.beginPath();   // dark side keeps ~7 % (earthshine)
+  for (let k = 0; k <= 48; k++) { const y = -r + 2 * r * k / 48; g.lineTo(c + ce * Math.sqrt(Math.max(0, r * r - y * y)), c + y); }   // terminator, top → bottom
+  g.arc(c, c, r + 2, Math.PI / 2, Math.PI * 1.5); g.fill(); })); })();   // lit limb at +x: unlit = left of x = cos(E)·√(r² − y²)
+export const moonrise = o => event({ name: 'Waxing Moon', t0: 0, t1: 60, bands: ['vis', 'ir', 'gamma'], freq: ['sunlight', 'lunarThermal', 'lunarGamma'], tags: ['common'], note: 'A waxing Moon about 6½ days old, 41 % lit, already up in the south-west at sunset and sinking west until it sets. Reflected sunlight, lit limb toward the Sun, and a warm sunlit surface (IR); cosmic rays make the whole disc glow in gamma rays, seen only from orbit.',
+  init() { this.s = new THREE.Sprite(new THREE.SpriteMaterial({ map: moonPhaseTex(), depthWrite: false, fog: false })); this.s.renderOrder = 3; S.scene.add(visOnly(this.s)); this.h = new Em('vis', '#cfd6ff'); this.ir = new Em('ir'); this.g = new Em('gamma', null, 0, 'space'); },
+  update() { const { t } = S, d = moonDir(), el = Math.asin(clamp(d.y, -1, 1)) / DEG, I = sm(0, 1.5, el); this.s.visible = S.on.vis && I > 0;
+    if (I <= 0) { this.p = null; return; } this.p = onSky(d);
+    const [u, v] = basis(d), sd = dirAE(SUN_AZ, sunEl()), sp = sd.addScaledVector(d, -sd.dot(d));                      // Sun's direction on the sky at the Moon
+    const mat = this.s.material, b = lerp(1.05, 1.6, sm(4, 20, t)), warm = 1 - sm(3, 12, el);                          // pale in twilight; extinction reddens it low down
+    mat.rotation = Math.atan2(sp.dot(v), sp.dot(u)); mat.opacity = I * lerp(.8, 1, sm(4, 20, t));
+    this.s.position.copy(this.p); this.s.scale.setScalar(deg(1.1)); mat.color.setRGB(b * (1 + .25 * warm), b * (1 - .08 * warm), b * (1 - .35 * warm));
+    // lunar IR (10 µm) ∝ the sunlit fraction: the ~100 K night side emits ~1e-4 of the sunlit part
+    const f = moonFlux(); S.act.vis += I * f; this.h.set(this.p, deg(7), I * f * .45); this.ir.set(this.p, deg(.9), I * .5 * MOON_K); this.g.set(this.p, deg(1.2), I * .3); },
   where() { return this.p; } }, o);
 
 // Growing structure: node table { n: parent, az, el, j, a, b, lv, w }; a node lerps from its parent's
@@ -343,8 +364,8 @@ export const purpleLight = o => event({ name: 'Purple light', t0: 8, t1: 16, ban
 
 // Zodiacal light: a faint cone of sunlight scattered by interplanetary dust, rising steeply along the
 // ecliptic from the western horizon once twilight is over. Needs a dark site (scaled by ENV.starDim)
-// and a moonless sky (fades as the Moon gets up). Overrides: az (base azimuth), tilt (deg from horizontal).
-export const zodiacalLight = o => event({ name: 'Zodiacal light', t0: 26, t1: 45, bands: ['vis'], freq: ['zodiacal'], az: 282, tilt: 62, note: 'A faint cone of sunlight scattered by interplanetary dust, leaning along the ecliptic above where the Sun set. Only from dark sites, before moonrise.',
+// and a moonless sky (washed out as the Moon's light takes over the dark sky). Overrides: az (base azimuth), tilt (deg from horizontal).
+export const zodiacalLight = o => event({ name: 'Zodiacal light', t0: 26, t1: 45, bands: ['vis'], freq: ['zodiacal'], az: 282, tilt: 62, note: 'A faint cone of sunlight scattered by interplanetary dust, leaning along the ecliptic above where the Sun set. Only from dark sites; the waxing Moon\'s light washes much of it out.',
   init() {
     const n = 16, pos = new Float32Array((n + 1) * 6), uv = [], idx = [], L = 55, W0 = 13, W1 = 2.5, sa = Math.sin(this.tilt * DEG), ca = Math.cos(this.tilt * DEG);
     for (let i = 0; i <= n; i++) { const v = i / n, az = this.az - v * L * ca, el = -4 + v * L * sa, hw = lerp(W0, W1, v);
@@ -358,7 +379,7 @@ export const zodiacalLight = o => event({ name: 'Zodiacal light', t0: 26, t1: 45
     this.mesh = new THREE.Mesh(g, this.mat); this.mesh.frustumCulled = false; this.mesh.renderOrder = -4; this.mesh.visible = false; S.scene.add(this.mesh);
     this.top = dirAE(this.az - .35 * L * ca, -4 + .35 * L * sa);
   },
-  update() { const I = env(S.t, this.t0, this.t1, 4) * night() * (ENV.starDim ?? 1) * (1 - .85 * moonlit()); this.mesh.visible = S.on.vis && I > .005; if (I <= .005) return;
+  update() { const I = env(S.t, this.t0, this.t1, 4) * night() * (ENV.starDim ?? 1) * Math.max(0, 1 - 1.5 * moonlit()); this.mesh.visible = S.on.vis && I > .005; if (I <= .005) return;
     this.mesh.position.copy(S.camera.position); this.mat.uniforms.uI.value = I * .11; S.act.vis += I * .15; },
   where() { return onSky(this.top); } }, o);
 
@@ -376,10 +397,12 @@ export const noctilucentClouds = o => event({ name: 'Noctilucent clouds', t0: 18
   where: () => skyP(300, 10) }, o);
 
 // 22° halo plus the upper tangent arc touching its top: V-shaped "gull wings" while the Moon is low,
-// flattening as it climbs (around 30° and higher they droop toward the circumscribed halo).
-export const moonHalo = o => event({ name: 'Moon halo', t0: 48, t1: 60, bands: ['vis', 'uv'], freq: ['iceHalo', 'haloUV'], tags: ['common'], note: 'A 22° halo around the Moon from hexagonal ice crystals in thin cirrus, with an upper tangent arc touching its top like gull wings.',
+// flattening as it climbs (around 30° and higher they droop toward the circumscribed halo). Its brightness follows the
+// Moon's light (moonlit: phase, extinction, setting): around the low, 41 % lit Moon of M9 it is a faint ring that fades
+// as the Moon sinks and is gone when it sets.
+export const moonHalo = o => event({ name: 'Moon halo', t0: 48, t1: 60, bands: ['vis', 'uv'], freq: ['iceHalo', 'haloUV'], tags: ['common'], note: 'A 22° halo around the Moon from hexagonal ice crystals in thin cirrus, with an upper tangent arc touching its top like gull wings. Around a half Moon it is faint.',
   init() { this.m = new Rib('vis', '#e8e4c8', 33); this.u = new Rib('uv', null, 33); this.arc = [0, 1].map(() => new Rib('vis', '#d6dcec', 12)); },
-  update() { const I = sm(48, 52, S.t); if (I <= 0) return; const d = moonDir(), [u, v] = basis(d), el = Math.asin(clamp(d.y, -1, 1)) / DEG;
+  update() { const I = sm(48, 52, S.t) * moonlit() * 1.6; if (I <= .01) return; const d = moonDir(), [u, v] = basis(d), el = Math.asin(clamp(d.y, -1, 1)) / DEG;
     this.m.set(ringPts(d, 22, 32), deg(.55), deg(.55), I * .5); this.u.set(ringPts(d, 22.6, 32), deg(.9), deg(.9), I * .35);
     const c = lerp(.035, -.004, clamp(el / 32));                                                     // wing curvature: up while low, flat/drooping when high
     for (let s = 0; s < 2; s++) { const pts = [];
@@ -393,20 +416,20 @@ export const moonHalo = o => event({ name: 'Moon halo', t0: 48, t1: 60, bands: [
 // vs the Sun's depression δ, roughly: −2 at δ ≈ 2.5–3°, 0 at δ ≈ 4.5–5°, +1 at δ ≈ 6–7° (Schaefer 1993, "Astronomy and
 // the limits of vision", Vistas Astron. 36, 311 — twilight sky brightness vs the eye's threshold); on this timeline
 // δ = 0.55 t − 4, so Jupiter at t ≈ 12, Arcturus at t ≈ 16, Spica at t ≈ 18.5, Denebola (mag 2, δ 8°) at t ≈ 22. Positions:
-// one late-July evening at ~45°N facing west (the noctilucent-cloud season) — Arcturus high WSW, Spica low SW,
+// one summer evening (Sun dec ≈ +17–20°, late July – early August) at ~45°N facing west (the noctilucent-cloud season) — Arcturus high WSW, Spica low SW,
 // Denebola west (Regulus and Pollux have set); the planet sits on the ecliptic above the sunset (Jupiter's place changes every year,
 // so it stands for "a bright planet there"). They sink with the western sky, ~0.5°/unit like the Sun (el only; the
 // star-field shader is fixed). Light pollution: Jupiter and mag-0 stars show in a city, mag-1 stars dimmed by ENV.starDim. Venus is its
 // own event; the faint field comes from the night-sky shader. Jupiter's decametric radio storms (Io-modulated,
 // 10–40 MHz) are bursty and reach ground antennas above the ionospheric cutoff.
 const FIRST_LIGHTS = [   // az, el at t0, magnitude, depression where it pops out (deg), colour
-  // one consistent sky: a late-July evening at ~45°N facing west, the Sun ~4–6° down (alt/az from J2000 RA/Dec)
+  // one consistent sky: a summer evening (late July – early August) at ~45°N facing west, the Sun ~4–6° down (alt/az from J2000 RA/Dec)
   [258, 15, -2.3, 2.6, '#fff4dc'],   // Jupiter, on the evening ecliptic (el ≈ 15° at az 258)
   [240, 51, -0.05, 4.6, '#ffd2a0'],  // Arcturus (K1.5 III, orange)
   [231, 19, 0.98, 6.2, '#cfe0ff'],   // Spica (B1, blue-white)
   [266, 25, 2.14, 8.0, '#eef2ff'],   // Denebola (A3 V), the Lion's tail — Regulus and Pollux have set by now
 ];
-export const firstStars = o => event({ name: 'First planet & stars', t0: 11, t1: 60, bands: ['vis', 'radio'], freq: ['sunlight', 'starlight', 'jupiterDAM'], tags: ['common'], note: 'As the Sun sinks 3–7° below the horizon the sky drops below one point of light after another: Jupiter first (mag −2), then Arcturus (mag 0), then Spica (mag 1) and, as twilight deepens, Denebola (mag 2). Jupiter\'s decametric radio storms (10–40 MHz) crackle on and off.',
+export const firstStars = o => event({ name: 'Jupiter & first stars', t0: 11, t1: 60, bands: ['vis', 'radio'], freq: ['sunlight', 'starlight', 'jupiterDAM'], tags: ['common'], note: 'As the Sun sinks 3–7° below the horizon the sky drops below one point of light after another: after Venus, Jupiter (mag −2), then Arcturus (mag 0), then Spica (mag 1) and, as twilight deepens, Denebola (mag 2). Jupiter\'s decametric radio storms (10–40 MHz) crackle on and off.',
   init() { this.f = new EmField('vis', FIRST_LIGHTS.length); FIRST_LIGHTS.forEach((s, i) => this.f.color(i, s[4])); this.r = new Em('radio'); this.p = null; },
   dir(i) { const [az, el] = FIRST_LIGHTS[i]; return dirAE(az, el - .5 * Math.cos((az - 270) * DEG) * Math.max(0, S.t - this.t0)); },   // western sky sinks with the Sun (~0.55°/unit)
   update() { const { t, T } = S, I = env(t, this.t0, this.t1, 1), dep = depression(), dim = ENV.starDim ?? 1;

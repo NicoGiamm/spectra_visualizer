@@ -146,7 +146,7 @@ void main(){ vQ = position.xy; vSeed = aS.z;
 const FOG_SHAPE = `float fogA(){ float n = fbm(vec2(vQ.x*2.2 + vSeed*13. + uTime*.012, vQ.y*1.2 + vSeed*5.));
   float top = .05 + .55*n, y = vQ.y;
   return smoothstep(1., .45, abs(vQ.x))*smoothstep(top + .1, top - .5, y)*smoothstep(-1., -.75, y)*(.45 + .55*n)*uAmt; }`;
-export const valleyFog = () => event({ name: 'Valley fog', t0: 30, t1: 60, bands: ['vis', 'ir'], freq: ['fogScatter', 'fogTop'], note: 'Cold air drains into the hollows ahead and its moisture condenses into fog banks. They glow silver once the Moon is up; on a thermal camera they read cold, hiding the warmer ground beneath.',
+export const valleyFog = () => event({ name: 'Valley fog', t0: 30, t1: 60, bands: ['vis', 'ir'], freq: ['fogScatter', 'fogTop'], note: 'Cold air drains into the hollows ahead and its moisture condenses into fog banks. They glow silver once moonlight takes over the darkening sky; on a thermal camera they read cold, hiding the warmer ground beneath.',
   init() {
     const banks = [], c0 = new V3(trailX(-40), 0, -40);
     for (let i = 0; i < 600 && banks.length < 22; i++) {
@@ -291,8 +291,20 @@ export const weatherStation = () => event({ name: 'Weather-station radio link', 
     this.link.set(pts, 3, 9, I * .6); },
   where() { return this.top; } });
 
-export const gnss = () => event({ name: 'GPS & Galileo satellites', t0: 0, t1: 60, bands: ['micro'], freq: ['gpsL1', 'galileoE5'], note: 'Navigation satellites 20 000 km up broadcast continuously in the L band (1.2–1.6 GHz, microwave): faint, steady points that barely move over a few hours — the signal your phone uses to place you on the trail.',
+// GNSS drift: GPS orbits in 11 h 58 min at 20 180 km (Galileo 14 h 05 min at 23 222 km), ~30°/h (GPS) and ~26°/h
+// (Galileo) in orbit, seen from the ground ~25–40°/h (faster near the zenith, slower low down) — a satellite crosses the
+// sky in ~5–7 h (IS-GPS-200; Galileo OS SIS ICD). On the sunset clock (1 script unit ≈ 3.4 min: the Sun sinks 0.55° per
+// unit at ~0.16°/min) that is ~1.7°/unit, ~100° over the night: each point moves along its own track and, leaving the
+// cone, is replaced by another rising into it (wrapped, faded at the cone's edges). Same R() draws as before.
+const GNSS_RATE = 1.7, GNSS_EL0 = 12, GNSS_EL1 = FOV_SKY.elMax - 2;   // °/script unit; elevation band drawn
+export const gnss = () => event({ name: 'GPS & Galileo satellites', t0: 0, t1: 60, bands: ['micro'], freq: ['gpsL1', 'galileoE5'], note: 'Navigation satellites 20 000 km up broadcast continuously in the L band (1.2–1.6 GHz, microwave): faint, steady points that each cross the sky in five to seven hours, so over the evening they drift tens of degrees, one setting as another rises — the signal your phone uses to place you on the trail.',
   init() { this.s = Array.from({ length: 9 }, () => ({ az: FOV_SKY.az0 + 4 + R() * 112, el: 14 + R() * (FOV_SKY.elMax - 16), d: (R() - .5) * .12 })); this.f = new EmField('micro', this.s.length, '#ffd27a'); },
+  // track direction from the old drift draw d (−.06….06 → any heading); position wrapped inside the cone
+  pos(s, i, t) { const h = s.d / .06 * Math.PI + i, w = FOV_SKY.az1 - FOV_SKY.az0 - 8, H = GNSS_EL1 - GNSS_EL0, k = i % 2 ? .87 : 1;   // Galileo (odd) a bit slower
+    const az = FOV_SKY.az0 + 4 + ((s.az - FOV_SKY.az0 - 4 + t * GNSS_RATE * k * Math.cos(h) / Math.cos(s.el * DEG)) % w + w) % w;
+    const el = GNSS_EL0 + ((s.el - GNSS_EL0 + t * GNSS_RATE * k * Math.sin(h)) % H + H) % H;
+    const edge = Math.min(az - FOV_SKY.az0 - 4, FOV_SKY.az0 + 4 + w - az, el - GNSS_EL0, GNSS_EL1 - el);
+    return { az, el, a: sm(0, 3, edge) }; },
   update() { const { t } = S;
-    this.s.forEach((s, i) => this.f.set(i, skyP(s.az + t * s.d, s.el + t * s.d * .5), deg(.7), .2)); },
-  where() { const s = this.s[3]; return skyP(s.az + S.t * s.d, s.el + S.t * s.d * .5); } });
+    this.s.forEach((s, i) => { const q = this.pos(s, i, t); this.f.set(i, skyP(q.az, q.el), deg(.7), .2 * q.a); }); },
+  where() { const q = this.pos(this.s[3], 3, S.t); return skyP(q.az, q.el); } });

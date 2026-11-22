@@ -4,7 +4,7 @@
 // so sky events from engine/events/sky.js line up with it wherever they are reused.
 import * as THREE from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
-import { V3, sm, lerp, kf } from '../core/util.js';
+import { V3, DEG, sm, lerp, kf } from '../core/util.js';
 import { S } from '../core/state.js';
 import { dirAE } from '../core/geom.js';
 import { COMMON } from '../render/shaders.js';
@@ -12,9 +12,30 @@ import { COMMON } from '../render/shaders.js';
 // --- timeline -------------------------------------------------------------------------
 export const SUN_AZ = 295;
 export const sunEl = () => 4 - S.t * .55;                       // kept low and dim: sets at t≈7
-export const moonDir = () => dirAE(252 - (S.t - 33) * .3, -4 + (S.t - 33) * 1.25);   // rises ahead from t≈33
 export const night = () => sm(8, 22, S.t);
-export const moonlit = () => sm(38, 50, S.t);
+// The Moon (M9/T1): a waxing Moon 6.5 days old, elongation 79° east of the Sun along the ecliptic, already up in the
+// south-west at sunset and setting at the end. Track from a spherical-astronomy computation (lat 45° N, Sun at dec
+// +17.4° / ecliptic longitude 131° so it sets at SUN_AZ 295 at t ≈ 7.3, 1 script unit = 3.4 min, Moon on the ecliptic
+// moving 0.51°/h against the stars), fitted to 0.15°: az 211 → 219 → 227 → 234 → 240 → 246 → 252 and
+// el 28 → 25 → 21 → 16 → 11 → 6 → 0 at t = 0, 10 … 60. On a summer evening the ecliptic runs low through the south,
+// so an older Moon would start east of the 210° edge of FOV_SKY, a younger one lower and farther west.
+export const MOON_ELONG = 79;                                    // deg, Sun–Moon elongation (≈ 12.2°/day × 6.5 d)
+export const MOON_K = (1 - Math.cos(MOON_ELONG * DEG)) / 2;      // illuminated fraction ≈ 0.41
+// Brightness vs phase angle α = 180° − elongation: m(α) = m_full + 0.026|α| + 4e-9 α⁴ (Krisciunas & Schaefer 1991,
+// PASP 103, 1033; cf. Allen's Astrophysical Quantities, lunar phase curve) → 0.061 of full-Moon illuminance here
+// (≈ 0.09 at quarter). Drawn as perceived brightness, Stevens' power law with exponent 1/3 (dark-adapted brightness,
+// Stevens 1957) — linear light would make a 6 % Moon vanish on screen; ratios below are perceived (cube-root) ratios, not linear ones
+// (a full Moon would read only ~2.6× brighter, not 16×) — order and timing stay physical.
+const PA = 180 - MOON_ELONG;
+export const MOON_ILLUM = 10 ** (-.4 * (.026 * PA + 4e-9 * PA ** 4));
+export const moonDir = () => { const t = S.t; return dirAE(211.1 + .824 * t - .00231 * t * t, 28.3 - .345 * t - .00207 * t * t); };
+// the Moon's light reaching the scene, 0..~0.39: phase × atmospheric extinction (0.2 mag/airmass, Kasten & Young 1989
+// airmass) × the last 1.5° of setting, ramped in as the twilight sky darkens below it — moonlight outshines the
+// twilight once the Sun is ~8–13° down (t ≈ 22–31). The Moon is up all along; this is how much its light matters.
+export const moonFlux = () => { const el = Math.asin(Math.min(1, moonDir().y)) / DEG, h = Math.max(el, 0);
+  const X = 1 / (Math.sin(h * DEG) + .50572 * (h + 6.07995) ** -1.6364);
+  return (MOON_ILLUM * 10 ** (-.08 * (X - 1))) ** (1 / 3) * sm(0, 1.5, el); };
+export const moonlit = () => moonFlux() * sm(8, 13, -sunEl());
 export const GAL_C = dirAE(215, 20);                            // galactic centre ahead-left
 export const GAL_N = new V3().crossVectors(GAL_C, dirAE(250, 80)).normalize();   // band arching overhead
 
