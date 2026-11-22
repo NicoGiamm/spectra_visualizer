@@ -1,8 +1,8 @@
 # Spectra Visualizer
 
-<video src="scenarios/seaside/examples/seaside.mp4" controls muted autoplay loop playsinline width="100%"></video>
+[![The seaside scene from sunset into the night, across the spectrum](scenarios/seaside/examples/seaside.webp)](scenarios/seaside/examples/seaside.mp4)
 
-*The seaside scene from sunset into the night ([watch the video](scenarios/seaside/examples/seaside.mp4)).*
+*The seaside scene from sunset into the night — click for the full 73 s video.*
 
 **See a night sky the way every instrument sees it at once.**
 
