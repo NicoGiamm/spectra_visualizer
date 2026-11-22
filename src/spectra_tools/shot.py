@@ -25,13 +25,21 @@ def find_chrome() -> str:
     env = os.environ.get("SPECTRA_CHROME")
     if env:
         return env
-    cands = sorted(glob(os.path.expanduser("~/.cache/ms-playwright/chromium_headless_shell-*/chrome-headless-shell-*/chrome-headless-shell")))
+    cands = sorted(
+        glob(
+            os.path.expanduser(
+                "~/.cache/ms-playwright/chromium_headless_shell-*/chrome-headless-shell-*/chrome-headless-shell"
+            )
+        )
+    )
     if cands:
         return cands[-1]
     for name in ("chrome-headless-shell", "chromium", "google-chrome"):
         if p := shutil.which(name):
             return p
-    raise SystemExit("no headless Chrome found: set SPECTRA_CHROME or run `uvx playwright install chromium-headless-shell`")
+    raise SystemExit(
+        "no headless Chrome found: set SPECTRA_CHROME or run `uvx playwright install chromium-headless-shell`"
+    )
 
 
 def console_messages(lines: list[str]) -> dict[str, int]:
@@ -61,17 +69,32 @@ class Run:
     console: dict[str, int]
 
 
-def run_headless(name: str, params: dict, *, screenshot: Path | None = None, dump_dom: bool = False,
-                 size: str = "1400,850", budget: int = 20000) -> Run:
+def run_headless(
+    name: str,
+    params: dict,
+    *,
+    screenshot: Path | None = None,
+    dump_dom: bool = False,
+    size: str = "1400,850",
+    budget: int = 20000,
+) -> Run:
     """Bundle scenario `name`, open it in headless Chrome with URL `params`; optionally screenshot or dump the DOM."""
     sc = get(name)
     with tempfile.TemporaryDirectory() as tmp:
         page = Path(tmp) / f"{sc.id}.html"
         page.write_text(bundle(sc), encoding="utf-8")
         url = page.as_uri() + "?" + urlencode(params)
-        cmd = [find_chrome(), "--no-sandbox", "--use-angle=swiftshader", "--enable-unsafe-swiftshader",
-               "--ignore-gpu-blocklist", "--enable-logging=stderr", "--v=0", f"--window-size={size}",
-               f"--virtual-time-budget={budget}"]
+        cmd = [
+            find_chrome(),
+            "--no-sandbox",
+            "--use-angle=swiftshader",
+            "--enable-unsafe-swiftshader",
+            "--ignore-gpu-blocklist",
+            "--enable-logging=stderr",
+            "--v=0",
+            f"--window-size={size}",
+            f"--virtual-time-budget={budget}",
+        ]
         if screenshot:
             screenshot.parent.mkdir(parents=True, exist_ok=True)
             cmd.append(f"--screenshot={screenshot}")
@@ -88,9 +111,19 @@ def print_console(run: Run, verbose: bool = False) -> None:
         print(msg if n == 1 else f"{msg}\n  (repeated {n}×)")
 
 
-def shot(name: str, out: Path, t: float | None = None, yaw: float | None = None, pitch: float | None = None,
-         bands: str | None = None, labels: bool = True, size: str = "1400,850", budget: int = 20000,
-         verbose: bool = False, detector: str | None = None) -> int:
+def shot(
+    name: str,
+    out: Path,
+    t: float | None = None,
+    yaw: float | None = None,
+    pitch: float | None = None,
+    bands: str | None = None,
+    labels: bool = True,
+    size: str = "1400,850",
+    budget: int = 20000,
+    verbose: bool = False,
+    detector: str | None = None,
+) -> int:
     params: dict = {"paused": "1"}
     for k, v in (("t", t), ("yaw", yaw), ("pitch", pitch), ("bands", bands), ("detector", detector)):
         if v is not None:

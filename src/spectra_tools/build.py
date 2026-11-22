@@ -44,7 +44,7 @@ class Bundler:
             return (importer.parent / spec).resolve()
         for prefix, target in sorted(self.local.items(), key=lambda kv: -len(kv[0])):
             if prefix.endswith("/") and spec.startswith(prefix):
-                return (target / spec[len(prefix):]).resolve()
+                return (target / spec[len(prefix) :]).resolve()
             if spec == prefix:
                 return target
         return None  # remote / bare specifier left for the browser
@@ -83,10 +83,15 @@ def bundle(sc: Scenario, home: str = "index.html") -> str:
     text = STYLESHEET_RE.sub(inline_css, text)
     entry = ENTRY_RE.search(text)
     if not entry:
-        raise SystemExit(f"{sc.html}: no <script type=\"module\" src=…> entry")
+        raise SystemExit(f'{sc.html}: no <script type="module" src=…> entry')
     key = b.add((sc.path / entry.group(1)).resolve())
-    text = ENTRY_RE.sub(lambda _: f"<script>window.SPECTRA_HOME = {json.dumps(home)};</script>\n"
-                        f"<script type=\"module\">import '{key}';</script>", text)
+    text = ENTRY_RE.sub(
+        lambda _: (
+            f"<script>window.SPECTRA_HOME = {json.dumps(home)};</script>\n"
+            f"<script type=\"module\">import '{key}';</script>"
+        ),
+        text,
+    )
     text = IMPORTMAP_RE.sub(lambda _: f'<script type="importmap">\n{b.importmap()}\n</script>', text)
     return text
 
