@@ -19,6 +19,10 @@ export const SPECTRUM = {
   lunarThermal:    { name: 'lunar surface thermal emission', lam: 10e-6 },
   lunarGamma:      { name: 'cosmic-ray gamma glow of the Moon', E: 1e8, ground: false },
   greenFlash:      { name: 'refracted green sunlight', lam: 520e-9 },
+  // Jupiter's decametric (DAM) radio storms, cyclotron-maser emission up to the 39.5 MHz electron-cyclotron limit, many
+  // controlled by Io; discovered at 22.2 MHz (Burke & Franklin 1955, J. Geophys. Res. 60, 213); amateur receivers
+  // (NASA Radio JOVE) listen at 20.1 MHz, above the night-time ionospheric cutoff, so it reaches the ground
+  jupiterDAM:      { name: 'Jupiter decametric radio storms (10–40 MHz)', f: 20.1e6 },
   // --- deep sky ---
   starlight:       { name: 'starlight', lam: 550e-9 },
   cmb:             { name: 'cosmic microwave background (2.7 K, peak)', f: 160e9 },

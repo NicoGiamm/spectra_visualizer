@@ -17,8 +17,8 @@ open the files); this is the procedure.
 2. **Where it lives.** Visible from every scenario's sky → factory `export const x = o => event({ … , ...o })` in
    `engine/events/sky.js`. Place-specific → `scenarios/<id>/events.js`. Copy the nearest existing event as the
    template (grep for one with the same bands).
-3. **Timing & place.** `t0`/`t1` on 0–60 (playback is half speed). Sky objects: `dirAE(az, el)` with az ~205–340,
-   el > 0. Filler events at the dense ends stay short.
+3. **Timing & place.** `t0`/`t1` on 0–60 (one even pace, 120 s per walk). Sky objects: `dirAE(az, el)` inside `FOV_SKY`
+   (engine/core/geom.js: az 210–330, el 0…60° for the whole visible path; `fovAz(u)`), setting below 0° → fade out. Filler events at the dense ends stay short.
 4. **Drawing.** `init()` builds `Em` / `Rib` / `EmField` (crowds) — `real = 1` for moving warm bodies; random
    placement from `R` only. `update()` computes from `S.t`/`S.T` and `set()`s every source it wants visible this
    frame, resetting sizes/intensities. `where()` a method when it reads `this`. Solids → `solid()`, visible-only

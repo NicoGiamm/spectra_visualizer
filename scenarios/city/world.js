@@ -390,9 +390,9 @@ export function build() {
     new THREE.MeshStandardMaterial({ color: 0x1b1c1e, roughness: .5, metalness: .5 })), METAL, { weight: .02 }));
   return {
     groundAt: () => 0,
-    // 80 m -> -15 m down the street canyon at an even pace in *real* time (~1.8 m/s: the opening is fast-forwarded,
-    // see PLAY, and a script-time pace ran the first 46 m at 4-4.6 m/s), reaching the park edge at the same script
-    // moment as before (t ~41.3); then slower into the park (-45 m at t = 60), as before
+    // 80 m -> -15 m down the street canyon at an even pace in *real* time (~1.15 m/s with PLAY's even pace; written
+    // against PLAY.real so it stays even if the pacing ever changes again), reaching the park edge at t ~41.3; then
+    // slower into the park (-45 m at t = 60)
     walk(t, camera) {
       const z = t < WALK_TC ? 80 + (WALK_ZC - 80) * PLAY.real(t) / WALK_RC : WALK_ZC - 1.55 * (t - WALK_TC);
       camera.position.set(SIDEWALK_X, 1.7 + Math.sin(PLAY.real(t) * 4.75) * .03, z);   // head bob at a steady step rate

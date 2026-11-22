@@ -115,7 +115,10 @@ export function createAtmosphere(opts = {}) {
     SU.sunPosition.value.copy(dirAE(SUN_AZ, Math.max(el, -2.5)));
     SU.uFade.value = 1 - sm(12, 28, t);
     const dim = 1 - .75 * lp;                                       // light pollution washes out faint stars
-    nightMat.uniforms.uStars.value = on.vis ? n * (1 - .4 * ml) * dim : 0; S.act.vis += n * .2;
+    // field stars follow the Sun's depression, not night(): mag 2–3 from δ ≈ 7–8° to mag 6 by δ ≈ 15° (astronomical
+    // twilight), so the first planet and bright stars (sky.firstStars) come out on their own first (M8 physics audit)
+    const stars = sm(7, 15, -el);
+    nightMat.uniforms.uStars.value = on.vis ? stars * (1 - .4 * ml) * dim : 0; S.act.vis += n * .2;
     nightMat.uniforms.uAir.value = on.vis ? n * (1 + 2 * ml) : 0;
     nightMat.uniforms.uGlow.value.copy(glow).multiplyScalar(on.vis ? n : 0);
     ENV.starDim = dim;

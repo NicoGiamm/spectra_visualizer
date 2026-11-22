@@ -8,7 +8,7 @@ import * as local from './events.js';
 run({
   title: 'Seaside',
   loading: 'Filling the bay…',
-  hint: 'Drag to look out over the bay (a quarter sphere ahead) · scroll to zoom · click a band or press 1–7 to filter · space = play/pause · lasts 1½ minutes',
+  hint: 'Drag to look out over the bay (a quarter sphere ahead) · scroll to zoom · click a band or press 1–7 to filter · space = play/pause · lasts 2 minutes',
   build,
   events: () => [
     sky.sunset(), local.greenFlash(), sky.sunDogs(), sky.crepuscularRays(), local.warmSand(), local.gulls(),
@@ -23,5 +23,7 @@ run({
     // M5/T2 maritime life, appended (they draw from R after everything above)
     local.fishingBoats(), local.vhf16(), local.buoys(), local.windFarm(), local.bonfire(),
     local.seaInterferometer(),
+    // M8/T3 twilight opening, appended last (seeded R): first planet & stars, a fireball, a launch plume (none draws from R)
+    sky.firstStars(), sky.fireball(), sky.rocketPlume(),
   ],
 });

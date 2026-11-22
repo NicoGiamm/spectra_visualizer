@@ -8,7 +8,7 @@ import * as local from './events.js';
 run({
   title: 'Mountain trail',
   loading: 'Building the mountains…',
-  hint: 'Drag to look ahead and up (a quarter sphere, you can\'t turn behind yourself) · scroll to zoom · click a band or press 1–7 to filter · space = play/pause · the walk lasts 1½ minutes',
+  hint: 'Drag to look ahead and up (a quarter sphere, you can\'t turn behind yourself) · scroll to zoom · click a band or press 1–7 to filter · space = play/pause · the walk lasts 2 minutes',
   build,
   // init() order = list order (they share the seeded stream); the panel sorts by t0 itself.
   events: () => [
@@ -23,5 +23,7 @@ run({
     // zodiacalScatter slot with the same 18 R() draws; the removed thermalUpdraft/fireWhirl drew none)
     local.cellMast(), local.weatherStation(), local.mountainStream(), local.gnss(), local.cows(), local.sunWarmedSlope(),
     local.farHikers(), local.sparkDraft(), sky.purpleLight(), sky.zodiacalLight(), local.valleyFog(),
+    // M8/T3 twilight opening, appended last (seeded R): first planet & stars, a fireball, a launch plume (none draws from R)
+    sky.firstStars(), sky.fireball(), sky.rocketPlume(),
   ],
 });
