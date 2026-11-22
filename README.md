@@ -135,7 +135,7 @@ event({ name: 'Gulls heading home', t0: 0, t1: 20, bands: ['ir', 'vis'], freq: [
   where()  { return this.p; } })                        // label position, or null
 ```
 
-Event times are on a 0–60 script axis; playback fast-forwards the opening sunset and slows down for the night.
+Event times are on a 0–60 script axis; playback runs at one even pace (half a script-second per second, 2 minutes per walk).
 Physical processes (`freq`) are keys of `engine/core/spectrum.js`, where each one carries its frequency or
 wavelength and the band is derived from it. To add a scene, copy `scenarios/seaside/`, write its `world.js` and
 compose `events()` from the shared library plus your own; the landing page picks it up automatically.

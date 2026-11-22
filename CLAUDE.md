@@ -1,6 +1,6 @@
 # Spectra Visualizer
 
-First-person three.js scenes (`trail`, `seaside`, `city`) playing a ~90 s sunset-to-night timelapse in which events
+First-person three.js scenes (`trail`, `seaside`, `city`) playing a 2-minute sunset-to-night timelapse in which events
 emit across the electromagnetic spectrum; bands can be filtered live. A shared **engine** (`engine/`, plain ES
 modules, no build step) runs **scenarios** (`scenarios/<id>/`); Python tooling (`src/spectra_tools/`, CLI
 `spectra`) serves, bundles, screenshots and audits them. README.md has the layout and the scenario/event contracts.

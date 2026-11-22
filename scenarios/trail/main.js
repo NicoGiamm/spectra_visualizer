@@ -8,7 +8,7 @@ import * as local from './events.js';
 run({
   title: 'Mountain trail',
   loading: 'Building the mountains…',
-  hint: 'Drag to look ahead and up (a quarter sphere, you can\'t turn behind yourself) · scroll to zoom · click a band or press 1–7 to filter · space = play/pause · the walk lasts 1½ minutes',
+  hint: 'Drag to look ahead and up (a quarter sphere, you can\'t turn behind yourself) · scroll to zoom · click a band or press 1–7 to filter · space = play/pause · the walk lasts 2 minutes',
   build,
   // init() order = list order (they share the seeded stream); the panel sorts by t0 itself.
   events: () => [

@@ -12,7 +12,7 @@ import * as street from './street.js';
 run({
   title: 'City',
   loading: 'Raising the skyline…',
-  hint: 'Drag to look ahead and up (a quarter sphere) · scroll to zoom · click a band or press 1–7 to filter · space = play/pause · the walk lasts 1½ minutes',
+  hint: 'Drag to look ahead and up (a quarter sphere) · scroll to zoom · click a band or press 1–7 to filter · space = play/pause · the walk lasts 2 minutes',
   atmosphere: { lightPollution: .7, cloudCover: [.55, .7] },
   fog: .00022,
   // Retuned in Orbit (the default detector) so each bar's 90th percentile sits near 0.85: the city really has an

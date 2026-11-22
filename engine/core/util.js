@@ -9,12 +9,12 @@ export const sm = (a, b, x) => { x = clamp((x - a) / (b - a)); return x * x * (3
 // envelope: fades in over f after t0, out over f before t1
 export const env = (t, t0, t1, f = 1.5) => sm(t0, t0 + f, t) * (1 - sm(t1 - f, t1, t));
 
-// Playback: script time S.t (0–60) advances at speed(t) script-s per real second. The opening (the sunset, few
-// events) is fast-forwarded at 4× the base half speed and eases into it between t 16 and 22, so a walk lasts ~90 s.
+// Playback: script time S.t (0–60) advances at speed(t) script-s per real second: one even pace, half a script-s
+// per second, from the sunset to the end (no fast-forward — user decision M8, 2026-11-22), so a walk lasts 120 s.
 // Event timings stay on the 0–60 axis; only the real-time pacing changes. PLAY.real(t) / PLAY.script(r) map
 // between script time and real seconds (the slider runs in real seconds, 0 … PLAY.len).
 export const PLAY = (() => {
-  const speed = t => .5 + 1.5 * (1 - sm(16, 22, t)), N = 1200, cum = new Float32Array(N + 1);
+  const speed = () => .5, N = 1200, cum = new Float32Array(N + 1);
   for (let i = 0; i < N; i++) cum[i + 1] = cum[i] + 60 / N / speed((i + .5) / N * 60);   // real seconds to reach t
   const real = t => { const x = clamp(t / 60) * N, i = Math.min(N - 1, Math.floor(x)); return lerp(cum[i], cum[i + 1], x - i); };
   const script = r => { r = clamp(r, 0, cum[N]); let lo = 0, hi = N; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (cum[m] <= r) lo = m; else hi = m; }
