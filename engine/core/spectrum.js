@@ -123,17 +123,29 @@ export const SPECTRUM = {
 
   // ===== seaside additions =====
   aisAtoN:         { name: 'AIS aid-to-navigation broadcast (VHF)', f: 161.975e6 },   // AIS 1 (ch. 87B); AIS 2 = 162.025 MHz (ITU-R M.1371-5, ITU RR App. 18)
+  // ch. 16 = 156.800 MHz, international distress, safety and calling (ITU RR Appendix 18; RR Art. 31/52): FM voice, 25 kHz channel
   vhf16:           { name: 'marine VHF channel 16 voice', f: 156.8e6 },
   sbandRadar:      { name: 'ship S-band navigation radar (2.9–3.1 GHz)', f: 3.05e9 },   // 2900–3100 MHz maritime radionavigation (ITU RR Art. 5); IEC 62388 S-band ship radar
+  // racons reply in the 9300–9500 MHz radar band (and 2900–3100 MHz) when a ship's radar sweeps them (ITU-R M.824-4; IALA R0101)
   racon:           { name: 'radar beacon (racon) reply', f: 9.4e9 },
+  // turbine towers and moving blades return strong, Doppler-spread X-band echoes and side-lobe ghosts (MCA/QinetiQ, "Results of the
+  // electromagnetic investigations", North Hoyle offshore wind farm, 2004)
   radarClutter:    { name: 'radar echoes off turbine blades (X-band)', f: 9.4e9 },
   navGreen:        { name: 'green navigation light', lam: 520e-9 },
+  // lantern colours: IALA R0201 / CIE S 004 signal-light chromaticity; white, yellow (special marks, offshore structures: IALA G1162)
   navWhiteLED:     { name: 'white LED lantern', lam: 560e-9 },
   navYellow:       { name: 'yellow special-mark light', lam: 590e-9 },
+  // metal-halide lamps: Hg + Na/Sc/Tl iodide lines across the visible; 560 nm stands for the white mix (Waymouth, "Electric Discharge Lamps", 1971)
   deckLight:       { name: 'metal-halide deck floodlights', lam: 560e-9 },
   mistScatter:     { name: 'moonlight scattered by sea-mist droplets', lam: 550e-9 },
   mistThermal:     { name: 'thermal emission of cool mist (~285 K)', lam: 10.2e-6 },
+  // Sea-cliff interferometers at Dover Heights, Sydney: 200 MHz (McCready, Pawsey & Payne-Scott 1947, the Sun) and
+  // 100 MHz (Bolton & Stanley 1948, Cygnus A)
   lloydFringe:     { name: 'sea-cliff interferometer fringes (Lloyd\'s mirror, 200 MHz)', f: 200e6 },
+  lloydFringe100:  { name: 'sea-cliff interferometer fringes (Lloyd\'s mirror, 100 MHz)', f: 100e6 },
+  // Bluetooth Classic (BR/EDR) audio streaming, A2DP profile: 79 × 1 MHz channels 2.402–2.480 GHz, frequency-hopping
+  // (Bluetooth Core Specification v5.3, Vol. 2 Part A)
+  bluetoothA2DP:   { name: 'Bluetooth Classic audio stream (A2DP)', f: 2.44e9 },
 
   // ===== city additions =====
   keyFob:          { name: 'car key fob (433.92 MHz)', f: 433.92e6 },
