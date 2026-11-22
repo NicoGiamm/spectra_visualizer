@@ -69,13 +69,26 @@ vec3 streetLight(vec3 W, vec3 N){
 // soft knee l/(1+l): a pale car roof right under a lamp stays under the bloom threshold (.9) instead of flaring
 const LIT = { extraDecl: LAMP_GLSL, visExtra: 'vec3 sl = diffuseColor.rgb*streetLight(W, N); gl_FragColor.rgb += sl/(1. + sl);', uniforms: LIGHT };
 
-// local surface presets (same shape as PRESET): metal poles/rails/units, car paint, painted road marks
+// local surface presets (same shape as PRESET): metal poles/rails/units, car paint, painted road marks.
+// Source keys ([Sal], [EL], [UMF], [FG], [WHO], [UN], [RP112], [Oke]) are listed above PRESET in engine/render/surface.js;
+// T0/Teq/tau and rRadio are scene stand-ins there too (only their order is physical).
 const P = (T0, Teq, tau, eIR, eMW, uvAlb, gamma, rRadio, gloss = 0) => ({ A: [T0, Teq, tau ? 1 / tau : 0, eIR], B: [eMW, uvAlb, gamma, rRadio], C: [gloss, 0, 0, 0] });
-const METAL = P(22, 10, 8, .3, .1, .1, .05, .95, .7);      // thin bare/galvanised metal: low eIR (reads sky-cold), cools fast, mirrors radio
-export const PAINT = P(27, 12, 14, .9, .6, .05, .05, .9, .4);     // car bodies: painted steel, glossy, recently driven ones still warm
-const MARK = P(34, 16, 30, .92, .88, .35, .3, .5);         // road paint on asphalt: brighter in UV
-// granite kerbstones: like the trail's rock (eIR .9, slow to cool) and the most radioactive stone in the street
-// (K-40, U and Th series; granite typically 2-3x the gamma dose rate of concrete or brick)
+// thin bare/galvanised metal: cools fast (little heat capacity per area), mirrors radio. eIR .3 — weathered galvanised
+// steel (new 0.05–0.1, weathered/oxidised 0.2–0.3) [EL], reads sky-cold; eMW .02 — a metal reflects (e ≈ 0) [UMF];
+// uvAlb .1 — STAND-IN; gamma .05 (steel: negligible activity) [UN]
+const METAL = P(22, 10, 8, .3, .02, .1, .05, .95, .7);
+// car bodies: painted steel, glossy, recently driven ones still warm. eIR .9 — the paint layer is opaque at 8–14 µm
+// [EL]; eMW .1 — at mm–cm wavelengths a ~0.1 mm paint layer is transparent and the steel underneath reflects [UMF]
+// (STAND-IN slightly above bare metal for glass and tyres), so cars read microwave-cold; uvAlb .05 — STAND-IN; gamma .05 [UN]
+export const PAINT = P(27, 12, 14, .9, .1, .05, .05, .9, .4);
+// road paint on asphalt: thermally the asphalt under it (μ ~1200) [Oke]; eIR .92 [EL]; eMW .88 as asphalt [UMF];
+// uvAlb .1 — white road paint is TiO2-pigmented and TiO2 (band gap ~3.0 eV) absorbs below ~410 nm, so it is only a
+// little brighter than asphalt in UV, not 'white' (rutile's absorption edge — why TiO2 is a sunscreen UV blocker);
+// gamma .3 as asphalt [RP112]
+const MARK = P(34, 16, 30, .92, .88, .1, .3, .5);
+// granite kerbstones: like the trail's rock (eIR .9 [Sal, EL], slow to cool, μ ~2200 [Oke]) and the most radioactive
+// stone in the street (K-40, U and Th series; granite typically 2-3x the gamma dose rate of concrete or brick) [UN, RP112];
+// eMW .88 [UMF]; uvAlb .12 — STAND-IN as the engine's rock
 const GRANITE = P(31, 15, 40, .9, .88, .12, 1, .5);
 
 // windows on vertical faces (> 3.2 m) and shop fronts at street level. The plane coordinate seeds the cells,
