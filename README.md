@@ -6,7 +6,7 @@
 
 **See a night sky the way every instrument sees it at once.**
 
-Spectra Visualizer is a set of first-person 3D scenes in the browser. Each one plays a ~90-second timelapse from
+Spectra Visualizer is a set of first-person 3D scenes in the browser. Each one plays a 2-minute timelapse from
 sunset into the night, and everything in it — the sky, the landscape, passing aircraft, phones, lighthouses,
 cosmic rays, a supernova — emits across the whole electromagnetic spectrum: **radio, microwave, infrared,
 visible, ultraviolet, X-ray and gamma**. Switch bands on and off live and watch what your eyes would never show
@@ -26,7 +26,7 @@ time, rare or stylised is labelled as such in the interface.
 | **City** | Out of a street canyon into a park: traffic, pedestrians with phones, Wi-Fi and 5G with multipath reflections, a tram arcing, LiDAR delivery robots, security cameras with near-IR illuminators, fireworks under a light-polluted sky. |
 
 All three share one sky: sunset and twilight, Venus, an airliner, satellites, the Milky Way and the cosmic
-microwave background, meteors, a pulsar, a comet, aurora, moonrise and halos, cosmic-ray air showers, a
+microwave background, meteors, a pulsar, a comet, aurora, a setting waxing Moon and halos, cosmic-ray air showers, a
 thunderstorm, a fast radio burst, a supernova and a gamma-ray burst.
 
 ## Try it
@@ -198,7 +198,7 @@ event({ name: 'Gulls heading home', t0: 0, t1: 20, bands: ['ir', 'vis'], freq: [
   where()  { return this.p; } })                        // label position, or null
 ```
 
-Event times are on a 0–60 script axis; playback fast-forwards the opening sunset and slows down for the night.
+Event times are on a 0–60 script axis; playback runs at one even pace (half a script-second per second, 2 minutes per walk).
 Physical processes (`freq`) are keys of `engine/core/spectrum.js`, where each one carries its frequency or
 wavelength and the band is derived from it. To add a scene, copy `scenarios/seaside/`, write its `world.js` and
 compose `events()` from the shared library plus your own; the landing page picks it up automatically.

@@ -19,6 +19,10 @@ export const SPECTRUM = {
   lunarThermal:    { name: 'lunar surface thermal emission', lam: 10e-6 },
   lunarGamma:      { name: 'cosmic-ray gamma glow of the Moon', E: 1e8, ground: false },
   greenFlash:      { name: 'refracted green sunlight', lam: 520e-9 },
+  // Jupiter's decametric (DAM) radio storms, cyclotron-maser emission up to the 39.5 MHz electron-cyclotron limit, many
+  // controlled by Io; discovered at 22.2 MHz (Burke & Franklin 1955, J. Geophys. Res. 60, 213); amateur receivers
+  // (NASA Radio JOVE) listen at 20.1 MHz, above the night-time ionospheric cutoff, so it reaches the ground
+  jupiterDAM:      { name: 'Jupiter decametric radio storms (10–40 MHz)', f: 20.1e6 },
   // --- deep sky ---
   starlight:       { name: 'starlight', lam: 550e-9 },
   cmb:             { name: 'cosmic microwave background (2.7 K, peak)', f: 160e9 },
@@ -83,7 +87,7 @@ export const SPECTRUM = {
   fm:              { name: 'FM broadcast', f: 100e6 },                 // 87.5–108 MHz broadcast band (ITU RR Art. 5, Region 1)
   airband:         { name: 'VHF airband voice', f: 125e6 },            // 118–137 MHz AM voice (ITU RR Art. 5; ICAO Annex 10 Vol. V)
   ais:             { name: 'AIS ship transponder (VHF)', f: 162e6 },
-  satBeacon:       { name: 'satellite VHF beacon', f: 145e6 },
+  satBeacon:       { name: 'satellite VHF beacon', f: 145.8e6 },   // ISS ARISS FM downlink 145.800 MHz
   modeS:           { name: 'aircraft transponder (Mode S / ADS-B)', f: 1090e6 },
   wxRadar:         { name: 'airborne weather radar (X-band)', f: 9.3e9 },
   xbandRadar:      { name: 'ship X-band radar', f: 9.4e9 },

@@ -16,8 +16,10 @@ its terrain, props, camera walk and ground height.
 ## Guardrails
 
 1. **Front is azimuth 270 (west, −z) in every scenario.** `dirAE(az, el)`, `skyP`, `onSky` (`engine/core/geom.js`)
-   put things on a sphere of radius `D` around the camera. View clamp: yaw ±1.35, pitch −0.1…1.5 — **keep sky
-   azimuths ~205–340 and above the horizon**, or the viewer can never see it.
+   put things on a sphere of radius `D` around the camera. View clamp: yaw ±1.35, pitch −0.1…1.5. **Sky events stay
+   inside `FOV_SKY` (geom.js): azimuth 210–330, elevation 0…60°, for their whole visible path** (moving tracks,
+   jets, rings, branches included) — take positions from it (`fovAz(u)`, `FOV_SKY.elMax`), don't hard-code a wider
+   arc. Things physically tied to the Sun (`SUN_AZ`) or the Moon (`moonDir()`) follow them.
 2. **One shared timeline** in `engine/world/atmosphere.js`: `SUN_AZ`/`sunEl()`, `moonDir()`, `night()`, `moonlit()`,
    keyframes `HEMI`/`HOR`/`CLOUD`/`CONTRAIL` read with `kf()`. Atmosphere also owns the lights (sun, moon, hemi,
    headlamp, storm flash) via `ENV`. Scenario options: `lightPollution` (dims stars/Milky Way, adds a horizon glow),

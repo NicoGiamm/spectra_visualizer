@@ -123,7 +123,7 @@ function start(sc) {
   function frame(now) {
     const dt = Math.min(.05, (now - last) / 1000); last = now;
     S.T = now / 1000; S.TIME.value = S.T;
-    if (S.playing) { S.t += dt * PLAY.speed(S.t); if (S.t > 60) S.t = 0; }   // fast opening, then half speed: ~90 s per walk (util.js PLAY)
+    if (S.playing) { S.t += dt * PLAY.speed(S.t); if (S.t > 60) S.t = 0; }   // one even pace: 120 s per walk (util.js PLAY)
     BANDS.forEach(b => S.act[b.id] = 0);
     hideAllSources();
     world.walk(S.t, camera);

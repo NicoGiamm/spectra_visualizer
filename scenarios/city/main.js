@@ -12,7 +12,7 @@ import * as street from './street.js';
 run({
   title: 'City',
   loading: 'Raising the skyline…',
-  hint: 'Drag to look ahead and up (a quarter sphere) · scroll to zoom · click a band or press 1–7 to filter · space = play/pause · the walk lasts 1½ minutes',
+  hint: 'Drag to look ahead and up (a quarter sphere) · scroll to zoom · click a band or press 1–7 to filter · space = play/pause · the walk lasts 2 minutes',
   atmosphere: { lightPollution: .7, cloudCover: [.55, .7] },
   fog: .00022,
   // Retuned in Orbit (the default detector) so each bar's 90th percentile sits near 0.85: the city really has an
@@ -36,7 +36,9 @@ run({
     // complexity parity with the trail and seaside: the sky events a light-polluted city still sees (no zodiacal
     // light, no aurora), then more street life; appended last so every earlier seeded R() draw is unchanged
     sky.sunDogs(), sky.crepuscularRays(), sky.purpleLight(),
-    sky.noctilucentClouds({ note: 'Silver-blue ripples at 80 km, still sunlit long after sunset: one of the few night-sky sights bright enough to beat the city glow. Their UV never reaches the ground.' }),
+    sky.noctilucentClouds({ note: 'Silver-blue ripples at 82 km, still sunlit in deep twilight: one of the few night-sky sights bright enough to beat the city glow. Their UV never reaches the ground.' }),
     street.buses(), street.cyclists(), street.swifts(), street.bats(), street.rooftopBar(), street.blackLight(), street.stoneGamma(), street.drone(),
+    // M8/T3 twilight opening, appended last (seeded R): Jupiter & first stars, a fireball, a launch plume (none draws from R); all bright enough for the city glow — mag-1 stars dimmed by it, the faint field already is
+    sky.firstStars(), sky.fireball(), sky.rocketPlume(),
   ],
 });

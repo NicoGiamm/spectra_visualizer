@@ -8,7 +8,7 @@ import * as local from './events.js';
 run({
   title: 'Seaside',
   loading: 'Filling the bay…',
-  hint: 'Drag to look out over the bay (a quarter sphere ahead) · scroll to zoom · click a band or press 1–7 to filter · space = play/pause · lasts 1½ minutes',
+  hint: 'Drag to look out over the bay (a quarter sphere ahead) · scroll to zoom · click a band or press 1–7 to filter · space = play/pause · lasts 2 minutes',
   // Microwave only (M7/T1): the ship's and fishing boats' X-band radars, the wind farm and the sea interferometer
   // put twice the trail's 90th-percentile micro activity on the bar (peak ~27 vs ~12); with the shared 4.8 it sat
   // pinned for ~16 s. 9 puts its peak at ~0.95.
@@ -23,9 +23,11 @@ run({
     sky.fastRadioBurst(), sky.supernova(), sky.gammaRayBurst(), local.bioluminescence(), sky.noctilucentClouds(), sky.moonHalo(),
     // added after the original list so the events above keep their seeded R values (crepuscularRays takes the
     // zodiacalScatter slot with the same 18 R() draws; these three draw none)
-    sky.purpleLight(), sky.zodiacalLight(), local.seaMist(),
+    sky.purpleLight(), /* zodiacalLight dropped (M9): a 41 % Moon is up and the August ecliptic lies flat along the SW horizon; it draws no R() */ local.seaMist(),
     // M5/T2 maritime life, appended (they draw from R after everything above)
     local.fishingBoats(), local.vhf16(), local.buoys(), local.windFarm(), local.bonfire(),
     local.seaInterferometer(),
+    // M8/T3 twilight opening, appended last (seeded R): Jupiter & first stars, a fireball, a launch plume (none draws from R)
+    sky.firstStars(), sky.fireball(), sky.rocketPlume(),
   ],
 });

@@ -30,7 +30,7 @@ export function buildDom(sc) {
   <button class="btn" id="detector" title="Ground: what reaches a detector on the ground (the air absorbs far-UV, X-rays and gamma rays from space). Orbit: what a satellite would see.">Detector: Ground</button>
 </div>
 <div id="events"><h3>Now happening</h3><div id="evlist"></div></div>
-<div id="hint">${sc.hint || 'Drag to look ahead and up · scroll to zoom · click a band or press 1–7 to filter · space = play/pause · lasts 1½ minutes'}</div>
+<div id="hint">${sc.hint || 'Drag to look ahead and up · scroll to zoom · click a band or press 1–7 to filter · space = play/pause · lasts 2 minutes'}</div>
 <div id="spectrum"></div>`);
 }
 

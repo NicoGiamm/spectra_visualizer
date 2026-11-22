@@ -17,9 +17,9 @@ place-specific ones in `scenarios/<id>/events.js`. Every event declares the phys
 ## Guardrails
 
 1. **Events are objects `{ name, t0, t1, bands, note, init(), update(), where() }` on the 0–60 script axis** (`S.t`;
-   playback `t += dt * PLAY.speed(t)`: 4× fast-forward through the opening, easing to half speed between t 16 and 22,
-   ~90 s per walk; the slider runs in real seconds, `PLAY` in `engine/core/util.js`). An event before t≈20 is on screen
-   only a quarter as long as one later — give early events enough script time to be noticed. Read `t`/`T`/`on`/`camera` from `S` (`engine/core/state.js`).
+   playback `t += dt * PLAY.speed(t)`: one even pace, 0.5 script-s per real second, 120 s per walk — no fast-forward
+   (user decision, M8); the slider runs in real seconds, `PLAY` in `engine/core/util.js`). Every script second gets
+   the same screen time, early or late. Read `t`/`T`/`on`/`camera` from `S` (`engine/core/state.js`).
 2. **`update()` must reset sizes/intensities every frame** — the loop hides every source first; what isn't `set()`
    this frame is invisible.
 3. **`where` must be a method, not an arrow, when it reads `this`** (ES modules: arrow `this` is undefined).
