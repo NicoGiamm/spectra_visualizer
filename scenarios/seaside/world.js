@@ -275,7 +275,7 @@ export function build() {
       E.hor.value.setRGB(...kf(HOR, t)[0]);
       const sk = kf(HEMI, t)[0]; E.sky.value.setRGB(sk[0] * .7, sk[1] * .7, sk[2] * .8);
       E.sunDir.value.copy(dirAE(SUN_AZ, Math.max(el, -1))); E.sunI.value = sm(-1.2, 2, el);
-      E.moonDir.value.copy(moonDir()); E.moonI.value = moonlit() * sm(-1, 3, moonDir().y * 57.3);
+      E.moonDir.value.copy(moonDir()); E.moonI.value = moonlit();   // phase, extinction and setting are in moonlit() (M9/T1)
       E.airT.value = airTemp(t); E.uvGlit.value = sm(.8, 4, el);       // the low sun's UV is gone before it touches the sea
       // sea interferometer (Lloyd's mirror, see LLOYD_LAMBDA): the cliff antenna's boom sits ~35 m above the sea,
       // less the rising tide. Slots: the Sun's radio during the sunset, Sgr A*'s synchrotron, the pulsar.

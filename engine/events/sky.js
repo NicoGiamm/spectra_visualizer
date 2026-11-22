@@ -14,8 +14,8 @@ import { event } from '../core/events.js';
 import { D, deg, dirAE, skyP, onSky, basis, ringPts, linePts, FOV_SKY, fovAz } from '../core/geom.js';
 import { Em, Rib, EmField } from '../render/sources.js';
 import { visOnly } from '../render/instrument.js';
-import { cloudTex, moonTex, softTex } from '../render/textures.js';
-import { ENV, SUN_AZ, sunEl, moonDir, night, moonlit, GAL_C, CONTRAIL } from '../world/atmosphere.js';
+import { canvasTex, cloudTex, moonTex, softTex } from '../render/textures.js';
+import { ENV, SUN_AZ, sunEl, moonDir, night, moonlit, moonFlux, MOON_ELONG, MOON_K, GAL_C, CONTRAIL } from '../world/atmosphere.js';
 
 export const sunset = o => event({ name: 'Sunset', t0: 0, t1: 16, bands: ['vis', 'ir', 'uv', 'radio'], freq: ['sunlight', 'solarNIR', 'solarUV', 'solarRadio'], tags: ['common'], note: 'The Sun is bright in every band; its UV fades first as it sets.',
   init() { this.e = [new Em('ir'), new Em('uv'), new Em('radio'), new Em('vis', '#ffb070')]; },
@@ -217,12 +217,25 @@ export const aurora = o => event({ name: 'Aurora', t0: 26, t1: 50, az0: 295, az1
   },
   where() { return this.p; } }, o);
 
-export const moonrise = o => event({ name: 'Moonrise', t0: 33, t1: 60, bands: ['vis', 'ir', 'gamma'], freq: ['sunlight', 'lunarThermal', 'lunarGamma'], tags: ['common'], note: 'Rising ahead of you: reflected sunlight and a warm surface (IR); cosmic rays make the Moon glow in gamma rays, seen only from orbit.',
-  init() { this.s = new THREE.Sprite(new THREE.SpriteMaterial({ map: moonTex(), depthWrite: false, fog: false })); this.s.renderOrder = 3; S.scene.add(visOnly(this.s)); this.h = new Em('vis', '#cfd6ff'); this.ir = new Em('ir'); this.g = new Em('gamma', null, 0, 'space'); },
-  update() { const { t } = S, I = sm(33, 35, t); this.s.visible = S.on.vis && I > 0;
-    if (I <= 0) { this.p = null; return; } this.p = onSky(moonDir());
-    const warm = 1 - sm(36, 50, t); this.s.position.copy(this.p); this.s.scale.setScalar(deg(1.1)); this.s.material.color.setRGB(lerp(2.2, 1.6, 1 - warm), 1.6, lerp(1.0, 1.55, 1 - warm));
-    S.act.vis += I * .5; this.h.set(this.p, deg(7), I * .18); this.ir.set(this.p, deg(.9), I * .5); this.g.set(this.p, deg(1.2), I * .3); },
+// The Moon (M9/T1; factory kept as `moonrise` so the scenario lists don't change): the waxing Moon of atmosphere.js
+// (moonDir, MOON_K, moonFlux), up in the south-west from the start and setting at the end. The phase is a terminator
+// mask on the sprite (lit fraction MOON_K, earthshine on the dark side) rotated each frame so the lit limb faces the
+// drawn Sun; pale against the twilight, reddened by extinction low down, faded over the last 1.5° as it sets.
+// Lunar thermal IR comes from the sunlit part (~390 K at the subsolar point); the cosmic-ray gamma glow from the whole disc.
+const moonPhaseTex = (() => { let tx; return () => tx || (tx = canvasTex(256, (g, s) => {
+  const r = s / 2 - 2, c = s / 2, ce = Math.cos(MOON_ELONG * DEG); g.drawImage(moonTex().image, 0, 0, s, s);
+  g.globalCompositeOperation = 'destination-out'; g.fillStyle = 'rgba(0,0,0,.93)'; g.filter = 'blur(1.5px)'; g.beginPath();   // dark side keeps ~7 % (earthshine)
+  for (let k = 0; k <= 48; k++) { const y = -r + 2 * r * k / 48; g.lineTo(c + ce * Math.sqrt(Math.max(0, r * r - y * y)), c + y); }   // terminator, top → bottom
+  g.arc(c, c, r + 2, Math.PI / 2, Math.PI * 1.5); g.fill(); })); })();   // lit limb at +x: unlit = left of x = cos(E)·√(r² − y²)
+export const moonrise = o => event({ name: 'Waxing Moon', t0: 0, t1: 60, bands: ['vis', 'ir', 'gamma'], freq: ['sunlight', 'lunarThermal', 'lunarGamma'], tags: ['common'], note: 'A waxing Moon about 6½ days old, 41 % lit, already up in the south-west at sunset and sinking west until it sets. Reflected sunlight, lit limb toward the Sun, and a warm sunlit surface (IR); cosmic rays make the whole disc glow in gamma rays, seen only from orbit.',
+  init() { this.s = new THREE.Sprite(new THREE.SpriteMaterial({ map: moonPhaseTex(), depthWrite: false, fog: false })); this.s.renderOrder = 3; S.scene.add(visOnly(this.s)); this.h = new Em('vis', '#cfd6ff'); this.ir = new Em('ir'); this.g = new Em('gamma', null, 0, 'space'); },
+  update() { const { t } = S, d = moonDir(), el = Math.asin(clamp(d.y, -1, 1)) / DEG, I = sm(0, 1.5, el); this.s.visible = S.on.vis && I > 0;
+    if (I <= 0) { this.p = null; return; } this.p = onSky(d);
+    const [u, v] = basis(d), sd = dirAE(SUN_AZ, sunEl()), sp = sd.addScaledVector(d, -sd.dot(d));                      // Sun's direction on the sky at the Moon
+    const mat = this.s.material, b = lerp(1.05, 1.6, sm(4, 20, t)), warm = 1 - sm(3, 12, el);                          // pale in twilight; extinction reddens it low down
+    mat.rotation = Math.atan2(sp.dot(v), sp.dot(u)); mat.opacity = I * lerp(.8, 1, sm(4, 20, t));
+    this.s.position.copy(this.p); this.s.scale.setScalar(deg(1.1)); mat.color.setRGB(b * (1 + .25 * warm), b * (1 - .08 * warm), b * (1 - .35 * warm));
+    const f = moonFlux(); S.act.vis += I * f; this.h.set(this.p, deg(7), I * f * .45); this.ir.set(this.p, deg(.9), I * .5 * (.3 + .7 * MOON_K)); this.g.set(this.p, deg(1.2), I * .3); },
   where() { return this.p; } }, o);
 
 // Growing structure: node table { n: parent, az, el, j, a, b, lv, w }; a node lerps from its parent's
@@ -343,8 +356,8 @@ export const purpleLight = o => event({ name: 'Purple light', t0: 8, t1: 16, ban
 
 // Zodiacal light: a faint cone of sunlight scattered by interplanetary dust, rising steeply along the
 // ecliptic from the western horizon once twilight is over. Needs a dark site (scaled by ENV.starDim)
-// and a moonless sky (fades as the Moon gets up). Overrides: az (base azimuth), tilt (deg from horizontal).
-export const zodiacalLight = o => event({ name: 'Zodiacal light', t0: 26, t1: 45, bands: ['vis'], freq: ['zodiacal'], az: 282, tilt: 62, note: 'A faint cone of sunlight scattered by interplanetary dust, leaning along the ecliptic above where the Sun set. Only from dark sites, before moonrise.',
+// and a moonless sky (washed out as the Moon's light takes over the dark sky). Overrides: az (base azimuth), tilt (deg from horizontal).
+export const zodiacalLight = o => event({ name: 'Zodiacal light', t0: 26, t1: 45, bands: ['vis'], freq: ['zodiacal'], az: 282, tilt: 62, note: 'A faint cone of sunlight scattered by interplanetary dust, leaning along the ecliptic above where the Sun set. Only from dark sites; the waxing Moon\'s light washes much of it out.',
   init() {
     const n = 16, pos = new Float32Array((n + 1) * 6), uv = [], idx = [], L = 55, W0 = 13, W1 = 2.5, sa = Math.sin(this.tilt * DEG), ca = Math.cos(this.tilt * DEG);
     for (let i = 0; i <= n; i++) { const v = i / n, az = this.az - v * L * ca, el = -4 + v * L * sa, hw = lerp(W0, W1, v);
@@ -358,7 +371,7 @@ export const zodiacalLight = o => event({ name: 'Zodiacal light', t0: 26, t1: 45
     this.mesh = new THREE.Mesh(g, this.mat); this.mesh.frustumCulled = false; this.mesh.renderOrder = -4; this.mesh.visible = false; S.scene.add(this.mesh);
     this.top = dirAE(this.az - .35 * L * ca, -4 + .35 * L * sa);
   },
-  update() { const I = env(S.t, this.t0, this.t1, 4) * night() * (ENV.starDim ?? 1) * (1 - .85 * moonlit()); this.mesh.visible = S.on.vis && I > .005; if (I <= .005) return;
+  update() { const I = env(S.t, this.t0, this.t1, 4) * night() * (ENV.starDim ?? 1) * Math.max(0, 1 - 1.5 * moonlit()); this.mesh.visible = S.on.vis && I > .005; if (I <= .005) return;
     this.mesh.position.copy(S.camera.position); this.mat.uniforms.uI.value = I * .11; S.act.vis += I * .15; },
   where() { return onSky(this.top); } }, o);
 
@@ -376,10 +389,12 @@ export const noctilucentClouds = o => event({ name: 'Noctilucent clouds', t0: 18
   where: () => skyP(300, 10) }, o);
 
 // 22° halo plus the upper tangent arc touching its top: V-shaped "gull wings" while the Moon is low,
-// flattening as it climbs (around 30° and higher they droop toward the circumscribed halo).
-export const moonHalo = o => event({ name: 'Moon halo', t0: 48, t1: 60, bands: ['vis', 'uv'], freq: ['iceHalo', 'haloUV'], tags: ['common'], note: 'A 22° halo around the Moon from hexagonal ice crystals in thin cirrus, with an upper tangent arc touching its top like gull wings.',
+// flattening as it climbs (around 30° and higher they droop toward the circumscribed halo). Its brightness follows the
+// Moon's light (moonlit: phase, extinction, setting): around the low, 41 % lit Moon of M9 it is a faint ring that fades
+// as the Moon sinks and is gone when it sets.
+export const moonHalo = o => event({ name: 'Moon halo', t0: 48, t1: 60, bands: ['vis', 'uv'], freq: ['iceHalo', 'haloUV'], tags: ['common'], note: 'A 22° halo around the Moon from hexagonal ice crystals in thin cirrus, with an upper tangent arc touching its top like gull wings. Around a half Moon it is faint.',
   init() { this.m = new Rib('vis', '#e8e4c8', 33); this.u = new Rib('uv', null, 33); this.arc = [0, 1].map(() => new Rib('vis', '#d6dcec', 12)); },
-  update() { const I = sm(48, 52, S.t); if (I <= 0) return; const d = moonDir(), [u, v] = basis(d), el = Math.asin(clamp(d.y, -1, 1)) / DEG;
+  update() { const I = sm(48, 52, S.t) * moonlit() * 1.6; if (I <= .01) return; const d = moonDir(), [u, v] = basis(d), el = Math.asin(clamp(d.y, -1, 1)) / DEG;
     this.m.set(ringPts(d, 22, 32), deg(.55), deg(.55), I * .5); this.u.set(ringPts(d, 22.6, 32), deg(.9), deg(.9), I * .35);
     const c = lerp(.035, -.004, clamp(el / 32));                                                     // wing curvature: up while low, flat/drooping when high
     for (let s = 0; s < 2; s++) { const pts = [];
