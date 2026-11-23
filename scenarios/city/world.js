@@ -72,15 +72,18 @@ const LIT = { extraDecl: LAMP_GLSL, visExtra: 'vec3 sl = diffuseColor.rgb*street
 // local surface presets (same shape as PRESET): metal poles/rails/units, car paint, painted road marks.
 // Source keys ([Sal], [EL], [UMF], [FG], [WHO], [UN], [RP112], [Oke]) are listed above PRESET in engine/render/surface.js;
 // T0/Teq/tau and rRadio are scene stand-ins there too (only their order is physical).
-const P = (T0, Teq, tau, eIR, eMW, uvAlb, gamma, rRadio, gloss = 0) => ({ A: [T0, Teq, tau ? 1 / tau : 0, eIR], B: [eMW, uvAlb, gamma, rRadio], C: [gloss, 0, 0, 0] });
+// C.yzw = transmission [Tradio, Tmicro, Tgamma] for light from behind (spectral eye, M10/T6): ground [.05, 0, 0] as the
+// engine's TRANS.ground; metal is a conductor — radio and microwave do not cross it (Faraday), gamma at 1.46 MeV does:
+// thin steel (poles, rails, 2–3 mm, μ/ρ .052 cm²/g × 7.9 g/cm³) ≈ .9 → .8 for a tube; a car (two steel skins + seats) .7 STAND-IN
+const P = (T0, Teq, tau, eIR, eMW, uvAlb, gamma, rRadio, gloss = 0, tr = [.05, 0, 0]) => ({ A: [T0, Teq, tau ? 1 / tau : 0, eIR], B: [eMW, uvAlb, gamma, rRadio], C: [gloss, ...tr] });
 // thin bare/galvanised metal: cools fast (little heat capacity per area), mirrors radio. eIR .3 — weathered galvanised
 // steel (new 0.05–0.1, weathered/oxidised 0.2–0.3) [EL], reads sky-cold; eMW .02 — a metal reflects (e ≈ 0) [UMF];
 // uvAlb .1 — STAND-IN; gamma .05 (steel: negligible activity) [UN]
-const METAL = P(22, 10, 8, .3, .02, .1, .05, .95, .7);
+const METAL = P(22, 10, 8, .3, .02, .1, .05, .95, .7, [0, 0, .8]);
 // car bodies: painted steel, glossy, recently driven ones still warm. eIR .9 — the paint layer is opaque at 8–14 µm
 // [EL]; eMW .1 — at mm–cm wavelengths a ~0.1 mm paint layer is transparent and the steel underneath reflects [UMF]
 // (STAND-IN slightly above bare metal for glass and tyres), so cars read microwave-cold; uvAlb .05 — STAND-IN; gamma .05 [UN]
-export const PAINT = P(27, 12, 14, .9, .1, .05, .05, .9, .4);
+export const PAINT = P(27, 12, 14, .9, .1, .05, .05, .9, .4, [0, 0, .7]);
 // road paint on asphalt: thermally the asphalt under it (μ ~1200) [Oke]; eIR .92 [EL]; eMW .88 as asphalt [UMF];
 // uvAlb .1 — white road paint is TiO2-pigmented and TiO2 (band gap ~3.0 eV) absorbs below ~410 nm, so it is only a
 // little brighter than asphalt in UV, not 'white' (rutile's absorption edge — why TiO2 is a sunscreen UV blocker);
@@ -375,7 +378,7 @@ function parkTrees() {
   const crowns = new THREE.InstancedMesh(crown, new THREE.MeshStandardMaterial({ color: 0x0c1609, roughness: .9, flatShading: true }), cM.length);
   const trunks = new THREE.InstancedMesh(trunk, new THREE.MeshStandardMaterial({ color: 0x140e0a, roughness: .9 }), tM.length);
   cM.forEach((m, i) => { crowns.setMatrixAt(i, m); crowns.setColorAt(i, new THREE.Color().setScalar(.7 + R() * .6)); }); tM.forEach((m, i) => trunks.setMatrixAt(i, m));
-  S.scene.add(spectral(crowns, 'forest', { weight: .3 }), spectral(trunks, 'wood', { weight: 0 }));
+  S.scene.add(spectral(crowns, 'canopy', { weight: .3 }), spectral(trunks, 'wood', { weight: 0 }));
 }
 
 // parked cars along both kerbs of the canyon (one instanced draw, painted-metal surface)

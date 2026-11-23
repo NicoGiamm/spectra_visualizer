@@ -2,7 +2,9 @@
 //
 //   A = [T0 °C at t=0, Teq °C (night equilibrium), 1/tau (per script-s), eIR (8–14 µm emissivity)]
 //   B = [eMW (microwave emissivity), uvAlb (UV albedo), gamma (terrestrial activity, rel.), rRadio (radio reflectivity)]
-//   C = [gloss (0 matte … 1 water/glass: emissivity drops at grazing angles), 0, 0, 0]
+//   C = [gloss (0 matte … 1 water/glass: emissivity drops at grazing angles), Tradio, Tmicro, Tgamma]
+//       T* = the fraction of radio / microwave / gamma light from behind that gets through (spectral eye, M10/T6:
+//       long waves and gamma cross walls, foliage and thin matter that block light); see TRANS below
 //
 // Temperature T(t) = Teq + (T0 − Teq)·exp(−t/tau): sand and meadows cool fast, rock and asphalt slowly,
 // water barely at all — which gives the beach its thermal crossover. Per band:
@@ -55,7 +57,19 @@ export const SURF_U = {
 //         the sea effectively infinite), wet sand 2550, concrete ~2200, stone/granite ~2200. Vegetation cools fastest
 //         despite its water: the canopy is thermally decoupled from the soil (dew); forest canopies trap longwave.
 //   rRadio radio reflectivity — STAND-IN (relative, stylised): conductors and sea water high, dry ground low.
-const P = (T0, Teq, tau, eIR, eMW, uvAlb, gamma, rRadio, gloss = 0) => ({ A: [T0, Teq, tau ? 1 / tau : 0, eIR], B: [eMW, uvAlb, gamma, rRadio], C: [gloss, 0, 0, 0] });
+// Transmission [Tradio, Tmicro, Tgamma] of what a surface stands for (C.yzw), for light from behind it:
+//   ground (terrain, water, paving): radio .05 — knife-edge diffraction over a ridge costs ~13 dB at VHF (ITU-R P.526),
+//     the "bending round hills"; microwave 0 — diffraction loss grows ~10 dB per frequency decade, ≥ 30 dB at GHz;
+//     gamma 0 — metres of rock/soil (1.46 MeV in rock: ~6 cm attenuation length)
+//   canopy (a tree crown, ~10 m of foliage): radio .9 — ~0.05 dB/m at 100 MHz (ITU-R P.833); microwave .2 —
+//     Weissberger model L = 1.33 f^0.284 d^0.588 dB ≈ 7 dB at 2.4 GHz, 10 m; gamma .6 — STAND-IN (crown biomass
+//     ~1 kg/m³, μ/ρ .052 cm²/g at 1.46 MeV)
+//   facade (a whole building: several walls and floors): radio .1 — ~10 dB building penetration at VHF (ITU-R P.2040 /
+//     P.1238 order of magnitude); microwave .002 — ≥ 25–30 dB at 2–5 GHz across a building; gamma 0
+//   wood (boardwalks, huts: a few cm): radio .95, microwave .6 — ~2 dB through 3–5 cm of wood at 2.4 GHz (ITU-R P.2040
+//     dry wood ε'≈2, loss tangent ~.05); gamma .88 — 2.5 g/cm² at μ/ρ .052
+const TRANS = { ground: [.05, 0, 0], canopy: [.9, .2, .6], facade: [.1, .002, 0], wood: [.95, .6, .88] };
+const P = (T0, Teq, tau, eIR, eMW, uvAlb, gamma, rRadio, gloss = 0, tr = TRANS.ground) => ({ A: [T0, Teq, tau ? 1 / tau : 0, eIR], B: [eMW, uvAlb, gamma, rRadio], C: [gloss, ...tr] });
 export const PRESET = {
   // sea surface: warm all night (no cooling), cold in microwave. eIR .98 [Masuda, EL]; eMW .45 calm sea [Wilheit, UMF];
   // uvAlb .06 [WHO, FG: water < 0.1]; gamma .05 (sea water shields, K-40 only) [UN]
@@ -79,7 +93,9 @@ export const PRESET = {
   meadow:   P(24, 7, 10, .97, .92, .03, .3, .2),
   // canopy keeps warmth longer (trapped longwave). eIR .97 [EL, MOD]; eMW .93 [UMF]; uvAlb .03 [FG]; gamma .25 (soil
   // under litter) [UN]
-  forest:   P(21, 12, 25, .97, .93, .03, .25, .3),
+  forest:    P(21, 12, 25, .97, .93, .03, .25, .3),
+  // canopy: tree crowns as objects (same emission as forest; the forest floor / forested terrain stays ground)
+  canopy:    P(21, 12, 25, .97, .93, .03, .25, .3, 0, TRANS.canopy),
   // bare dry soil / trail. eIR .94 [Sal, MOD]; eMW .9 dry soil [UMF]; uvAlb .08 (UV-A end; 0.04–0.05 in UV-B) [FG];
   // gamma .4 world-median soil [UN]; μ ~600–1000 [Oke] ≥ dry sand's 620, so it cools no faster than sand
   dirt:     P(28, 10, 20, .94, .9, .08, .4, .3),
@@ -90,10 +106,10 @@ export const PRESET = {
   concrete: P(32, 16, 30, .93, .88, .1, .4, .6),
   // brick/plaster walls with heated interiors behind them (Teq kept high and tau held up by the interior — STAND-IN). eIR .9
   // (brick 0.90–0.93) [EL]; eMW .85 [UMF]; uvAlb .08 — STAND-IN (like concrete, a bit darker); gamma .5 (brick ~0.65, plaster far lower: a mix) [RP112]
-  facade:   P(26, 19, 40, .9, .85, .08, .5, .8),
+  facade:    P(26, 19, 40, .9, .85, .08, .5, .8, 0, TRANS.facade),
   // μ ~380 [Oke] (below sand and soil, so it cools faster than both); eIR .9 (0.90–0.95) [EL]; eMW .9 [UMF]; uvAlb .05 — STAND-IN (dark organic surface, like soil [FG]);
   // gamma .1 (K-40 only) [UN]
-  wood:     P(22, 14, 12, .9, .9, .05, .1, .3),
+  wood:      P(22, 14, 12, .9, .9, .05, .1, .3, 0, TRANS.wood),
 };
 export function mixSurf(parts) {   // [[preset, weight], ...] -> blended {A, B, C}
   const out = { A: [0, 0, 0, 0], B: [0, 0, 0, 0], C: [0, 0, 0, 0] }; let W = 0;
@@ -248,6 +264,11 @@ function patchVisible(mat, props, { extraDecl = '', visExtra = '', instrExtra = 
 // the eye masks, as luminance into the eye's band outputs: o1 = (IR, UV, gamma, coverage), o3 = (radio, micro,
 // X-ray, coverage). The ground is dark in X-rays and opaque in every band (coverage 1).
 export const eyeBandsGLSL = (instrExtra = '') => `
+#ifdef SURF_ATTR
+vec3 eyeTrans(){ return vSurfC.yzw; }
+#else
+vec3 eyeTrans(){ return uSurfC.yzw; }
+#endif
 vec3 eyeSurfC(){ vec3 N = normalize(vSurfN), W = vSurfW; float dist = length(W - cameraPosition), line = 0.;
   vec3 c = surfBands(W, N, 0.); ${instrExtra}
   return c; }

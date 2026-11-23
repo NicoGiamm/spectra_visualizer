@@ -100,7 +100,7 @@ function trees() {   // instanced pines
   }
   const mesh = new THREE.InstancedMesh(treeGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .9 }), M.length);
   M.forEach((m, i) => { mesh.setMatrixAt(i, m); mesh.setColorAt(i, new THREE.Color().setScalar(.7 + R() * .6)); });
-  S.scene.add(spectral(mesh, 'forest', { weight: .5 }));
+  S.scene.add(spectral(mesh, 'canopy', { weight: .5 }));
 }
 
 function rocks() {

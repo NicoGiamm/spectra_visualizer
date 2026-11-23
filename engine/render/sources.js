@@ -15,6 +15,7 @@ export const EMS = [], RIBS = [], FIELDS = [];
 const gain = band => (S.eye ? 1 : GAIN[band]);
 // spectral position of a source inside its band (0 long-wave … 1 short-wave, spectrum.js bandPos): the mean over the
 // current event's processes in that band, .5 when it declares none; the eye shifts the band hue with it (uSpec)
+const ORIGIN = { ground: 0, high: 1, space: 2 };   // uOrigin: the eye attenuates only ground-origin light by distance
 const POS = new Map();
 // per frame: Σ I and Σ I·position of the sources set in each band (the eye's diffraction blur picks the band's
 // wavelength from it, engine/render/compose.js); reset in hideAllSources()
@@ -65,7 +66,7 @@ function pxPerUnit(pos) {
 // real = 1 picks the realistic IR look for moving warm bodies (animals, engines)
 export function bandMat(band, color, ribbon, real) {
   return new THREE.ShaderMaterial({
-    uniforms: { uBand: { value: BI[band] }, uI: { value: 0 }, uSpec: { value: .5 }, uTime: S.TIME, uSeed: { value: Math.random() }, uSize: { value: 1 }, uReal: { value: real ? 1 : 0 },
+    uniforms: { uBand: { value: BI[band] }, uI: { value: 0 }, uSpec: { value: .5 }, uOrigin: { value: 0 }, uTime: S.TIME, uSeed: { value: Math.random() }, uSize: { value: 1 }, uReal: { value: real ? 1 : 0 },
       uColor: { value: new THREE.Color(color || '#ffffff') }, uLen: { value: 1 }, uFade: { value: 0 } },
     vertexShader: ribbon ? RIB_VS : QUAD_VS, fragmentShader: ribbon ? RIB_FS : QUAD_FS,
     blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, side: THREE.DoubleSide,
@@ -80,7 +81,7 @@ export class Em {
     if (absorbed(this.band, this.origin)) { ghost(this, pos); return this; }
     S.act[this.band] += I; LOD.total.em++;
     if (size * pxPerUnit(pos) < LOD.minPx) { LOD.skipped.em++; this.m.visible = false; return this; }
-    const u = this.m.material.uniforms; this.m.position.copy(pos); u.uSize.value = size; u.uI.value = I * gain(this.band); u.uSpec.value = specPos(this.band); specAdd(this.band, I, u.uSpec.value);
+    const u = this.m.material.uniforms; this.m.position.copy(pos); u.uSize.value = size; u.uI.value = I * gain(this.band); u.uOrigin.value = ORIGIN[this.origin]; u.uSpec.value = specPos(this.band); specAdd(this.band, I, u.uSpec.value);
     this.m.visible = S.on[this.band]; return this;
   }
 }
@@ -120,7 +121,7 @@ export class Rib {
     }
     pos.needsUpdate = uv.needsUpdate = true;
     this.m.geometry.setDrawRange(0, (m - 1) * 6);
-    const U = this.m.material.uniforms; U.uI.value = I * gain(this.band); U.uSpec.value = specPos(this.band); specAdd(this.band, I * .5, U.uSpec.value); U.uFade.value = fade; U.uLen.value = total / Math.max(1e-3, (w0 + w1) / 2);
+    const U = this.m.material.uniforms; U.uI.value = I * gain(this.band); U.uOrigin.value = ORIGIN[this.origin]; U.uSpec.value = specPos(this.band); specAdd(this.band, I * .5, U.uSpec.value); U.uFade.value = fade; U.uLen.value = total / Math.max(1e-3, (w0 + w1) / 2);
     this.m.visible = S.on[this.band]; return this;
   }
 }
@@ -150,7 +151,7 @@ export class EmField {
     attr('iSeed', 1, Float32Array.from({ length: n }, Math.random));   // visual only: keeps the seeded R stream untouched
     g.instanceCount = n;
     this.m = new THREE.Mesh(g, new THREE.ShaderMaterial({
-      uniforms: { uBand: { value: BI[band] }, uSpec: { value: .5 }, uTime: S.TIME, uReal: { value: real ? 1 : 0 } },
+      uniforms: { uBand: { value: BI[band] }, uSpec: { value: .5 }, uOrigin: { value: 0 }, uTime: S.TIME, uReal: { value: real ? 1 : 0 } },
       vertexShader: FIELD_VS, fragmentShader: FIELD_FS,
       blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, side: THREE.DoubleSide,
     }));
@@ -161,7 +162,7 @@ export class EmField {
     if (absorbed(this.band, this.origin)) { ghost(this, pos); return this; }
     S.act[this.band] += I; LOD.total.field++;
     if (size * pxPerUnit(pos) < LOD.minPx) { LOD.skipped.field++; if (this.aI.array[i]) { this.aI.array[i] = 0; this.aI.needsUpdate = true; } return this; }
-    this.aPos.setXYZ(i, pos.x, pos.y, pos.z); this.aSize.array[i] = size; this.aI.array[i] = I * gain(this.band); this.m.material.uniforms.uSpec.value = specPos(this.band); specAdd(this.band, I, this.m.material.uniforms.uSpec.value);
+    this.aPos.setXYZ(i, pos.x, pos.y, pos.z); this.aSize.array[i] = size; this.aI.array[i] = I * gain(this.band); this.m.material.uniforms.uOrigin.value = ORIGIN[this.origin]; this.m.material.uniforms.uSpec.value = specPos(this.band); specAdd(this.band, I, this.m.material.uniforms.uSpec.value);
     this.aPos.needsUpdate = this.aSize.needsUpdate = this.aI.needsUpdate = true;
     this.dirty = true; this.m.visible = S.on[this.band]; return this;
   }

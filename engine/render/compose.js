@@ -19,6 +19,21 @@
 // own for custom shaders) and take their position from SURF_POS; every other material writes nothing there —
 // black if opaque (it occludes), nothing if transparent. No MSAA on the five outputs (memory: 5 half-float
 // outputs × 4 samples would be ~750 MB at 1080p × 1.5 pixel ratio); FXAA on the result instead.
+// Output 5 holds the frontmost opaque surface's transmission (Tradio, Tmicro, Tgamma) for light from behind it (surface
+// PRESET C.yzw; T_PROP for plain props).
+//
+// What each band sees through (M10/T6). Radio, microwave and gamma sources live on layer 1 only, so the scene pass
+// skips them; they are drawn once in a second pass without depth test, against (T, distance) of the frontmost opaque
+// surface copied from the scene pass: in front of it as is, behind it × its transmission.
+//   * Air. Every ground-origin fragment is attenuated by exp(−α d) over its own line-of-sight distance d (from its depth),
+//     α per band from EXTINCTION (bands.js: microwave gas ~0.05 dB/km, IR 8–14 µm window, UV Rayleigh + aerosol) and,
+//     for X-ray / gamma, from the photon energy (XCOM_AIR): X-rays die within metres, terrestrial gamma within a few
+//     hundred metres. UV haze also glows: opaque fragments add the path radiance UV_PATH·uUVsky·(1 − e^(−α d)).
+//     Sky sources ('high' / 'space') are left to the detector (Orbit / Ground, TRANSMIT). Visible keeps the scene fog.
+//   * Matter. Radio, microwave and gamma sources hidden behind the frontmost opaque surface are drawn again in a
+//     second pass (layer 1, no depth test) scaled by that surface's transmission: radio through buildings and round
+//     hills, microwave through foliage, gamma through thin walls. One occluder only (the frontmost).
+//
 // Each layer is then seen by its own receptor:
 //
 //   1. Adaptation. Every band is seen by the same receptor model: the layer's mean luminance La (the field a
@@ -70,12 +85,12 @@ import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 import { S } from '../core/state.js';
-import { BANDS, LREF, APERTURE } from '../core/bands.js';
+import { BANDS, LREF, APERTURE, EXTINCTION, XCOM_AIR, UV_PATH } from '../core/bands.js';
 import { applyVisMode } from './instrument.js';
 import { SURF_U, OVERLAY } from './surface.js';
 import { bandPos, posLambda, bandEdges } from '../core/spectrum.js';
 import { COMMON } from './shaders.js';
-import { SPEC } from './sources.js';
+import { SPEC, EMS, RIBS, FIELDS } from './sources.js';
 
 const IDS = BANDS.map(b => b.id);                    // 0 radio, 1 micro, 2 ir, 3 vis, 4 uv, 5 xray, 6 gamma (uBand order)
 // where each band lives in the MRT: [output, channel]
@@ -89,44 +104,90 @@ const SURF_POS = { ir: bandPos({ lam: 10e-6 }), uv: bandPos({ lam: 365e-9 }), ga
 const v3 = (a, b, c) => `vec3(${a.toFixed(4)}, ${b.toFixed(4)}, ${c.toFixed(4)})`;
 
 // ---------------------------------------------------------------- material patch (every material in the scene)
+const glf = x => (Number.isInteger(x) ? x.toFixed(1) : String(x));
+const EDGE = id => { const [lo, hi] = bandEdges(id); return `vec2(${Math.log(lo).toFixed(5)}, ${Math.log(hi).toFixed(5)})`; };
+// props without a surface preset (animals, vehicles, poles, crates): mostly smaller than a VHF wavelength, so they
+// barely block radio; vehicles are metal (microwave blocked); a few cm of matter for gamma — STAND-IN [radio, micro, gamma]
+const T_PROP = [.7, .2, .7];
 const EYE_TOP = `layout(location = 1) out highp vec4 eyeO1;
 layout(location = 2) out highp vec4 eyeO2;
 layout(location = 3) out highp vec4 eyeO3;
 layout(location = 4) out highp vec4 eyeO4;
+layout(location = 5) out highp vec4 eyeO5;
+uniform float eyeNear, eyeFar, eyeTanY, eyeAspect, eyeUV, eyeP2, eyeAtm; uniform vec2 eyeRes; uniform sampler2D eyeTZ;
 float eyeL(vec3 c){ return dot(c, vec3(.2126, .7152, .0722)); }
+// distance (m) from the eye to this fragment, from its depth
+float eyeDist(){ float z = gl_FragCoord.z*2. - 1., zv = 2.*eyeNear*eyeFar/(eyeFar + eyeNear - z*(eyeFar - eyeNear));
+  vec2 ndc = gl_FragCoord.xy/eyeRes*2. - 1.; return zv*length(vec3(ndc.x*eyeTanY*eyeAspect, ndc.y*eyeTanY, 1.)); }
+// air attenuation length for X-ray / gamma: NIST XCOM dry air (bands.js XCOM_AIR), log-log, × 1.205e-3 g/cm³ → 1/m
+const float eyeXE[${XCOM_AIR.length}] = float[${XCOM_AIR.length}](${XCOM_AIR.map(r => glf(r[0])).join(', ')});
+const float eyeXM[${XCOM_AIR.length}] = float[${XCOM_AIR.length}](${XCOM_AIR.map(r => glf(r[1])).join(', ')});
+float eyeMuAir(float keV){ float lk = log(clamp(keV, eyeXE[0], eyeXE[${XCOM_AIR.length - 1}]));
+  for(int i = 0; i < ${XCOM_AIR.length - 1}; i++){ float a = log(eyeXE[i]), b = log(eyeXE[i + 1]);
+    if(lk <= b) return exp(mix(log(eyeXM[i]), log(eyeXM[i + 1]), (lk - a)/(b - a)))*.1205; }
+  return eyeXM[${XCOM_AIR.length - 1}]*.1205; }
+// transmission of the air over d metres for band b (uBand order) at spectral position pos
+float eyeAtt(int b, float pos, float d){
+  float a = b == 1 ? ${glf(EXTINCTION.micro)} : b == 2 ? ${glf(EXTINCTION.ir)} : b == 4 ? ${glf(EXTINCTION.uv)} : ${glf(EXTINCTION.radio)};
+  if(b == 5 || b == 6){ vec2 L = b == 5 ? ${EDGE('xray')} : ${EDGE('gamma')};
+    a = eyeMuAir(1.23984e-9/exp(L.y - pos*(L.y - L.x))); }
+  return exp(-a*d*eyeAtm); }
+float eyeUVpath(float d){ return eyeAtm*eyeUV*${glf(UV_PATH)}*(1. - exp(-${glf(EXTINCTION.uv)}*d)); }
 `;
-const ZERO = 'eyeO1 = vec4(0.); eyeO2 = vec4(0.); eyeO3 = vec4(0.); eyeO4 = vec4(0.);';
+const ZERO = 'eyeO1 = vec4(0.); eyeO2 = vec4(0.); eyeO3 = vec4(0.); eyeO4 = vec4(0.); eyeO5 = vec4(0.);';
 const SRC_MAIN = `
-uniform float uSpec;
+uniform float uSpec, uOrigin;
 void main(){ ${ZERO} eyeMain_();
   if(uBand != 3){ float l = eyeL(gl_FragColor.rgb); gl_FragColor = vec4(0.);
+    float d = eyeDist();
+    if(uOrigin < .5) l *= eyeAtt(uBand, uSpec, d);                       // ground-origin light crosses the air to the eye
+    if(eyeP2 > .5){                                                       // second pass: in front of the frontmost opaque
+      vec4 tz = texelFetch(eyeTZ, ivec2(gl_FragCoord.xy), 0);                //   surface → as is; behind it → × its T
+      bool hidden = d > tz.w*1.0005;
+      if(!hidden && eyeP2 > 1.5) discard;                                   //   (?epen=only / glass: just the hidden part)
+      if(hidden) l *= uBand == 0 ? tz.r : uBand == 1 ? tz.g : tz.b; }
     vec3 v = vec3(0.), w = vec3(0.);
     if(uBand == 2) v.r = l; else if(uBand == 4) v.g = l; else if(uBand == 6) v.b = l;
     else if(uBand == 0) w.r = l; else if(uBand == 1) w.g = l; else w.b = l;
-    eyeO1 = vec4(v, 1.); eyeO2 = vec4(v*uSpec, 1.); eyeO3 = vec4(w, 1.); eyeO4 = vec4(w*uSpec, 1.); } }`;
-const SURF_MAIN = `
+    eyeO1 = vec4(v, 1.); eyeO2 = vec4(v*uSpec, 1.); eyeO3 = vec4(w, 1.); eyeO4 = vec4(w*uSpec, 1.); }
+  else if(eyeP2 > .5) discard; }`;
+// surfaces: their band emission (hook), crossed through the air; opaque ones add the UV haze in front of them and
+// write their transmission for the penetration pass
+const SURF_MAIN = opaque => `
 void main(){ ${ZERO} eyeMain_(); eyeBands(eyeO1, eyeO3);
+  float d = eyeDist();
+  eyeO1.rgb *= vec3(eyeAtt(2, ${glf(SURF_POS.ir)}, d), eyeAtt(4, ${glf(SURF_POS.uv)}, d), eyeAtt(6, ${glf(SURF_POS.gamma)}, d));
+  eyeO3.rgb *= vec3(eyeAtt(0, ${glf(SURF_POS.radio)}, d), eyeAtt(1, ${glf(SURF_POS.micro)}, d), 1.);
+  ${opaque ? 'eyeO1.g += eyeUVpath(d); eyeO5 = vec4(eyeTrans(), 1.);' : ''}
   eyeO2 = vec4(eyeO1.rgb*${v3(SURF_POS.ir, SURF_POS.uv, SURF_POS.gamma)}, eyeO1.a);
   eyeO4 = vec4(eyeO3.rgb*${v3(SURF_POS.radio, SURF_POS.micro, SURF_POS.xray)}, eyeO3.a); }`;
-const PLAIN_MAIN = `
-void main(){ ${ZERO} eyeMain_(); }`;
+// everything else: an opaque prop is black in every band (it occludes), with the UV haze in front of it and T_PROP;
+// a transparent one writes nothing
+const PLAIN_MAIN = opaque => `
+void main(){ ${ZERO} eyeMain_();
+  ${opaque ? `float d = eyeDist(); eyeO1 = vec4(0., eyeUVpath(d), 0., 1.); eyeO2 = vec4(eyeO1.rgb*${v3(SURF_POS.ir, SURF_POS.uv, SURF_POS.gamma)}, 1.);
+  eyeO3 = vec4(0., 0., 0., 1.); eyeO4 = vec4(0., 0., 0., 1.); eyeO5 = vec4(${v3(...T_PROP)}, 1.);` : ''} }`;
 const MAIN_RE = /void\s+main\s*\(\s*(void)?\s*\)/;
 
 function eyeShader(src, m) {
   if (!MAIN_RE.test(src)) throw new Error(`spectral eye: no main() in the fragment shader of ${m.type} ${m.name}`);
   const body = src.replace(MAIN_RE, 'void eyeMain_()');
   if (m.uniforms && m.uniforms.uBand) return EYE_TOP + body + SRC_MAIN;
-  if (m.userData.eyeBands) return EYE_TOP + body + m.userData.eyeBands + SURF_MAIN;
-  return EYE_TOP + body + PLAIN_MAIN;
+  const opaque = !m.transparent;
+  if (m.userData.eyeBands) return EYE_TOP + body + m.userData.eyeBands + SURF_MAIN(opaque);
+  return EYE_TOP + body + PLAIN_MAIN(opaque);
 }
 function patch(m) {
   if (!m || m.userData.eyeMRT) return;
   m.userData.eyeMRT = true;
   const prev = m.onBeforeCompile, prevKey = m.customProgramCacheKey();
-  m.onBeforeCompile = (sh, r) => { prev.call(m, sh, r); sh.fragmentShader = eyeShader(sh.fragmentShader, m); };
+  m.onBeforeCompile = (sh, r) => { prev.call(m, sh, r); Object.assign(sh.uniforms, EYE_U); sh.fragmentShader = eyeShader(sh.fragmentShader, m); };
   m.customProgramCacheKey = () => `eye|${prevKey}`;
   m.needsUpdate = true;
 }
+// uniforms every patched material shares (set once per frame by the EyePass)
+const EYE_U = { eyeNear: { value: .2 }, eyeFar: { value: 4e4 }, eyeTanY: { value: 1 }, eyeAspect: { value: 1 }, eyeRes: { value: new THREE.Vector2(1, 1) },
+  eyeUV: SURF_U.uUVsky, eyeP2: { value: 0 }, eyeTZ: { value: null }, eyeAtm: { value: 1 } };
 const patchScene = scene => scene.traverse(o => { if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(patch); });
 
 // ---------------------------------------------------------------- reduce / adapt / combine
@@ -154,6 +215,13 @@ vec4 cur(int b){ ivec2 z = ivec2(0); if(b == 0) return texelFetch(tR0, z, 0); if
 void main(){ int b = int(gl_FragCoord.x); vec4 p = texelFetch(tPrev, ivec2(b, 0), 0);
   if(b > 6){ gl_FragColor = p; return; }
   vec4 c = cur(b); gl_FragColor = mix(p, c, c.b > p.b ? uUp : uDown); }`;
+
+// after the scene pass: (transmission of the frontmost opaque surface, its distance) per pixel, for the penetration pass;
+// no opaque surface: T = 1, distance = far
+const TZ_FS = `uniform sampler2D tDepth, tT; uniform float uNear, uFar, uTanY, uAspect, uGlass; varying vec2 vUv;
+void main(){ float z = texture2D(tDepth, vUv).r*2. - 1., zv = 2.*uNear*uFar/(uFar + uNear - z*(uFar - uNear));
+  vec2 ndc = vUv*2. - 1.; float d = zv*length(vec3(ndc.x*uTanY*uAspect, ndc.y*uTanY, 1.));
+  vec4 t = texture2D(tT, vUv); gl_FragColor = vec4(t.a > .5 && uGlass < .5 ? t.rgb : vec3(1.), d); }`;
 
 // diffraction blur: one band's (luminance, luminance × position) from the MRT, box-averaged over 2^k × 2^k pixels
 // with 4×4 bilinear taps
@@ -223,6 +291,7 @@ const rtOpts = { type: THREE.HalfFloatType, minFilter: THREE.NearestFilter, magF
 // hue = the band colour scaled to a brightest channel of 1 (normalising to equal luminance instead multiplies a deep
 // red like IR's by ~3.7, so every IR pixel above ~0.1 clipped to flat red)
 const hueOf = id => { const c = new THREE.Color(BANDS.find(b => b.id === id).color); const m = Math.max(c.r, c.g, c.b); return new THREE.Vector3(c.r / m, c.g / m, c.b / m); };
+const PENETRATE = new Set(['radio', 'micro', 'gamma']);   // bands that cross matter (output 5 / penetration pass)
 const BLUR = ['radio', 'micro', 'ir', 'uv'];       // bands with an aperture (vis is sub-pixel and RGB: never blurred)
 const lin = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, type: THREE.HalfFloatType, depthBuffer: false };
 const SEL = id => { const [o, ch] = SLOT[id]; return o === 0 ? new THREE.Vector4(0, 0, 0, 2) : new THREE.Vector4(ch === 0 ? 1 : 0, ch === 1 ? 1 : 0, ch === 2 ? 1 : 0, 0); };
@@ -232,7 +301,13 @@ class EyePass extends Pass {
     super();
     Object.assign(this, { scene, camera, first: true, dbg: q.has('eyedbg'), dbgN: 0, ratio: q.has('eyeratio') ? 0 : -1, chains: {} });
     for (const [k, n] of [['ekey', 'key'], ['ep', 'p'], ['efloor', 'floorRel'], ['ebeta', 'beta']]) if (q.has(k)) EYE[n] = +q.get(k);
-    this.mrt = new THREE.WebGLMultipleRenderTargets(1, 1, 5, { type: THREE.HalfFloatType });
+    // comparison switches: ?eatm=0 no air between emitter and eye, ?epen=0 no penetration pass
+    EYE_U.eyeAtm.value = q.get('eatm') === '0' ? 0 : 1; this.pen = q.get('epen') !== '0'; this.penOnly = q.get('epen') === 'only' || q.get('epen') === 'glass'; this.glass = q.get('epen') === 'glass';   // glass: test, every occluder T = 1   // only: just what crossed matter
+    this.mrt = new THREE.WebGLMultipleRenderTargets(1, 1, 6, { type: THREE.HalfFloatType });
+    this.mrt.depthTexture = new THREE.DepthTexture(1, 1); this.mrt.depthTexture.type = THREE.UnsignedIntType;
+    this.tz = new THREE.WebGLRenderTarget(1, 1, { ...rtOpts, type: THREE.FloatType });
+    this.tzQ = new FullScreenQuad(new THREE.ShaderMaterial({ vertexShader: VS, fragmentShader: TZ_FS, uniforms: {
+      tDepth: { value: null }, tT: { value: null }, uGlass: { value: 0 }, uNear: { value: .2 }, uFar: { value: 4e4 }, uTanY: { value: 1 }, uAspect: { value: 1 } } }));
     this.reduceQ = new FullScreenQuad(new THREE.ShaderMaterial({ vertexShader: VS, fragmentShader: REDUCE_FS,
       uniforms: { tSrc: { value: null }, uSrcF: { value: new THREE.Vector2() }, uSel: { value: new THREE.Vector4() }, uFirst: { value: 1 } } }));
     const au = { tPrev: { value: null }, uUp: { value: 1 }, uDown: { value: 1 } }; IDS.forEach((_, i) => au['tR' + i] = { value: null });
@@ -278,7 +353,7 @@ class EyePass extends Pass {
     return B.a.texture;
   }
   setSize(w, h) {
-    this.mrt.setSize(w, h);
+    this.mrt.setSize(w, h); this.tz.setSize(w, h);
     for (const id of IDS) {
       (this.chains[id] || []).forEach(r => r.dispose());
       const chain = []; let cw = w, ch = h;
@@ -291,12 +366,31 @@ class EyePass extends Pass {
     // combine), every surface term computed, no 12 % overlay in the visible light, no diffuse radio stand-in
     // (Rayleigh: at λ ≥ 1 m sea and land are smooth, they mirror radio sources instead of glowing)
     applyVisMode(true);
-    for (const k of ['uSOnR_', 'uSOnM_', 'uSOnI_', 'uSOnU_', 'uSOnG_']) SURF_U[k].value = 1;
+    for (const k of ['uSOnR_', 'uSOnM_', 'uSOnI_', 'uSOnU_', 'uSOnG_']) SURF_U[k].value = this.penOnly ? 0 : 1;   // epen=only: no surface emission either
     OVERLAY.value = 0; SURF_U.uRadioDiffuse.value = 0;
     patchScene(this.scene);
+    const cam = this.camera, tanY = Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2) / cam.zoom;
+    Object.assign(EYE_U.eyeNear, { value: cam.near }); EYE_U.eyeFar.value = cam.far; EYE_U.eyeTanY.value = tanY;
+    EYE_U.eyeAspect.value = cam.aspect; EYE_U.eyeRes.value.set(this.mrt.width, this.mrt.height); EYE_U.eyeP2.value = 0;
     const cc = renderer.getClearColor(new THREE.Color()), ca = renderer.getClearAlpha();
     renderer.setClearColor(0x000000, 0);
-    renderer.setRenderTarget(this.mrt); renderer.clear(); renderer.render(this.scene, this.camera);
+    const pen = [...EMS, ...RIBS, ...FIELDS].filter(x => PENETRATE.has(x.band));
+    pen.forEach(x => x.m.layers.set(this.pen ? 1 : 0));                 // layer 1 only: not in the scene pass
+    renderer.setRenderTarget(this.mrt); renderer.clear(); renderer.render(this.scene, cam);
+    // (T, distance) of the frontmost opaque surface, then the radio / microwave / gamma sources, once, on layer 1
+    const tu = this.tzQ.material.uniforms;
+    tu.tDepth.value = this.mrt.depthTexture; tu.tT.value = this.mrt.texture[5]; tu.uGlass.value = this.glass ? 1 : 0;
+    tu.uNear.value = cam.near; tu.uFar.value = cam.far; tu.uTanY.value = tanY; tu.uAspect.value = cam.aspect;
+    renderer.setRenderTarget(this.tz); this.tzQ.render(renderer);
+    const shown = pen.filter(x => x.m.visible);
+    if (shown.length && this.pen) {
+      shown.forEach(x => { x.m.material.depthTest = false; });
+      EYE_U.eyeTZ.value = this.tz.texture; EYE_U.eyeP2.value = this.penOnly ? 2 : 1;
+      const mask = cam.layers.mask, ac = renderer.autoClear; cam.layers.set(1); renderer.autoClear = false;
+      renderer.setRenderTarget(this.mrt); renderer.render(this.scene, cam);
+      cam.layers.mask = mask; renderer.autoClear = ac; EYE_U.eyeP2.value = 0;
+      shown.forEach(x => { x.m.material.depthTest = true; });
+    }
     renderer.setClearColor(cc, ca);
     const tex = this.mrt.texture, ru = this.reduceQ.material.uniforms;
     for (const id of IDS) {

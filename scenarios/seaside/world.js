@@ -28,7 +28,8 @@ export function heightAt(x, z) {
   return h;
 }
 
-// Local surface presets (same shape as engine PRESET): { A: [T0, Teq, 1/tau, eIR], B: [eMW, uvAlb, gamma, rRadio], C: [gloss, 0, 0, 0] }
+// Local surface presets (same shape as engine PRESET): { A: [T0, Teq, 1/tau, eIR], B: [eMW, uvAlb, gamma, rRadio], C: [gloss, Tradio, Tmicro, Tgamma] }
+// (all ground here: C.yzw = [.05, 0, 0], the engine's TRANS.ground — surface.js)
 // Source keys ([Sal], [EL], [UMF], [FG], [WHO], [UN], [Oke], [Wilheit]) are listed above PRESET in engine/render/surface.js;
 // T0/Teq/tau and rRadio are scene STAND-INS there too (time-compressed, only their order is physical).
 //   wet sand: tracks the water temperature (μ 2550, slower than dry sand) [Oke] — faster than the granite despite μ:
@@ -46,10 +47,10 @@ export function heightAt(x, z) {
 //     eMW .88 [UMF]; uvAlb .12 — STAND-IN as the engine's rock
 //   sea: the engine's water preset (eMW .45 calm sea [Wilheit])
 export const SURF = {
-  wetSand: { A: [23, 16, 1 / 30, .96], B: [.6, .1, .55, .5], C: [.5, 0, 0, 0] },
-  sand:    { A: [35, 8, 1 / 22, .92], B: [.9, .24, .7, .3], C: [0, 0, 0, 0] },   // 35 °C at sunset, crosses the sea's 18 °C near t=22
-  dune:    { A: [27, 7, 1 / 10, .97], B: [.92, .05, .45, .2], C: [0, 0, 0, 0] },   // marram grass on the dunes
-  granite: { A: [31, 14, 1 / 45, .9], B: [.88, .12, 1, .5], C: [0, 0, 0, 0] },
+  wetSand: { A: [23, 16, 1 / 30, .96], B: [.6, .1, .55, .5], C: [.5, .05, 0, 0] },
+  sand:    { A: [35, 8, 1 / 22, .92], B: [.9, .24, .7, .3], C: [0, .05, 0, 0] },   // 35 °C at sunset, crosses the sea's 18 °C near t=22
+  dune:    { A: [27, 7, 1 / 10, .97], B: [.92, .05, .45, .2], C: [0, .05, 0, 0] },   // marram grass on the dunes
+  granite: { A: [31, 14, 1 / 45, .9], B: [.88, .12, 1, .5], C: [0, .05, 0, 0] },
   sea:     PRESET.water,
 };
 
@@ -242,6 +243,7 @@ function seaMaterial(instr) {
 const SEA_EYE = `
 float eyeSeaL(float r, float m, float i, float u, float g, vec3 W, vec3 N, vec3 V, vec3 Rf, float dist, float foam){
   eyeMR = r; eyeMM = m; eyeMI = i; eyeMU = u; eyeMG = g; eyeSmooth = 1.; return eyeL(seaBands(W, N, V, Rf, dist, foam, 0.)); }
+vec3 eyeTrans(){ return uSurfC.yzw; }
 void eyeBands(out vec4 o1, out vec4 o3){
   vec3 W, V, N, Rf; vec2 p; float dist, fd, crest, wash, foam;
   seaGeo(W, dist, V, N, Rf, p, fd, crest, wash, foam);

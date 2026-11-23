@@ -44,6 +44,26 @@ export const GAIN = { radio: 2.2, micro: 2.0, ir: 1.6, vis: 1, uv: 1.9, xray: 2.
 //   xray/gamma 0      no diffraction limit: those photons are imaged by masks / pinholes, not lenses
 export const APERTURE = { radio: 100, micro: 1, ir: .007, vis: .007, uv: .007, xray: 0, gamma: 0 };
 
+// Spectral eye (M10/T6): horizontal sea-level extinction coefficient α (1/m) per band, for light crossing the air
+// between a ground-level emitter and the eye (exp(−α d), engine/render/compose.js). Visible is left to the scene's
+// own fog. Sky sources (origin 'high' / 'space') are not attenuated here: their path is the detector's (TRANSMIT).
+//   radio  0        the troposphere is transparent at 10 MHz–1 GHz
+//   micro  1.2e-5   ~0.05 dB/km: O₂ + H₂O gas absorption at 3–20 GHz, sea level (ITU-R P.676-13); cloud and fog add
+//                   ~0.1 dB/km per g/m³ of liquid water at 20 GHz (ITU-R P.840) — negligible over these ranges
+//   ir     2e-4     8–14 µm window, horizontal sea-level path: ~0.6–0.9 transmittance per km depending on humidity
+//                   (LOWTRAN 7, Kneizys et al. 1988, AFGL-TR-88-0177) → 1–5e-4/m; mid value
+//   uv     2.3e-4   365 nm: Rayleigh 1.16e-5/m at 550 nm × (550/365)⁴ = 6e-5/m (Bucholtz 1995) + aerosol 1e-4/m at
+//                   550 nm (Koschmieder visual range ~39 km) × (550/365)^1.3 (Ångström exponent) = 1.7e-4/m
+//   xray / gamma    from the photon energy: NIST XCOM mass attenuation of dry air (XCOM_AIR, cm²/g, with scattering)
+//                   × 1.205e-3 g/cm³ — 1 keV ≈ 2 mm, 10 keV ≈ 1.6 m, 100 keV ≈ 54 m, 1.46 MeV (K-40) ≈ 160 m
+export const EXTINCTION = { radio: 0, micro: 1.2e-5, ir: 2e-4, vis: 0, uv: 2.3e-4 };
+export const XCOM_AIR = [[1, 3606], [2, 527.9], [3, 162.5], [5, 40.27], [10, 5.12], [20, .7779], [30, .3538], [50, .208],
+  [100, .1541], [200, .1233], [500, .08712], [1000, .06358], [2000, .04447], [5000, .02751], [1e4, .02045], [1e5, .0173]];
+// UV path radiance: the haze between the eye and a surface glows with the UV skylight; its asymptote (an infinitely
+// long path) is taken as the radiance of a white Lambertian surface under the same sky (uniform-sky approximation,
+// in the surface terms' units: 1.3 × uUVsky, engine/render/surface.js).
+export const UV_PATH = 1.3;
+
 export const LREF = { radio: .37, micro: .37, ir: .37, vis: .37, uv: .37, xray: .37, gamma: .37 };
 
 // Meter normalisation (activity that fills a bar). Scenarios may override via `meterNorm`.
