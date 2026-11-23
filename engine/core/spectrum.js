@@ -217,7 +217,8 @@ export function bandOf(p) { const l = wavelength(p); return RANGES.find(([, lo, 
 // mains hum at 50 Hz clamps to 0), gamma at 1.24e-15 m (1 GeV, air-shower photons). Used by the spectral eye to
 // shift a band's hue slightly with frequency (engine/render/compose.js).
 const OPEN = { radio: [1, 1e5], gamma: [1.24e-15, 1e-11] };
-const edges = b => { const r = RANGES.find(x => x[0] === b); return OPEN[b] || [r[1], r[2]]; };
+export const bandEdges = b => { const r = RANGES.find(x => x[0] === b); return OPEN[b] || [r[1], r[2]]; };   // [λ lo, λ hi] in m
+const edges = bandEdges;
 export function bandPos(p) {
   const l = wavelength(p), [lo, hi] = edges(bandOf(p));
   return Math.min(1, Math.max(0, (Math.log(hi) - Math.log(l)) / (Math.log(hi) - Math.log(lo))));

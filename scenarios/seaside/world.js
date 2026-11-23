@@ -119,7 +119,7 @@ function terrain() {
     if(uSOnG > 0.){                                   // granite gamma speckle that stays visible on the far cliffs
       float cs = max(.45, dist*.006); vec3 gc = floor(W/cs);
       float h = h21(gc.xz + gc.y*17.31 + floor(uSurfTime*14.)*3.17), rk = smoothstep(.7, .95, vSurfB.z);
-      c += uSOnG*hsv(fract(uSurfTime*1.1 + h21(gc.xz)))*step(1. - .045*rk, h)*1.5*smoothstep(160., 420., dist)*(1. - inVis);
+      c += uSOnG*mix(hsv(fract(uSurfTime*1.1 + h21(gc.xz)))*step(1. - .045*rk, h)*1.5*smoothstep(160., 420., dist)*(1. - inVis), vec3(.045*rk*1.5*.6), eyeSmooth);   // eye: expected value
     }
     return c;
   }`;
@@ -156,7 +156,7 @@ vec3 seaBands(vec3 W, vec3 N, vec3 V, vec3 Rf, float dist, float foam, float inV
     float e = mix(.45*(1. - .55*pow(1. - cosv, 3.)), .92, foam);
     float Tb = e*(T + 273.) + (1. - e)*mix(110., 8., pow(clamp(Rf.y, 0., 1.), .3)), x = clamp((Tb - 120.)/180., 0., 1.);
     float cs = max(.4, dist*.012); vec2 g = floor(W.xz/cs);
-    float sp = step(.88 - .3*x, h21(g + floor(uSurfTime*10.)))*(1. - inVis);
+    float sp = mix(step(.88 - .3*x, h21(g + floor(uSurfTime*10.)))*(1. - inVis), .12 + .3*x, eyeSmooth);   // eye: expected value
     col += uSOnM*mix(vec3(1.,.42,0.), vec3(1.,.85,.2), h21(g*1.7))*(x*x*.22 + sp*x*x*.5);
     // radar sea clutter: the sea returns far less than the cliffs at grazing incidence (sigma0 tens of dB below land)
     // and only within a few km of the antenna
@@ -183,7 +183,7 @@ vec3 seaBands(vec3 W, vec3 N, vec3 V, vec3 Rf, float dist, float foam, float inV
   }
   if(uSOnG > 0.){                                   // GAMMA: water shields the seabed — almost silent
     vec3 gc = floor(W*2.2); float h = h21(gc.xz + floor(uSurfTime*16.)*3.17);
-    col += uSOnG*hsv(fract(uSurfTime*1.1 + h21(gc.xz)))*step(1. - uSurfB.z*.03, h)*1.8*(1. - smoothstep(40., 200., dist))*(1. - inVis);
+    col += uSOnG*mix(hsv(fract(uSurfTime*1.1 + h21(gc.xz)))*step(1. - uSurfB.z*.03, h)*1.8*(1. - smoothstep(40., 200., dist))*(1. - inVis), vec3(uSurfB.z*.03*1.8*.6), eyeSmooth);   // eye: expected value
   }
   return col;
 }`;
@@ -241,14 +241,14 @@ function seaMaterial(instr) {
 // spectral eye (engine/render/compose.js): the sea's own band hook — seaBands one band at a time, as luminance
 const SEA_EYE = `
 float eyeSeaL(float r, float m, float i, float u, float g, vec3 W, vec3 N, vec3 V, vec3 Rf, float dist, float foam){
-  eyeMR = r; eyeMM = m; eyeMI = i; eyeMU = u; eyeMG = g; return eyeL(seaBands(W, N, V, Rf, dist, foam, 0.)); }
+  eyeMR = r; eyeMM = m; eyeMI = i; eyeMU = u; eyeMG = g; eyeSmooth = 1.; return eyeL(seaBands(W, N, V, Rf, dist, foam, 0.)); }
 void eyeBands(out vec4 o1, out vec4 o3){
   vec3 W, V, N, Rf; vec2 p; float dist, fd, crest, wash, foam;
   seaGeo(W, dist, V, N, Rf, p, fd, crest, wash, foam);
   o1 = vec4(eyeSeaL(0., 0., 1., 0., 0., W, N, V, Rf, dist, foam), eyeSeaL(0., 0., 0., 1., 0., W, N, V, Rf, dist, foam),
             eyeSeaL(0., 0., 0., 0., 1., W, N, V, Rf, dist, foam), 1.);
   o3 = vec4(eyeSeaL(1., 0., 0., 0., 0., W, N, V, Rf, dist, foam), eyeSeaL(0., 1., 0., 0., 0., W, N, V, Rf, dist, foam), 0., 1.);
-  eyeMR = eyeMM = eyeMI = eyeMU = eyeMG = 1.; }`;
+  eyeMR = eyeMM = eyeMI = eyeMU = eyeMG = 1.; eyeSmooth = 0.; }`;
 
 function sea() {
   const mat = seaMaterial(false);

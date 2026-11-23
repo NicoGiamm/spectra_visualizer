@@ -45,6 +45,15 @@
 //      visible / UV sharper than a pixel (not blurred), X-ray / gamma not diffraction-limited. Built as one
 //      downsample to 2^k of the frame and a separable Gaussian there (σ' = σ / 2^k in [2, 4)), sampled bilinearly
 //      in the combine; σ is capped at a quarter of the frame height (beyond that the band is only a glow).
+//   2c. Detection statistics. Light arrives as photons: for the same energy flux the photon rate scales as 1/E, so a
+//      pixel that would collect N = L · K / E photons this frame (E = hc/λ from the band's spectral position there)
+//      shows Poisson(N) / N · L — the mean is kept, the noise is √N/N. One quantum constant K for every band, set so
+//      the darkest visible night sky (L ≈ .01, 2 eV) keeps < 2 % shot noise (the visible scene stays smooth); the
+//      photon energy alone then makes X-ray (~keV, ×500) grainy at its faint edges and gamma (~MeV, ×5·10⁵) a
+//      sparse flicker of single hits whose density follows the source's rate. IR / microwave photons are so
+//      cheap that N is astronomically large: smooth. Radio is coherent (wave, not photon-counting): it shows speckle —
+//      a fully developed speckle field (exponential intensity, mean 1) with the grain of its resolution element
+//      (2.35 σ of the diffraction blur), drifting slowly (scintillation). Seeds are visual-only (render rule 9).
 //   3. Combine. The hue-coded layers are summed and stretched with the colour-preserving asinh of Lupton et al.
 //      2004 (PASP 116:133): out = C · asinh(β I) / (β I), I = mean(C), clipped by the brightest channel so hues
 //      survive. Faint things stay linear, bright ones compress logarithmically — no band can wash out the others.
@@ -64,13 +73,14 @@ import { S } from '../core/state.js';
 import { BANDS, LREF, APERTURE } from '../core/bands.js';
 import { applyVisMode } from './instrument.js';
 import { SURF_U, OVERLAY } from './surface.js';
-import { bandPos, posLambda } from '../core/spectrum.js';
+import { bandPos, posLambda, bandEdges } from '../core/spectrum.js';
+import { COMMON } from './shaders.js';
 import { SPEC } from './sources.js';
 
 const IDS = BANDS.map(b => b.id);                    // 0 radio, 1 micro, 2 ir, 3 vis, 4 uv, 5 xray, 6 gamma (uBand order)
 // where each band lives in the MRT: [output, channel]
 export const SLOT = { radio: [3, 0], micro: [3, 1], ir: [1, 0], vis: [0, -1], uv: [1, 1], xray: [3, 2], gamma: [1, 2] };
-export const EYE = { key: .05, p: .5, floorRel: .01, beta: 6, satVis: .7, tauUp: .15, tauDown: 1.5, hueShift: .6 };
+export const EYE = { key: .05, p: .5, floorRel: .01, beta: 6, satVis: .7, tauUp: .15, tauDown: 1.5, hueShift: .6, quanta: 5e5, cell: 2 };
 // spectral position of the landscape's own emission, from what the surface terms model (surface.js header):
 // IR = 10 µm thermal (8–14 µm window), UV = 365 nm skylight (UV-A), gamma = 1.46 MeV (K-40 line; U/Th lines nearby),
 // radio = 100 MHz (the FM transmitters it mirrors), microwave = 20 GHz (the 10–37 GHz emissivities), X-ray: none
@@ -158,7 +168,26 @@ void main(){ vec4 a = vec4(0.); float w = 0.; float R = ceil(3.*uSigma);
     float k = exp(-.5*x*x/(uSigma*uSigma)); a += k*texture2D(t, vUv + x*uDir); w += k; }
   gl_FragColor = a/w; }`;
 
-const COMBINE_FS = LUM + `uniform sampler2D tV, tB1, tS1, tB2, tS2, tA, tBl0, tBl1, tBl2, tBl4; uniform vec4 uBl; varying vec2 vUv;
+const COMBINE_FS = COMMON + LUM + `uniform sampler2D tV, tB1, tS1, tB2, tS2, tA, tBl0, tBl1, tBl2, tBl4; uniform vec4 uBl; varying vec2 vUv;
+uniform vec2 uLogLam[7]; uniform float uK, uSeed, uSpk, uTime, uCell;
+float hs(vec2 p, float k){ return fract(sin(dot(p + uSeed*vec2(91.7, 37.3) + k*vec2(13.1, 71.9), vec2(12.9898, 78.233)))*43758.5453); }
+// photons counted this frame at a pixel that expects N: Poisson by inversion (N ≤ 12) or its Gaussian limit
+float poisson(float N, vec2 p){
+  if(N > 12.){ float u1 = max(hs(p, 1.), 1e-6), u2 = hs(p, 2.); return max(0., N + sqrt(N)*sqrt(-2.*log(u1))*cos(6.2832*u2)); }
+  float u = hs(p, 3.), t = exp(-N), c = t, k = 0.;
+  for(int i = 0; i < 40; i++){ if(u <= c) break; k += 1.; t *= N/k; c += t; }
+  return k; }
+// band b's luminance after photon counting (E from its spectral position: λ = exp(logλhi − pos·(logλhi − logλlo)))
+// photons are counted per detector cell of uCell × uCell px (the receptor element; X-ray / gamma have no optics, so a
+// hit is one cell): N per cell = L · K / E · uCell², every pixel of the cell shows the same count
+float photons(int b, float l, float ls, vec2 p){
+  if(l <= 0.) return 0.;
+  float lam = exp(uLogLam[b].y - clamp(ls/l, 0., 1.)*(uLogLam[b].y - uLogLam[b].x)), N = l*uK*lam/1.23984e-6*uCell*uCell;
+  return N > 1e5 ? l : l*poisson(N, floor(p/uCell))/N; }
+// fully developed speckle: |complex Gaussian field|², mean ≈ 1, grain ≈ uSpk px, drifting slowly
+float speckle(vec2 px){ vec2 q = px/max(uSpk, 1.) + vec2(uTime*.11, uTime*.07);
+  float a = n2(q) - .5, c = n2(q + vec2(31.7, 11.3)) - .5, d = n2(q*1.7 + vec2(5.1, 47.)) - .5, e = n2(q*1.7 + vec2(19.3, 3.9)) - .5;
+  return ((a + .6*d)*(a + .6*d) + (c + .6*e)*(c + .6*e))/.1; }
 uniform vec3 uHue[7]; uniform float uOn[7], uLref[7]; uniform float uKey, uP, uFloorRel, uBeta, uSatVis, uShift;
 float gain(int b){ float La = texelFetch(tA, ivec2(b, 0), 0).b;
   return uKey/(pow(uLref[b], 1. - uP)*pow(max(La, uFloorRel*uLref[b]), uP)); }
@@ -174,6 +203,12 @@ void main(){
   // diffraction-blurred bands (uBl: radio, micro, IR, UV) replace their sharp channel
   vec2 bR = uBl.x > .5 ? texture2D(tBl0, vUv).rg : vec2(b2.r, s2.r), bM = uBl.y > .5 ? texture2D(tBl1, vUv).rg : vec2(b2.g, s2.g);
   vec2 bI = uBl.z > .5 ? texture2D(tBl2, vUv).rg : vec2(b1.r, s1.r), bU = uBl.w > .5 ? texture2D(tBl4, vUv).rg : vec2(b1.g, s1.g);
+  // detection statistics: radio speckle (coherent), photon counting everywhere else (smooth where N is large)
+  vec2 px = gl_FragCoord.xy;
+  bR.x *= speckle(px);
+  bM.x = photons(1, bM.x, bM.y, px); bI.x = photons(2, bI.x, bI.y, px + 1001.); bU.x = photons(4, bU.x, bU.y, px + 2011.);
+  float lx = photons(5, b2.b, s2.b, px + 3007.), lg = photons(6, b1.b, s1.b, px + 4001.);
+  b2.b = lx; b1.b = lg;
   v *= gain(3);
   vec3 C = uOn[3]*mix(vec3(lum(v)), v, uSatVis)
          + bandC(0, bR.x, bR.y) + bandC(1, bM.x, bM.y) + bandC(2, bI.x, bI.y)
@@ -207,7 +242,9 @@ class EyePass extends Pass {
       tV: { value: null }, tB1: { value: null }, tS1: { value: null }, tB2: { value: null }, tS2: { value: null }, tA: { value: null }, uShift: { value: EYE.hueShift },
       uHue: { value: IDS.map(hueOf) }, uOn: { value: IDS.map(() => 0) }, uLref: { value: IDS.map(id => LREF[id]) },
       uKey: { value: 0 }, uP: { value: 0 }, uFloorRel: { value: 0 }, uBeta: { value: 0 }, uSatVis: { value: EYE.satVis },
-      tBl0: { value: null }, tBl1: { value: null }, tBl2: { value: null }, tBl4: { value: null }, uBl: { value: new THREE.Vector4() } } }));
+      tBl0: { value: null }, tBl1: { value: null }, tBl2: { value: null }, tBl4: { value: null }, uBl: { value: new THREE.Vector4() },
+      uLogLam: { value: IDS.map(id => { const [lo, hi] = bandEdges(id); return new THREE.Vector2(Math.log(lo), Math.log(hi)); }) },
+      uK: { value: EYE.quanta }, uCell: { value: EYE.cell }, uSeed: { value: 0 }, uSpk: { value: 1 }, uTime: { value: 0 } } }));
     this.downQ = new FullScreenQuad(new THREE.ShaderMaterial({ vertexShader: VS, fragmentShader: DOWN_FS,
       uniforms: { tL: { value: null }, tS: { value: null }, uSel: { value: new THREE.Vector4() }, uPx: { value: new THREE.Vector2() }, uB: { value: 1 } } }));
     this.gaussQ = new FullScreenQuad(new THREE.ShaderMaterial({ vertexShader: VS, fragmentShader: GAUSS_FS,
@@ -282,6 +319,8 @@ class EyePass extends Pass {
     const bl = BLUR.map(b => this.blurBand(renderer, b));
     [cu.tBl0.value, cu.tBl1.value, cu.tBl2.value, cu.tBl4.value] = bl;
     cu.uBl.value.set(...bl.map(t => (t ? 1 : 0)));
+    cu.uSeed.value = Math.random(); cu.uTime.value = S.T;                 // visual-only noise seed (render rule 9)
+    cu.uSpk.value = Math.max(1, 2.35 * this.blur.radio.sigma);         // speckle grain = the radio resolution element
     cu.uKey.value = EYE.key; cu.uP.value = EYE.p; cu.uFloorRel.value = EYE.floorRel; cu.uBeta.value = EYE.beta;
     renderer.setRenderTarget(this.renderToScreen ? null : writeBuffer); this.combineQ.render(renderer);
     if (this.ratio >= 0 && ++this.ratio === 1) this.ratioCheck(renderer, next);

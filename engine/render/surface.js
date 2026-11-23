@@ -130,6 +130,9 @@ uniform float uSOnR_, uSOnM_, uSOnI_, uSOnU_, uSOnG_, uOverlay, uRadioDiffuse, u
 // band switches = uniform × eye mask: the spectral eye (engine/render/compose.js) evaluates one band at a time by
 // setting the masks; everywhere else they stay 1, so the switches are exactly the uniforms
 float eyeMR = 1., eyeMM = 1., eyeMI = 1., eyeMU = 1., eyeMG = 1.;
+// eyeSmooth = 1 inside the spectral eye's hooks: stylised random speckle is replaced by its expected value (the eye
+// adds the real detection statistics itself, photon grain / speckle — compose.js); 0 everywhere else
+float eyeSmooth = 0.;
 #define uSOnR (uSOnR_*eyeMR)
 #define uSOnM (uSOnM_*eyeMM)
 #define uSOnI (uSOnI_*eyeMI)
@@ -171,7 +174,7 @@ vec3 surfBands(vec3 W, vec3 N, float inVis){   // inVis = 1 for the faint overla
     float Tb = B.x*(T + 273.) + (1. - B.x)*50., x = clamp((Tb - 120.)/180., 0., 1.);
     // crackle only up close, in cells of ~0.2° (like the emitter crackle): power-of-two world cells so they don't swim
     float cs = exp2(floor(log2(max(dist*.0035, .03)))); vec3 gc = mod(floor(W/cs), 512.);
-    vec2 g = gc.xz + gc.y*17.31; float sp = step(.96 - .06*x, h21(g + floor(uSurfTime*10.)))*near;
+    vec2 g = gc.xz + gc.y*17.31; float sp = mix(step(.96 - .06*x, h21(g + floor(uSurfTime*10.)))*near, .04 + .06*x, eyeSmooth);   // eye: expected value, every distance
     vec3 c = mix(vec3(1.,.42,0.), vec3(1.,.85,.2), h21(g*1.7));        // per-cell tint on the sparks only
     float tx = txField(uTxM, W, N, 22., 0.), txs = tx/(1. + tx), hit = hitField(W);
     // instrument view with IR on: the thermal palette carries the surfaces, so the smooth Tb/tx wash nearly goes and
@@ -188,7 +191,10 @@ vec3 surfBands(vec3 W, vec3 N, float inVis){   // inVis = 1 for the faint overla
   }
   if(uSOnG > 0.){                                                     // GAMMA
     vec3 gc = floor(W*2.2); float h = h21(gc.xz + gc.y*17.31 + floor(uSurfTime*16.)*3.17);
-    col += uSOnG*hsv(fract(uSurfTime*1.1 + h21(gc.xz)))*step(1. - B.z*.03, h)*1.8*(1. - smoothstep(40., 260., dist))*(1. - inVis);
+    // eye: the expected value (hit probability B.z·.03 × 1.8 × mean hue luminance ~.6) at every distance — terrestrial
+    // gamma does not fade with distance, the near fade is a display LOD of the speckle
+    col += uSOnG*mix(hsv(fract(uSurfTime*1.1 + h21(gc.xz)))*step(1. - B.z*.03, h)*1.8*(1. - smoothstep(40., 260., dist))*(1. - inVis),
+                     vec3(B.z*.03*1.8*.6), eyeSmooth);
   }
   return col;
 }
@@ -245,11 +251,11 @@ export const eyeBandsGLSL = (instrExtra = '') => `
 vec3 eyeSurfC(){ vec3 N = normalize(vSurfN), W = vSurfW; float dist = length(W - cameraPosition), line = 0.;
   vec3 c = surfBands(W, N, 0.); ${instrExtra}
   return c; }
-float eyeSurfL(float r, float m, float i, float u, float g){ eyeMR = r; eyeMM = m; eyeMI = i; eyeMU = u; eyeMG = g; return eyeL(eyeSurfC()); }
+float eyeSurfL(float r, float m, float i, float u, float g){ eyeMR = r; eyeMM = m; eyeMI = i; eyeMU = u; eyeMG = g; eyeSmooth = 1.; return eyeL(eyeSurfC()); }
 void eyeBands(out vec4 o1, out vec4 o3){
   o1 = vec4(eyeSurfL(0., 0., 1., 0., 0.), eyeSurfL(0., 0., 0., 1., 0.), eyeSurfL(0., 0., 0., 0., 1.), 1.);
   o3 = vec4(eyeSurfL(1., 0., 0., 0., 0.), eyeSurfL(0., 1., 0., 0., 0.), 0., 1.);
-  eyeMR = eyeMM = eyeMI = eyeMU = eyeMG = 1.; }`;
+  eyeMR = eyeMM = eyeMI = eyeMU = eyeMG = 1.; eyeSmooth = 0.; }`;
 
 // Registry of surfaces for the meters (activity is the weighted band response of each surface).
 const SURFACES = [];
