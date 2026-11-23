@@ -61,7 +61,7 @@ export const SURF_U = {
 //   ground (terrain, water, paving): radio .05 — knife-edge diffraction over a ridge costs ~13 dB at VHF (ITU-R P.526),
 //     the "bending round hills"; microwave 0 — diffraction loss grows ~10 dB per frequency decade (~25 dB at 1–3 GHz);
 //     gamma 0 — metres of rock/soil (1.46 MeV in rock: ~6 cm attenuation length)
-//   canopy (a tree crown, ~10 m of foliage): radio .9 — ~0.05 dB/m at 100 MHz (ITU-R P.833); microwave .2 —
+//   canopy (a tree crown, ~10 m of foliage): radio .9 — ~0.05 dB/m at 100 MHz (ITU-R P.833); microwave .25 —
 //     Weissberger 1982 (ECAC-TR-81-101), d < 14 m branch L = 0.45 f^0.284 d dB ≈ 6 dB at 2.4 GHz, 10 m (T ≈ .25);
 //     gamma .95 — crown biomass ~1 kg/m³ × 10 m = 1 g/cm² at μ/ρ .052 cm²/g (1.46 MeV); the biomass is a STAND-IN
 //   facade (a whole building: several walls and floors): radio .1 — ~10 dB building entry loss at VHF (ITU-R P.2109

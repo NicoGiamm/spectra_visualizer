@@ -318,7 +318,7 @@ const MEAN_FS = `uniform sampler2D tA, tB;
 void main(){ vec4 a = vec4(0.); bool first = gl_FragCoord.x < 1.;
   for(int y = 0; y < ${SHARE_H}; y++) for(int x = 0; x < ${SHARE_W}; x++) a += first ? texelFetch(tA, ivec2(x, y), 0) : texelFetch(tB, ivec2(x, y), 0);
   gl_FragColor = a/${(SHARE_W * SHARE_H).toFixed(1)}; }`;
-// read w×h RGBA floats of the bound target asynchronously (pixel-pack buffer + fence, collected on a later frame):
+// read w×h RGBA floats of the bound target asynchronously (pixel-pack buffer + fence, polled on timers until signalled):
 // a synchronous readPixels stalls the GPU and logs a console warning, which fails `spectra timeline`
 function readAsync(gl, w, h) {
   const n = w * h * 4, buf = gl.createBuffer();
