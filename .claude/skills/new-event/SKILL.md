@@ -32,4 +32,4 @@ open the files); this is the procedure.
 
 ## Related
 
-- README § "The event contract"; `engine/core/events.js` (`event()`); `engine/render/sources.js`.
+- docs/technical.md § "Writing a scene or an event"; `engine/core/events.js` (`event()`); `engine/render/sources.js`.

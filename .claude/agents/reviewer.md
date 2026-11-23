@@ -32,7 +32,7 @@ come from their GitHub issues, linked in it); from it you read the mission's wor
    GLSL `//` comment in a single-line shader string, a dump-shape change without `timeline.py`.
 4. **Honesty of the record**: Outcomes state numbers (draw calls before → after, warnings, moments shot) and what
    was not verified; no Goal reworded to fit the code (deviations belong in Notes); Current state matches.
-5. **Docs**: README / CLAUDE.md / a rule made wrong by this diff was updated in it.
+5. **Docs**: README / docs/technical.md / CLAUDE.md / a rule made wrong by this diff was updated in it.
 
 Verify every finding at `file:line` before writing it. No findings on style, naming or a working implementation
 choice. Read-only git only; do not run `spectra` or any interpreter — verification evidence is in the Outcomes.
