@@ -20,14 +20,14 @@ import * as THREE from 'three';
 import { V3, sm } from '../core/util.js';
 import { S } from '../core/state.js';
 import { COMMON } from './shaders.js';
-import { solid, SURF_BASE } from './instrument.js';
+import { solid } from './instrument.js';
 
 export const OVERLAY = { value: .12 };
 const MAX_TX = 8, MAX_HIT = 12;
 const vec4s = () => Array.from({ length: MAX_TX }, () => new THREE.Vector4());
 export const SURF_U = {
-  uSOnR: { value: 0 }, uSOnM: { value: 0 }, uSOnI: { value: 0 }, uSOnU: { value: 0 }, uSOnG: { value: 0 },
-  uOverlay: OVERLAY, uBase: SURF_BASE, uRadioDiffuse: { value: 1 }, uSurfT: { value: 0 }, uUVsky: { value: 0 }, uSurfTime: S.TIME,
+  uSOnR_: { value: 0 }, uSOnM_: { value: 0 }, uSOnI_: { value: 0 }, uSOnU_: { value: 0 }, uSOnG_: { value: 0 },
+  uOverlay: OVERLAY, uRadioDiffuse: { value: 1 }, uSurfT: { value: 0 }, uUVsky: { value: 0 }, uSurfTime: S.TIME,
   uTxR: { value: vec4s() }, uTxM: { value: vec4s() },
   uHitM: { value: Array.from({ length: MAX_HIT }, () => new THREE.Vector4()) },
 };
@@ -126,7 +126,15 @@ varying vec4 vSurfA; varying vec4 vSurfB; varying vec4 vSurfC;
 #else
 uniform vec4 uSurfA, uSurfB, uSurfC;
 #endif
-uniform float uSOnR, uSOnM, uSOnI, uSOnU, uSOnG, uOverlay, uBase, uRadioDiffuse, uSurfT, uUVsky, uSurfTime;
+uniform float uSOnR_, uSOnM_, uSOnI_, uSOnU_, uSOnG_, uOverlay, uRadioDiffuse, uSurfT, uUVsky, uSurfTime;
+// band switches = uniform × eye mask: the spectral eye (engine/render/compose.js) evaluates one band at a time by
+// setting the masks; everywhere else they stay 1, so the switches are exactly the uniforms
+float eyeMR = 1., eyeMM = 1., eyeMI = 1., eyeMU = 1., eyeMG = 1.;
+#define uSOnR (uSOnR_*eyeMR)
+#define uSOnM (uSOnM_*eyeMM)
+#define uSOnI (uSOnI_*eyeMI)
+#define uSOnU (uSOnU_*eyeMU)
+#define uSOnG (uSOnG_*eyeMG)
 uniform vec4 uTxR[${MAX_TX}], uTxM[${MAX_TX}], uHitM[${MAX_HIT}];
 // ray hit flashes: a spot (~2 m) on the hit face, brighter in the middle
 float hitField(vec3 W){
@@ -206,14 +214,14 @@ function instrumentMaterial(props, { lines = 'none', cell = 25, extraDecl = '', 
         ${lines === 'topo' ? `float q = W.y/20., f = fract(q); line = (1. - smoothstep(0., fwidth(q)*1.2, min(f, 1. - f)))*(1. - smoothstep(300., 5500., dist));` : ''}
         ${lines === 'grid' ? `vec2 q = W.xz/${cell.toFixed(1)}, f = abs(fract(q) - .5), w = fwidth(q)*1.2;
           line = max(smoothstep(.5 - w.x, .5, f.x), smoothstep(.5 - w.y, .5, f.y))*(1. - smoothstep(.12, .35, max(w.x, w.y)))*(1. - smoothstep(200., 4000., dist));` : ''}
-        vec3 c = uBase*(vec3(.006,.007,.014) + vec3(.16,.2,.42)*line*.8) + surfBands(W, N, 0.);
+        vec3 c = vec3(.006,.007,.014) + vec3(.16,.2,.42)*line*.8 + surfBands(W, N, 0.);
         ${instrExtra}
         gl_FragColor = vec4(c, 1.);
       }`,
   });
 }
 
-function patchVisible(mat, props, { extraDecl = '', visExtra = '', uniforms = {}, vertDecl = '', vertMain = '' } = {}) {
+function patchVisible(mat, props, { extraDecl = '', visExtra = '', instrExtra = '', uniforms = {}, vertDecl = '', vertMain = '' } = {}) {
   const attr = props === 'attr', prev = mat.onBeforeCompile, prevKey = mat.customProgramCacheKey(), id = ++variant;
   const own = attr ? {} : { uSurfA: { value: toVec4(props.A) }, uSurfB: { value: toVec4(props.B) }, uSurfC: { value: toVec4(props.C) } };
   mat.onBeforeCompile = (sh, r) => {
@@ -225,8 +233,23 @@ function patchVisible(mat, props, { extraDecl = '', visExtra = '', uniforms = {}
       `#include <opaque_fragment>\n{ vec3 N = normalize(vSurfN), W = vSurfW; gl_FragColor.rgb += uOverlay*surfBands(W, N, 1.); ${visExtra} }`);
   };
   mat.customProgramCacheKey = () => `surf${id}|${prevKey}`;
+  mat.userData.eyeBands = eyeBandsGLSL(instrExtra);
   mat.needsUpdate = true;
 }
+
+// The spectral eye's hook (engine/render/compose.js): the surface's emission per band, the same terms as the
+// instrument view (surfBands + instrExtra, full detail) without its dark base and lines, one band at a time via
+// the eye masks, as luminance into the eye's band outputs: o1 = (IR, UV, gamma, coverage), o2 = (radio, micro,
+// X-ray, coverage). The ground is dark in X-rays and opaque in every band (coverage 1).
+export const eyeBandsGLSL = (instrExtra = '') => `
+vec3 eyeSurfC(){ vec3 N = normalize(vSurfN), W = vSurfW; float dist = length(W - cameraPosition), line = 0.;
+  vec3 c = surfBands(W, N, 0.); ${instrExtra}
+  return c; }
+float eyeSurfL(float r, float m, float i, float u, float g){ eyeMR = r; eyeMM = m; eyeMI = i; eyeMU = u; eyeMG = g; return eyeL(eyeSurfC()); }
+void eyeBands(out vec4 o1, out vec4 o2){
+  o1 = vec4(eyeSurfL(0., 0., 1., 0., 0.), eyeSurfL(0., 0., 0., 1., 0.), eyeSurfL(0., 0., 0., 0., 1.), 1.);
+  o2 = vec4(eyeSurfL(1., 0., 0., 0., 0.), eyeSurfL(0., 1., 0., 0., 0.), 0., 1.);
+  eyeMR = eyeMM = eyeMI = eyeMU = eyeMG = 1.; }`;
 
 // Registry of surfaces for the meters (activity is the weighted band response of each surface).
 const SURFACES = [];
@@ -265,8 +288,8 @@ export const addHits = (band, fn) => HITS[band].push(fn);
 const tempAt = (A, t) => A[1] + (A[0] - A[1]) * Math.exp(-t * A[2]);
 export function updateSurfaces(uvSky) {
   const u = SURF_U, on = S.on, t = S.t;
-  u.uSOnR.value = on.radio ? 1 : 0; u.uSOnM.value = on.micro ? 1 : 0; u.uSOnI.value = on.ir ? 1 : 0;
-  u.uSOnU.value = on.uv ? 1 : 0; u.uSOnG.value = on.gamma ? 1 : 0;
+  u.uSOnR_.value = on.radio ? 1 : 0; u.uSOnM_.value = on.micro ? 1 : 0; u.uSOnI_.value = on.ir ? 1 : 0;
+  u.uSOnU_.value = on.uv ? 1 : 0; u.uSOnG_.value = on.gamma ? 1 : 0;
   u.uSurfT.value = t; u.uUVsky.value = uvSky;
   let txPow = { radio: 0, micro: 0 };
   for (const band of ['radio', 'micro']) {

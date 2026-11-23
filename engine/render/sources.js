@@ -9,6 +9,9 @@ import { BI, GAIN, TRANSMIT } from '../core/bands.js';
 import { QUAD_VS, QUAD_FS, RIB_VS, RIB_FS } from './shaders.js';
 
 export const EMS = [], RIBS = [], FIELDS = [];
+// display gain: the spectral eye (S.eye, engine/render/compose.js) draws sources at their physical intensity and
+// lets each band adapt; the default view keeps the per-band instrument GAIN
+const gain = band => (S.eye ? 1 : GAIN[band]);
 
 // Source origin: 'ground' (default) | 'high' | 'space' — pass it as the optional last constructor argument
 // or set `src.origin` later. In Ground detector mode, sources whose band can't cross the atmosphere from
@@ -60,7 +63,7 @@ export class Em {
     if (absorbed(this.band, this.origin)) { ghost(this, pos); return this; }
     S.act[this.band] += I; LOD.total.em++;
     if (size * pxPerUnit(pos) < LOD.minPx) { LOD.skipped.em++; this.m.visible = false; return this; }
-    const u = this.m.material.uniforms; this.m.position.copy(pos); u.uSize.value = size; u.uI.value = I * GAIN[this.band];
+    const u = this.m.material.uniforms; this.m.position.copy(pos); u.uSize.value = size; u.uI.value = I * gain(this.band);
     this.m.visible = S.on[this.band]; return this;
   }
 }
@@ -100,7 +103,7 @@ export class Rib {
     }
     pos.needsUpdate = uv.needsUpdate = true;
     this.m.geometry.setDrawRange(0, (m - 1) * 6);
-    const U = this.m.material.uniforms; U.uI.value = I * GAIN[this.band]; U.uFade.value = fade; U.uLen.value = total / Math.max(1e-3, (w0 + w1) / 2);
+    const U = this.m.material.uniforms; U.uI.value = I * gain(this.band); U.uFade.value = fade; U.uLen.value = total / Math.max(1e-3, (w0 + w1) / 2);
     this.m.visible = S.on[this.band]; return this;
   }
 }
@@ -141,7 +144,7 @@ export class EmField {
     if (absorbed(this.band, this.origin)) { ghost(this, pos); return this; }
     S.act[this.band] += I; LOD.total.field++;
     if (size * pxPerUnit(pos) < LOD.minPx) { LOD.skipped.field++; if (this.aI.array[i]) { this.aI.array[i] = 0; this.aI.needsUpdate = true; } return this; }
-    this.aPos.setXYZ(i, pos.x, pos.y, pos.z); this.aSize.array[i] = size; this.aI.array[i] = I * GAIN[this.band];
+    this.aPos.setXYZ(i, pos.x, pos.y, pos.z); this.aSize.array[i] = size; this.aI.array[i] = I * gain(this.band);
     this.aPos.needsUpdate = this.aSize.needsUpdate = this.aI.needsUpdate = true;
     this.dirty = true; this.m.visible = S.on[this.band]; return this;
   }

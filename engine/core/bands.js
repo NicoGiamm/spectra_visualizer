@@ -23,7 +23,18 @@ export const PRESETS = {
 // Radio was raised (1.9 -> 2.2, M7/T1) once the M1 radio surfaces (pink terrain, microwave flecks) shared the
 // Radio telescope view: the radio cones, sferics and links read against them again; ir already blooms at
 // campfires and street lamps, and uv/xray/gamma sources fill the dark High energy view, so those stay.
+// Not used by the spectral eye (M10, engine/render/compose.js): there every band adapts to its own scene (LREF).
 export const GAIN = { radio: 2.2, micro: 2.0, ir: 1.6, vis: 1, uv: 1.9, xray: 2.1, gamma: 1.9 };
+
+// Spectral eye (M10): each band's receptor operating point — the layer mean luminance (shader units) at which its
+// gain is key/LREF; its absolute threshold is EYE.floorRel × LREF (engine/render/compose.js). One value for every
+// band: the sources are authored on one intensity scale (a nominal source has I ≈ 1 in every band; measured layer
+// peaks are 1–3 in every band and scenario), so one receptor model sees them alike. Per-band operating points were
+// measured in M10/T2 (median of the layer mean over t 5/20/40/55 in all three scenarios: radio 3e-5, micro .043,
+// IR .021, visible .042, UV 5.6e-4, X-ray 4.6e-6, gamma .0044) and rejected: they track how much of the frame a
+// band fills, not how bright its sources are, and would amplify the sparse bands (X-ray, UV, radio) 100–10 000×.
+// .37 is the visible field at dusk (seaside t 5), the photopic design point, so the night is darker than dusk.
+export const LREF = { radio: .37, micro: .37, ir: .37, vis: .37, uv: .37, xray: .37, gamma: .37 };
 
 // Meter normalisation (activity that fills a bar). Scenarios may override via `meterNorm`.
 // Rule (M7/T1, with the M1 surfaces and M7/T4 presets in): in hud.js's 1 - exp(-act/norm) each bar peaks at

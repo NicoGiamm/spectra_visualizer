@@ -195,25 +195,30 @@ function seaMaterial(instr) {
   return new THREE.ShaderMaterial({ uniforms: u,
     vertexShader: SURF_VERT_DECL + `void main(){ vec4 w = modelMatrix*vec4(position,1.); vSurfW = w.xyz; vSurfN = vec3(0., 1., 0.); gl_Position = projectionMatrix*viewMatrix*w; }`,
     fragmentShader: SURF_FRAG_DECL + SEA_GLSL + `
-    void main(){
-      vec3 W = vSurfW, toP = W - cameraPosition; float dist = length(toP); vec3 V = toP/dist;
-      float fd = 1. - smoothstep(150., 2500., dist), fd2 = 1. - smoothstep(30., 400., dist);
-      vec2 p = W.xz, g = vec2(0.);
+    // the sea's geometry at this pixel: waves, reflection, surf (shared by main and the spectral eye's hook)
+    void seaGeo(out vec3 W, out float dist, out vec3 V, out vec3 N, out vec3 Rf, out vec2 p, out float fd, out float crest, out float wash, out float foam){
+      W = vSurfW; vec3 toP = W - cameraPosition; dist = length(toP); V = toP/dist;
+      fd = 1. - smoothstep(150., 2500., dist); float fd2 = 1. - smoothstep(30., 400., dist);
+      p = W.xz; vec2 g = vec2(0.);
       g += wave(p, vec2(.06,.10), .9, .9) + wave(p, vec2(-.09,.07), 1.1, .7) + wave(p, vec2(.13,-.05), 1.3, .5);
       g *= fd;
       g += fd2*(wave(p, vec2(.55,.8), 2.6, .09) + wave(p, vec2(-.9,.45), 3.1, .07) + wave(p, vec2(.3,-1.1), 3.4, .05)
              + .06*vec2(n2(p*1.3+uSurfTime*.6)-.5, n2(p*1.3-uSurfTime*.5+7.)-.5));
-      vec3 N = normalize(vec3(-g.x, 1., -g.y)), Rf = reflect(V, N);
+      N = normalize(vec3(-g.x, 1., -g.y)); Rf = reflect(V, N);
       Rf.y = abs(Rf.y);
       // surf: breaking lines rolling in toward the beach, and the wash at the edge
       float d = coastZ(W.x) - W.z;                                                     // metres offshore
       float roll = smoothstep(.75, 1., sin(d*.32 + uSurfTime*1.4 + n2(vec2(W.x*.05, 0.))*3.))*(1. - smoothstep(4., 38., d));
-      float wash = 1. - smoothstep(0., 3.5, d), crest = roll*(.5 + .5*n2(p*.8 + uSurfTime*.3));
-      float foam = clamp(crest + wash*.7, 0., 1.)*fd;
+      wash = 1. - smoothstep(0., 3.5, d); crest = roll*(.5 + .5*n2(p*.8 + uSurfTime*.3));
+      foam = clamp(crest + wash*.7, 0., 1.)*fd;
+    }
+    void main(){
+      vec3 W, V, N, Rf; vec2 p; float dist, fd, crest, wash, foam;
+      seaGeo(W, dist, V, N, Rf, p, fd, crest, wash, foam);
 #ifdef SEA_INSTR
       vec2 q = W.xz/40., f = abs(fract(q) - .5), w = fwidth(q)*1.2;
       float line = max(smoothstep(.5 - w.x, .5, f.x), smoothstep(.5 - w.y, .5, f.y))*(1. - smoothstep(.12, .35, max(w.x, w.y)))*(1. - smoothstep(200., 4000., dist));
-      gl_FragColor = vec4(uBase*(vec3(.006,.007,.014) + vec3(.16,.2,.42)*line*.8) + seaBands(W, N, V, Rf, dist, foam, 0.), 1.);
+      gl_FragColor = vec4(vec3(.006,.007,.014) + vec3(.16,.2,.42)*line*.8 + seaBands(W, N, V, Rf, dist, foam, 0.), 1.);
 #else
       float fres = .02 + .98*pow(1. - clamp(dot(-V, N), 0., 1.), 5.);   // clamp: pow(<0) is NaN on GPUs
       vec3 skyc = mix(uHor, uSky, smoothstep(0., .35, Rf.y));
@@ -233,9 +238,21 @@ function seaMaterial(instr) {
     defines: instr ? { SEA_INSTR: '' } : {},
   });
 }
+// spectral eye (engine/render/compose.js): the sea's own band hook — seaBands one band at a time, as luminance
+const SEA_EYE = `
+float eyeSeaL(float r, float m, float i, float u, float g, vec3 W, vec3 N, vec3 V, vec3 Rf, float dist, float foam){
+  eyeMR = r; eyeMM = m; eyeMI = i; eyeMU = u; eyeMG = g; return eyeL(seaBands(W, N, V, Rf, dist, foam, 0.)); }
+void eyeBands(out vec4 o1, out vec4 o2){
+  vec3 W, V, N, Rf; vec2 p; float dist, fd, crest, wash, foam;
+  seaGeo(W, dist, V, N, Rf, p, fd, crest, wash, foam);
+  o1 = vec4(eyeSeaL(0., 0., 1., 0., 0., W, N, V, Rf, dist, foam), eyeSeaL(0., 0., 0., 1., 0., W, N, V, Rf, dist, foam),
+            eyeSeaL(0., 0., 0., 0., 1., W, N, V, Rf, dist, foam), 1.);
+  o2 = vec4(eyeSeaL(1., 0., 0., 0., 0., W, N, V, Rf, dist, foam), eyeSeaL(0., 1., 0., 0., 0., W, N, V, Rf, dist, foam), 0., 1.);
+  eyeMR = eyeMM = eyeMI = eyeMU = eyeMG = 1.; }`;
 
 function sea() {
   const mat = seaMaterial(false);
+  mat.userData.eyeBands = SEA_EYE;
   SEA.mat = mat;
   const m = new THREE.Mesh(new THREE.PlaneGeometry(40000, 40000, 1, 1), mat);
   m.rotation.x = -Math.PI / 2; m.position.y = .05;

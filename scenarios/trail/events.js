@@ -165,8 +165,11 @@ export const valleyFog = () => event({ name: 'Valley fog', t0: 30, t1: 60, bands
     const vis = new THREE.ShaderMaterial({ ...common, uniforms: this.u, fragmentShader: COMMON + `uniform float uAmt, uTime; uniform vec3 uCol; varying vec2 vQ; varying float vSeed; ${FOG_SHAPE}
       void main(){ float a = fogA(); gl_FragColor = vec4(uCol*(.8 + .35*(vQ.y*.5 + .5)), a*.8); }` });
     // instrument view: in IR the fog top is cold (≈ air at the fog layer) and opaque enough to hide the warmer ground
-    const ir = new THREE.ShaderMaterial({ ...common, uniforms: { ...this.u, uSOnI: SURF_U.uSOnI }, fragmentShader: COMMON + `uniform float uAmt, uTime, uSOnI; varying vec2 vQ; varying float vSeed; ${FOG_SHAPE}
+    const ir = new THREE.ShaderMaterial({ ...common, uniforms: { ...this.u, uSOnI: SURF_U.uSOnI_ }, fragmentShader: COMMON + `uniform float uAmt, uTime, uSOnI; varying vec2 vQ; varying float vSeed; ${FOG_SHAPE}
       void main(){ if(uSOnI < .5) discard; float a = fogA(); gl_FragColor = vec4(thermal(.06 + .05*(vQ.y*.5 + .5))*.22, a*.92); }` });
+    // spectral eye (engine/render/compose.js): the same cold fog top in the IR channel, with its own coverage, so it
+    // hides the warm ground in IR only (radio, microwave and gamma pass through fog)
+    vis.userData.eyeBands = `void eyeBands(out vec4 o1, out vec4 o2){ float a = fogA(); o1 = vec4(eyeL(thermal(.06 + .05*(vQ.y*.5 + .5))*.22), 0., 0., a*.92); o2 = vec4(0.); }`;
     this.mesh = new THREE.Mesh(g, vis); this.mesh.frustumCulled = false; this.mesh.renderOrder = 4; S.scene.add(solid(this.mesh, ir));
     const near = banks.reduce((a, b) => (Math.hypot(b.x - c0.x, b.z - c0.z) < Math.hypot(a.x - c0.x, a.z - c0.z) ? b : a), banks[0]);
     this.p = near ? new V3(near.x, near.y + 4, near.z) : null;

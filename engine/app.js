@@ -12,7 +12,7 @@
 //
 // URL parameters (handy for screenshots): ?t=30 (script time 0–60) &yaw=0.3 &pitch=0.5
 // &paused &bands=ir,micro &labels=0 &detector=ground (default orbit; ground: the atmosphere absorbs far-UV/X/gamma)
-// &eye=1 (M10 prototype: the spectral eye, render/compose.js)
+// &eye=0 (the pre-M10 view: one pass, per-band GAIN, ACES; default is the spectral eye, render/compose.js)
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
@@ -60,8 +60,8 @@ function start(sc) {
 
   const atmo = createAtmosphere(sc.atmosphere);
   const q = new URLSearchParams(location.search);
-  // ?eye=1: the spectral eye's own pipeline (per-band layers, adaptation, asinh combine); default view untouched
-  const eye = q.has('eye') && q.get('eye') !== '0' ? createEye(renderer, scene, camera, atmo, nanGuard) : null;
+  // the spectral eye (M10): per-band layers in one MRT pass, per-band adaptation, asinh combine; ?eye=0 = the old view
+  const eye = q.get('eye') !== '0' ? createEye(renderer, scene, camera, nanGuard) : null;
   const out = eye ? eye.composer : composer;
   const world = sc.build();
   S.groundAt = world.groundAt || (() => 0);

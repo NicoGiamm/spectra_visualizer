@@ -58,7 +58,8 @@ def render(rep: dict) -> str:
     lines = [
         f"{rep['scenario']}  ·  detector: {rep.get('detector', 'ground')}  ·  {len(rep['events'])} events  ·  sources: {rep['sources']['em']} Em, "
         f"{rep['sources']['rib']} Rib, {rep['sources']['fields']} fields ({rep['sources']['fieldInstances']} instances)",
-        "draw calls (scene pass): " + ", ".join(f"t={d['t']}: {d['calls']}" for d in rep["draws"]),
+        "draw calls (whole frame; spectral eye: MRT scene pass + eye/post passes): "
+        + ", ".join(f"t={d['t']}: {d['calls']}" for d in rep["draws"]),
         "",
     ]
     axis = "".join(str(t // 10) if t % 10 == 0 else ("·" if t % 5 == 0 else " ") for t in range(61))
