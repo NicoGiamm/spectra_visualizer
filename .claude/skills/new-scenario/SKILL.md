@@ -24,8 +24,8 @@ Arguments: `$ARGUMENTS`. A new scenario is a mission of its own (`/mission-track
 5. **Verify**: `uv run spectra list` shows it; `/verify-scene <id>` (timeline 0 warnings, draw calls noted, shots
    at 5/30/54 + instrument view); `uv run spectra build <id>` produces `dist/<id>.html` and the regenerated root
    `index.html` links the new scenario.
-6. Update README's scenario table in the same mission; review and `/ship`.
+6. Update the scenario table in docs/technical.md (and the README's wording if it names the scenes) in the same mission; review and `/ship`.
 
 ## Related
 
-- README § "Adding a scenario", § "The scenario contract"; `.claude/rules/sky-world.md`, `.claude/rules/render.md`.
+- docs/technical.md § "Writing a scene or an event"; `.claude/rules/sky-world.md`, `.claude/rules/render.md`.

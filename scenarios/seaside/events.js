@@ -300,7 +300,7 @@ export const bonfire = () => event({ name: 'Beach bonfire', t0: 28, t1: 60, band
     this.pp = Array.from({ length: PEOPLE }, (_, k) => { const a = k * 1.256 + .4 + R() * .5, r = 1.9 + R() * .6, x = FIRE.x + Math.cos(a) * r, z = FIRE.z + Math.sin(a) * r, sit = k % 2 === 1;
       return { p: new V3(x, heightAt(x, z), z), a, sit, ph: R() * 6 }; });
     const o = new THREE.Object3D(); this.pp.forEach((q, k) => { o.position.copy(q.p); if (q.sit) o.position.y -= .45; o.rotation.set(0, -q.a - Math.PI / 2, 0); o.scale.set(1, q.sit ? .72 : 1, 1); o.updateMatrix(); pm.setMatrixAt(k, o.matrix); });
-    this.pm = solid(pm); S.scene.add(pm); pm.visible = false;
+    this.pm = spectralGroup(pm, 'body', { weight: 0 }); S.scene.add(pm); pm.visible = false;   // warm surface (M10/T9); metered by the sources
     this.light = new THREE.PointLight(0xff7a2a, 0, 45, 1.7); this.light.position.copy(FIRE).add(new V3(0, .9, 0)); S.scene.add(this.light);
     this.fl = [['#ff5a14', 1.6], ['#ff9a2a', 1.1], ['#ffe9a0', .6]].map(([c, s]) => ({ e: new Em('vis', c), s }));
     this.emb = new EmField('vis', 10, '#ffb050'); this.hot = new Em('ir');

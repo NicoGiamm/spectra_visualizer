@@ -120,6 +120,6 @@ scenario · touched Python ruff/ty-clean (the hook reports) · Outcome says what
 `refs` · closed by `task --done` (issue closed + Done, verified).
 
 **Mission**: every task done (or the user accepted `--partial`) · reviewer `ok` for the head (physics-auditor `ok`
-if events/spectrum changed) · README / CLAUDE.md / rules updated in the branch if a contract changed · Current
+if events/spectrum changed) · README / docs/technical.md / CLAUDE.md / rules updated in the branch if a contract changed · Current
 state updated · `check M<N>` clean · `ship merge` green (issue delivered, closed + Done) · pushed only on the user's
 word.

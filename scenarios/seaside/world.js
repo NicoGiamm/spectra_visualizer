@@ -28,7 +28,8 @@ export function heightAt(x, z) {
   return h;
 }
 
-// Local surface presets (same shape as engine PRESET): { A: [T0, Teq, 1/tau, eIR], B: [eMW, uvAlb, gamma, rRadio], C: [gloss, 0, 0, 0] }
+// Local surface presets (same shape as engine PRESET): { A: [T0, Teq, 1/tau, eIR], B: [eMW, uvAlb, gamma, rRadio], C: [gloss, Tradio, Tmicro, Tgamma] }
+// (all ground here: C.yzw = [.05, 0, 0], the engine's TRANS.ground — surface.js)
 // Source keys ([Sal], [EL], [UMF], [FG], [WHO], [UN], [Oke], [Wilheit]) are listed above PRESET in engine/render/surface.js;
 // T0/Teq/tau and rRadio are scene STAND-INS there too (time-compressed, only their order is physical).
 //   wet sand: tracks the water temperature (μ 2550, slower than dry sand) [Oke] — faster than the granite despite μ:
@@ -46,10 +47,10 @@ export function heightAt(x, z) {
 //     eMW .88 [UMF]; uvAlb .12 — STAND-IN as the engine's rock
 //   sea: the engine's water preset (eMW .45 calm sea [Wilheit])
 export const SURF = {
-  wetSand: { A: [23, 16, 1 / 30, .96], B: [.6, .1, .55, .5], C: [.5, 0, 0, 0] },
-  sand:    { A: [35, 8, 1 / 22, .92], B: [.9, .24, .7, .3], C: [0, 0, 0, 0] },   // 35 °C at sunset, crosses the sea's 18 °C near t=22
-  dune:    { A: [27, 7, 1 / 10, .97], B: [.92, .05, .45, .2], C: [0, 0, 0, 0] },   // marram grass on the dunes
-  granite: { A: [31, 14, 1 / 45, .9], B: [.88, .12, 1, .5], C: [0, 0, 0, 0] },
+  wetSand: { A: [23, 16, 1 / 30, .96], B: [.6, .1, .55, .5], C: [.5, .05, 0, 0] },
+  sand:    { A: [35, 8, 1 / 22, .92], B: [.9, .24, .7, .3], C: [0, .05, 0, 0] },   // 35 °C at sunset, crosses the sea's 18 °C near t=22
+  dune:    { A: [27, 7, 1 / 10, .97], B: [.92, .05, .45, .2], C: [0, .05, 0, 0] },   // marram grass on the dunes
+  granite: { A: [31, 14, 1 / 45, .9], B: [.88, .12, 1, .5], C: [0, .05, 0, 0] },
   sea:     PRESET.water,
 };
 
@@ -111,7 +112,7 @@ function terrain() {
     vec3 c = vec3(0.);
     if(uSOnM > 0.){                                   // ship radar echoes off the cliffs (microwave)
       float e = radarEcho(W, N); vec2 gc = floor(W.xz*.12);
-      c += uSOnM*vec3(1.,.55,.08)*e*(.2 + step(.55, h21(gc + floor(uSurfTime*12.))));
+      c += uSOnM*vec3(1.,.55,.08)*e*(.2 + mix(step(.55, h21(gc + floor(uSurfTime*12.))), .45, eyeSmooth));   // eye: expected value
     }
     if(uSOnI > 0. && uFire.w > 0.){                   // bonfire: hot sand around the pit
       float r = length(W.xz - uFire.xz); c += uSOnI*thermal(clamp(.95 - r*.22, 0., 1.))*uFire.w*exp(-r*r*.12)*.8;
@@ -119,7 +120,7 @@ function terrain() {
     if(uSOnG > 0.){                                   // granite gamma speckle that stays visible on the far cliffs
       float cs = max(.45, dist*.006); vec3 gc = floor(W/cs);
       float h = h21(gc.xz + gc.y*17.31 + floor(uSurfTime*14.)*3.17), rk = smoothstep(.7, .95, vSurfB.z);
-      c += uSOnG*hsv(fract(uSurfTime*1.1 + h21(gc.xz)))*step(1. - .045*rk, h)*1.5*smoothstep(160., 420., dist)*(1. - inVis);
+      c += uSOnG*mix(hsv(fract(uSurfTime*1.1 + h21(gc.xz)))*step(1. - .045*rk, h)*1.5*smoothstep(160., 420., dist)*(1. - inVis), vec3(.045*rk*1.5*.6), eyeSmooth);   // eye: expected value
     }
     return c;
   }`;
@@ -142,7 +143,7 @@ uniform float uSunI, uMoonI, uBio, uMist, uAirT, uUVglit; uniform vec3 uHor, uSk
 // Lloyd's-mirror response at sin(elevation) s, 200 MHz in .x and 100 MHz in .y, normalised to 0..1 (0 below the horizon)
 vec2 lloyd(float s){ return s > 0. ? .5 - .5*cos(uLloyd*s) : vec2(0.); }
 vec2 wave(vec2 p, vec2 k, float w, float a){ float ph = dot(k,p) + w*uSurfTime; return a*k*cos(ph); }   // gradient of a*sin
-float skyT(float y){ float e = 1. - pow(.25, 1./max(y, .04)); return mix(-60., uAirT, e); }               // 8–14 µm sky brightness temp
+float skyT(float y){ float e = 1. - pow(.7, 1./max(y, .04)); return mix(-60., uAirT, e); }                // 8–14 µm sky brightness temp: zenith window transmittance ~.7 (ε ≈ .3, Idso 1981)
 vec3 seaBands(vec3 W, vec3 N, vec3 V, vec3 Rf, float dist, float foam, float inVis){
   vec3 col = vec3(0.); float cosv = clamp(dot(-V, N), 0., 1.), gz = pow(1. - cosv, 5.);
   float T = uSurfA.x + .6*(n2(W.xz*.004) - .5), mistK = uMist*(1. - exp(-dist/700.));
@@ -156,15 +157,15 @@ vec3 seaBands(vec3 W, vec3 N, vec3 V, vec3 Rf, float dist, float foam, float inV
     float e = mix(.45*(1. - .55*pow(1. - cosv, 3.)), .92, foam);
     float Tb = e*(T + 273.) + (1. - e)*mix(110., 8., pow(clamp(Rf.y, 0., 1.), .3)), x = clamp((Tb - 120.)/180., 0., 1.);
     float cs = max(.4, dist*.012); vec2 g = floor(W.xz/cs);
-    float sp = step(.88 - .3*x, h21(g + floor(uSurfTime*10.)))*(1. - inVis);
+    float sp = mix(step(.88 - .3*x, h21(g + floor(uSurfTime*10.)))*(1. - inVis), 0., eyeSmooth);   // eye: none (decoration; the emission is the Tb wash)
     col += uSOnM*mix(vec3(1.,.42,0.), vec3(1.,.85,.2), h21(g*1.7))*(x*x*.22 + sp*x*x*.5);
     // radar sea clutter: the sea returns far less than the cliffs at grazing incidence (sigma0 tens of dB below land)
     // and only within a few km of the antenna
-    float cl = radarEcho(W, vec3(0.,1.,0.))*exp(-length(W - uRadP)/1800.)*step(.55, h21(floor(W.xz*.05) + floor(uSurfTime*12.)));
+    float cl = radarEcho(W, vec3(0.,1.,0.))*exp(-length(W - uRadP)/1800.)*mix(step(.55, h21(floor(W.xz*.05) + floor(uSurfTime*12.))), .45, eyeSmooth);   // eye: expected value
     col += uSOnM*vec3(1.,.55,.08)*cl*.15;
   }
   if(uSOnR > 0.){                                   // RADIO: transmitters paint the water; the sea mirrors the radio sky
-    col += uSOnR*vec3(1.,.31,.85)*.9*txField(uTxR, W, N, 700., 9.)*1.1;
+    col += uSOnR*uRadioDiffuse*vec3(1.,.31,.85)*.9*txField(uTxR, W, N, 700., 9.)*1.1;
     // Sea interferometer: each source's mirror image is as bright as the cliff antenna's fringe at the source's
     // elevation; below it, a column at the source's azimuth maps the antenna's lobe pattern against the elevation the
     // flat sea reflects there (depression = elevation), so the image slides through the lobes as the source moves.
@@ -183,7 +184,7 @@ vec3 seaBands(vec3 W, vec3 N, vec3 V, vec3 Rf, float dist, float foam, float inV
   }
   if(uSOnG > 0.){                                   // GAMMA: water shields the seabed — almost silent
     vec3 gc = floor(W*2.2); float h = h21(gc.xz + floor(uSurfTime*16.)*3.17);
-    col += uSOnG*hsv(fract(uSurfTime*1.1 + h21(gc.xz)))*step(1. - uSurfB.z*.03, h)*1.8*(1. - smoothstep(40., 200., dist))*(1. - inVis);
+    col += uSOnG*mix(hsv(fract(uSurfTime*1.1 + h21(gc.xz)))*step(1. - uSurfB.z*.03, h)*1.8*(1. - smoothstep(40., 200., dist))*(1. - inVis), vec3(uSurfB.z*.03*1.8*.6), eyeSmooth);   // eye: expected value
   }
   return col;
 }`;
@@ -195,21 +196,26 @@ function seaMaterial(instr) {
   return new THREE.ShaderMaterial({ uniforms: u,
     vertexShader: SURF_VERT_DECL + `void main(){ vec4 w = modelMatrix*vec4(position,1.); vSurfW = w.xyz; vSurfN = vec3(0., 1., 0.); gl_Position = projectionMatrix*viewMatrix*w; }`,
     fragmentShader: SURF_FRAG_DECL + SEA_GLSL + `
-    void main(){
-      vec3 W = vSurfW, toP = W - cameraPosition; float dist = length(toP); vec3 V = toP/dist;
-      float fd = 1. - smoothstep(150., 2500., dist), fd2 = 1. - smoothstep(30., 400., dist);
-      vec2 p = W.xz, g = vec2(0.);
+    // the sea's geometry at this pixel: waves, reflection, surf (shared by main and the spectral eye's hook)
+    void seaGeo(out vec3 W, out float dist, out vec3 V, out vec3 N, out vec3 Rf, out vec2 p, out float fd, out float crest, out float wash, out float foam){
+      W = vSurfW; vec3 toP = W - cameraPosition; dist = length(toP); V = toP/dist;
+      fd = 1. - smoothstep(150., 2500., dist); float fd2 = 1. - smoothstep(30., 400., dist);
+      p = W.xz; vec2 g = vec2(0.);
       g += wave(p, vec2(.06,.10), .9, .9) + wave(p, vec2(-.09,.07), 1.1, .7) + wave(p, vec2(.13,-.05), 1.3, .5);
       g *= fd;
       g += fd2*(wave(p, vec2(.55,.8), 2.6, .09) + wave(p, vec2(-.9,.45), 3.1, .07) + wave(p, vec2(.3,-1.1), 3.4, .05)
              + .06*vec2(n2(p*1.3+uSurfTime*.6)-.5, n2(p*1.3-uSurfTime*.5+7.)-.5));
-      vec3 N = normalize(vec3(-g.x, 1., -g.y)), Rf = reflect(V, N);
+      N = normalize(vec3(-g.x, 1., -g.y)); Rf = reflect(V, N);
       Rf.y = abs(Rf.y);
       // surf: breaking lines rolling in toward the beach, and the wash at the edge
       float d = coastZ(W.x) - W.z;                                                     // metres offshore
       float roll = smoothstep(.75, 1., sin(d*.32 + uSurfTime*1.4 + n2(vec2(W.x*.05, 0.))*3.))*(1. - smoothstep(4., 38., d));
-      float wash = 1. - smoothstep(0., 3.5, d), crest = roll*(.5 + .5*n2(p*.8 + uSurfTime*.3));
-      float foam = clamp(crest + wash*.7, 0., 1.)*fd;
+      wash = 1. - smoothstep(0., 3.5, d); crest = roll*(.5 + .5*n2(p*.8 + uSurfTime*.3));
+      foam = clamp(crest + wash*.7, 0., 1.)*fd;
+    }
+    void main(){
+      vec3 W, V, N, Rf; vec2 p; float dist, fd, crest, wash, foam;
+      seaGeo(W, dist, V, N, Rf, p, fd, crest, wash, foam);
 #ifdef SEA_INSTR
       vec2 q = W.xz/40., f = abs(fract(q) - .5), w = fwidth(q)*1.2;
       float line = max(smoothstep(.5 - w.x, .5, f.x), smoothstep(.5 - w.y, .5, f.y))*(1. - smoothstep(.12, .35, max(w.x, w.y)))*(1. - smoothstep(200., 4000., dist));
@@ -233,9 +239,22 @@ function seaMaterial(instr) {
     defines: instr ? { SEA_INSTR: '' } : {},
   });
 }
+// spectral eye (engine/render/compose.js): the sea's own band hook — seaBands one band at a time, as luminance
+const SEA_EYE = `
+float eyeSeaL(float r, float m, float i, float u, float g, vec3 W, vec3 N, vec3 V, vec3 Rf, float dist, float foam){
+  eyeMR = r; eyeMM = m; eyeMI = i; eyeMU = u; eyeMG = g; eyeSmooth = 1.; return eyeL(seaBands(W, N, V, Rf, dist, foam, 0.)); }
+vec3 eyeTrans(){ return uSurfC.yzw; }
+void eyeBands(out vec4 o1, out vec4 o3){
+  vec3 W, V, N, Rf; vec2 p; float dist, fd, crest, wash, foam;
+  seaGeo(W, dist, V, N, Rf, p, fd, crest, wash, foam);
+  o1 = vec4(eyeSeaL(0., 0., 1., 0., 0., W, N, V, Rf, dist, foam), eyeSeaL(0., 0., 0., 1., 0., W, N, V, Rf, dist, foam),
+            eyeSeaL(0., 0., 0., 0., 1., W, N, V, Rf, dist, foam), 1.);
+  o3 = vec4(eyeSeaL(1., 0., 0., 0., 0., W, N, V, Rf, dist, foam), eyeSeaL(0., 1., 0., 0., 0., W, N, V, Rf, dist, foam), 0., 1.);
+  eyeMR = eyeMM = eyeMI = eyeMU = eyeMG = 1.; eyeSmooth = 0.; }`;
 
 function sea() {
   const mat = seaMaterial(false);
+  mat.userData.eyeBands = SEA_EYE;
   SEA.mat = mat;
   const m = new THREE.Mesh(new THREE.PlaneGeometry(40000, 40000, 1, 1), mat);
   m.rotation.x = -Math.PI / 2; m.position.y = .05;

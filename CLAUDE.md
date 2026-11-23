@@ -3,7 +3,7 @@
 First-person three.js scenes (`trail`, `seaside`, `city`) playing a 2-minute sunset-to-night timelapse in which events
 emit across the electromagnetic spectrum; bands can be filtered live. A shared **engine** (`engine/`, plain ES
 modules, no build step) runs **scenarios** (`scenarios/<id>/`); Python tooling (`src/spectra_tools/`, CLI
-`spectra`) serves, bundles, screenshots and audits them. README.md has the layout and the scenario/event contracts.
+`spectra`) serves, bundles, screenshots and audits them. README.md is the front page; docs/technical.md has the layout, the rendering model and the scenario/event contracts.
 
 ## Commands
 
@@ -42,10 +42,14 @@ one worktree under `.claude/worktrees/`. The lifecycle — propose → user appr
 - **Physics first, stylisation second.** The look per band is stylised; *what* emits, how much and when follows
   real physics. Every event lists its processes in `freq: [...]` (keys of `SPECTRUM`, `engine/core/spectrum.js`);
   add a sourced process there rather than guessing a band; tag what is `stylised`, `rare` or `time-compressed`.
+- **The spectral eye is the view** (`engine/render/compose.js`, M10): one multi-output scene pass, every band adapted
+  by its own receptor, diffraction, photon grain / speckle, air and matter per band, band skies, asinh combine. `?eye=0`
+  is the pre-eye view (fixed `GAIN`, `OVERLAY`, instrument view), kept for comparison. Render rules: `.claude/rules/render.md`.
 - **Sources vs surfaces.** Glowing things use `Em` / `Rib` / `EmField` (crowds: one instanced draw); a source
   emitted above the absorbing air takes origin `'high'`/`'space'` (`TRANSMIT`, `engine/core/bands.js`) so Ground
   mode hides it. The landscape's own emission comes from `PRESET`s (`engine/render/surface.js`, `A`/`B`/`C`
-  packing); every value cites a source key from that file's header or says STAND-IN. One table per fact.
+  packing, `C.yzw` = transmission for the eye); every value cites a source key from that file's header or says
+  STAND-IN. One table per fact.
 - **Seeded randomness.** Layout and `init()` draw from `R` (`engine/core/util.js`) in list order — new events go
   after the existing list; `Math.random` only for visual-only jitter.
 - **One shared sky.** Front is azimuth 270 (west) everywhere, view clamp yaw ±1.35 / pitch −0.1…1.5; one timeline

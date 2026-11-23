@@ -28,6 +28,21 @@ export const SPECTRUM = {
   cmb:             { name: 'cosmic microwave background (2.7 K, peak)', f: 160e9 },
   dustFIR:         { name: 'warm interstellar dust', lam: 100e-6 },
   synchrotron:     { name: 'galactic synchrotron', f: 100e6 },
+  // --- the sky's own background per band (spectral eye, M10/T7: engine/world/atmosphere.js) ---
+  // atmospheric O₂ / H₂O thermal emission at ~20 GHz, near the 22.235 GHz water line (ITU-R P.676-13); with the
+  // 2.725 K CMB behind it (Fixsen 2009, ApJ 707, 916: the 'cmb' key)
+  skyMicrowave:    { name: 'sky brightness temperature (atmosphere + CMB)', f: 20e9 },
+  // clear-sky thermal emission in the 8–14 µm window: ≈ air temperature at the horizon, colder at the zenith
+  // (Idso 1981, Water Resour. Res. 17, 295; Berdahl & Fromberg 1982)
+  skyThermalIR:    { name: 'clear-sky thermal emission (8–14 µm)', lam: 10e-6 },
+  // O₂ Herzberg I bands, 250–400 nm, from ~95 km (Chamberlain 1961, Physics of the Aurora and Airglow; ~400 R)
+  uvAirglow:       { name: 'UV airglow (O₂ Herzberg bands)', lam: 340e-9 },
+  // cosmic X-ray background at ~5 keV, the 2–10 keV band its photon rate is quoted for (~10 ph cm⁻² s⁻¹ sr⁻¹; its νFν
+  // peaks near 30 keV — Gruber et al. 1999, ApJ 520, 124); absorbed by the air column
+  cxb:             { name: 'cosmic X-ray background', E: 5e3, ground: false },
+  // diffuse Galactic gamma rays from cosmic-ray interactions, concentrated in the plane (Fermi-LAT: Ackermann et al.
+  // 2012, ApJ 750, 3); absorbed by the air column
+  gammaDiffuse:    { name: 'diffuse Galactic gamma rays', E: 1e8, ground: false },
   pulsarRadio:     { name: 'pulsar radio beam', f: 150e6 },
   pulsarOptical:   { name: 'pulsar optical pulses', lam: 500e-9 },
   pulsarXray:      { name: 'pulsar X-rays', E: 1e3, ground: false },
@@ -212,6 +227,19 @@ const RANGES = [['radio', 1, Infinity], ['micro', 1e-3, 1], ['ir', 700e-9, 1e-3]
 
 export const wavelength = p => p.lam ?? (p.f ? C / p.f : HC / p.E);
 export function bandOf(p) { const l = wavelength(p); return RANGES.find(([, lo, hi]) => l >= lo && l < hi)[0]; }
+// Where a process sits inside its band: 0 = the long-wave (low-frequency) edge, 1 = the short-wave edge, linear in
+// log wavelength. The open ends are closed at the extremes of this table: radio at 100 km (3 kHz, VLF sferics;
+// mains hum at 50 Hz clamps to 0), gamma at 1.24e-15 m (1 GeV, air-shower photons). Used by the spectral eye to
+// shift a band's hue slightly with frequency (engine/render/compose.js).
+const OPEN = { radio: [1, 1e5], gamma: [1.24e-15, 1e-11] };
+export const bandEdges = b => { const r = RANGES.find(x => x[0] === b); return OPEN[b] || [r[1], r[2]]; };   // [λ lo, λ hi] in m
+const edges = bandEdges;
+export function bandPos(p) {
+  const l = wavelength(p), [lo, hi] = edges(bandOf(p));
+  return Math.min(1, Math.max(0, (Math.log(hi) - Math.log(l)) / (Math.log(hi) - Math.log(lo))));
+}
+// the inverse: the wavelength (m) at position pos inside band b
+export function posLambda(b, pos) { const [lo, hi] = edges(b); return Math.exp(Math.log(hi) - pos * (Math.log(hi) - Math.log(lo))); }
 
 const si = (v, units) => { for (const [k, u] of units) if (v >= k) return `${+(v / k).toPrecision(3)} ${u}`; return `${v.toPrecision(3)} ${units.at(-1)[1]}`; };
 // "2.4 GHz · 12.5 cm" — used by the panel

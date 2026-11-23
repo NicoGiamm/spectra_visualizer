@@ -23,7 +23,48 @@ export const PRESETS = {
 // Radio was raised (1.9 -> 2.2, M7/T1) once the M1 radio surfaces (pink terrain, microwave flecks) shared the
 // Radio telescope view: the radio cones, sferics and links read against them again; ir already blooms at
 // campfires and street lamps, and uv/xray/gamma sources fill the dark High energy view, so those stay.
+// Not used by the spectral eye (M10, engine/render/compose.js): there every band adapts to its own scene (LREF).
 export const GAIN = { radio: 2.2, micro: 2.0, ir: 1.6, vis: 1, uv: 1.9, xray: 2.1, gamma: 1.9 };
+
+// Spectral eye (M10): each band's receptor operating point — the layer mean luminance (shader units) at which its
+// gain is key/LREF; its absolute threshold is EYE.floorRel × LREF (engine/render/compose.js). One value for every
+// band: the sources are authored on one intensity scale (a nominal source has I ≈ 1 in every band; measured layer
+// peaks are 1–3 in every band and scenario), so one receptor model sees them alike. Per-band operating points were
+// measured in M10/T2 (median of the layer mean over t 5/20/40/55 in all three scenarios: radio 3e-5, micro .043,
+// IR .021, visible .042, UV 5.6e-4, X-ray 4.6e-6, gamma .0044) and rejected: they track how much of the frame a
+// band fills, not how bright its sources are, and would amplify the sparse bands (X-ray, UV, radio) 100–10 000×.
+// .37 is the visible field at dusk (seaside t 5), the photopic design point, so the night is darker than dusk.
+// Spectral eye (M10/T4): each band's receptor aperture D (m), which sets its diffraction blur θ ≈ 1.22 λ / D
+// (engine/render/compose.js; Gaussian σ ≈ 0.42 λ / D for the Airy core). A human-sized pupil cannot image radio at
+// all (λ ≫ D), so the enhanced eye has a receptor organ per band — stand-ins at instrument scale, not one value:
+//   ir/vis/uv  0.007  the dark-adapted human pupil (~7 mm): visible is sharper than a pixel, 10 µm IR ≈ 1 px
+//   micro      1      a dish of satellite-TV size (60–120 cm Ku/Ka-band dishes): 20 GHz ≈ 1°, 2.4 GHz ≈ 9° soft
+//   radio      100    an interferometric array the size of a LOFAR station (~30–90 m, van Haarlem et al. 2013,
+//                     A&A 556, A2): FM ≈ 2°, Jupiter's 20 MHz ≈ 10°, VLF sferics only a glow
+//   xray/gamma 0      no diffraction limit: those photons are imaged by masks / pinholes, not lenses
+export const APERTURE = { radio: 100, micro: 1, ir: .007, vis: .007, uv: .007, xray: 0, gamma: 0 };
+
+// Spectral eye (M10/T6): horizontal sea-level extinction coefficient α (1/m) per band, for light crossing the air
+// between a ground-level emitter and the eye (exp(−α d), engine/render/compose.js). Visible is left to the scene's
+// own fog. Sky sources (origin 'high' / 'space') are not attenuated here: their path is the detector's (TRANSMIT).
+//   radio  0        the troposphere is transparent at 10 MHz–1 GHz
+//   micro  1.2e-5   ~0.05 dB/km: O₂ + H₂O gas absorption at ~20 GHz, sea level (~0.007 dB/km at 3 GHz) (ITU-R P.676-13); cloud and fog add
+//                   ~0.1 dB/km per g/m³ of liquid water at 20 GHz (ITU-R P.840) — negligible over these ranges
+//   ir     2e-4     8–14 µm window, horizontal sea-level path: ~0.6–0.9 transmittance per km depending on humidity
+//                   (LOWTRAN 7, Kneizys et al. 1988, AFGL-TR-88-0177) → 1–5e-4/m; mid value
+//   uv     2.3e-4   365 nm: Rayleigh 1.16e-5/m at 550 nm × (550/365)⁴ = 6e-5/m (Bucholtz 1995) + aerosol 1e-4/m at
+//                   550 nm (Koschmieder visual range ~39 km) × (550/365)^1.3 (Ångström exponent) = 1.7e-4/m
+//   xray / gamma    from the photon energy: NIST XCOM mass attenuation of dry air (XCOM_AIR, cm²/g, with scattering)
+//                   × 1.205e-3 g/cm³ — 1 keV ≈ 2 mm, 10 keV ≈ 1.6 m, 100 keV ≈ 54 m, 1.46 MeV (K-40) ≈ 160 m
+export const EXTINCTION = { radio: 0, micro: 1.2e-5, ir: 2e-4, vis: 0, uv: 2.3e-4 };
+export const XCOM_AIR = [[1, 3606], [2, 527.9], [3, 162.5], [5, 40.27], [10, 5.12], [20, .7779], [30, .3538], [50, .208],
+  [100, .1541], [200, .1233], [500, .08712], [1000, .06358], [2000, .04447], [5000, .02751], [1e4, .02045], [1e5, .0173]];
+// UV path radiance: the haze between the eye and a surface glows with the UV skylight; its asymptote (an infinitely
+// long path) is taken as the radiance of a white Lambertian surface under the same sky (uniform-sky approximation,
+// in the surface terms' units: 1.3 × uUVsky, engine/render/surface.js).
+export const UV_PATH = 1.3;
+
+export const LREF = { radio: .37, micro: .37, ir: .37, vis: .37, uv: .37, xray: .37, gamma: .37 };
 
 // Meter normalisation (activity that fills a bar). Scenarios may override via `meterNorm`.
 // Rule (M7/T1, with the M1 surfaces and M7/T4 presets in): in hud.js's 1 - exp(-act/norm) each bar peaks at

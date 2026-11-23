@@ -12,6 +12,7 @@
 //
 // URL parameters (handy for screenshots): ?t=30 (script time 0–60) &yaw=0.3 &pitch=0.5
 // &paused &bands=ir,micro &labels=0 &detector=ground (default orbit; ground: the atmosphere absorbs far-UV/X/gamma)
+// &eye=0 (the pre-M10 view: one pass, per-band GAIN, ACES; default is the spectral eye, render/compose.js)
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
@@ -27,6 +28,7 @@ import { applyVisMode } from './render/instrument.js';
 import { createAtmosphere, sunEl } from './world/atmosphere.js';
 import { updateSurfaces, uvSkylight } from './render/surface.js';
 import { buildDom, createHud, sizeOverlay, drawOverlay } from './ui/hud.js';
+import { createEye } from './render/compose.js';
 
 // S.curEvent lets sources group ghost markers (absorbed in Ground mode) by event
 function updateEvent(e) { S.curEvent = e; if (e.update) e.update(); S.curEvent = null; }
@@ -52,17 +54,15 @@ function start(sc) {
   const rt = new THREE.WebGLRenderTarget(innerWidth * PR, innerHeight * PR, { type: THREE.HalfFloatType, samples: 4 });
   const composer = new EffectComposer(renderer, rt);
   composer.addPass(new RenderPass(scene, camera));
-  // NaN/Inf guard: one bad pixel from any shader (e.g. pow() of a negative number, which real GPUs return as NaN
-  // and SwiftShader doesn't) would be smeared by the bloom mip chain into a large black staircase block.
-  composer.addPass(new ShaderPass({ uniforms: { tDiffuse: { value: null } },
-    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position, 1.); }',
-    fragmentShader: `uniform sampler2D tDiffuse; varying vec2 vUv;
-      void main(){ vec4 c = texture2D(tDiffuse, vUv); bvec4 bad = bvec4(isnan(c.r) || isinf(c.r), isnan(c.g) || isinf(c.g), isnan(c.b) || isinf(c.b), isnan(c.a) || isinf(c.a));
-        gl_FragColor = any(bad) ? vec4(0., 0., 0., 1.) : c; }` }));
+  composer.addPass(nanGuard());
   composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), .55, .3, .9));
   composer.addPass(new OutputPass());
 
   const atmo = createAtmosphere(sc.atmosphere);
+  const q = new URLSearchParams(location.search);
+  // the spectral eye (M10): per-band layers in one MRT pass, per-band adaptation, asinh combine; ?eye=0 = the old view
+  const eye = q.get('eye') !== '0' ? createEye(renderer, scene, camera, nanGuard) : null;
+  const out = eye ? eye.composer : composer;
   const world = sc.build();
   S.groundAt = world.groundAt || (() => 0);
   const EV = sc.events();
@@ -73,7 +73,6 @@ function start(sc) {
   const hud = createHud({ onFilter: () => { atmo.setVis(S.on.vis); applyVisMode(S.on.vis); } });
 
   // URL parameters
-  const q = new URLSearchParams(location.search);
   if (q.has('t')) S.t = clamp(+q.get('t'), 0, 60);
   if (q.has('yaw')) S.yaw = clamp(+q.get('yaw'), -1.35, 1.35);
   if (q.has('pitch')) S.pitch = clamp(+q.get('pitch'), -.1, 1.5);
@@ -91,7 +90,7 @@ function start(sc) {
   gl.addEventListener('wheel', e => { e.preventDefault(); camera.fov = clamp(camera.fov + e.deltaY * .03, 20, 90); camera.updateProjectionMatrix(); }, { passive: false });
   addEventListener('resize', () => {
     camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
-    renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight); sizeOverlay();
+    renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight); if (eye) eye.setSize(innerWidth, innerHeight); sizeOverlay();
   });
 
   sizeOverlay();
@@ -115,7 +114,7 @@ function start(sc) {
       const gh = S.ghosts.get(e); if (gh) gh.bands.forEach(b => absorbed[i].add(b));
     });
   }
-  if (q.has('dump')) dumpReport(sc, EV, step, norm, +(q.get('dstep') || .5), composer);
+  if (q.has('dump')) dumpReport(sc, EV, step, norm, +(q.get('dstep') || .5), out, eye);
   if (q.has('t')) S.t = clamp(+q.get('t'), 0, 60); else S.t = 0;
   document.getElementById('loading').remove();
 
@@ -132,12 +131,22 @@ function start(sc) {
     updateSurfaces(uvSkylight(sunEl()));
     world.update && world.update(S.t);
     EV.forEach(updateEvent);
-    composer.render();
+    out.render(dt);
     const active = EV.filter(e => S.t >= e.t0 && S.t <= e.t1);
     drawOverlay(active); hud.frame(active, norm);
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
+}
+
+// NaN/Inf guard: one bad pixel from any shader (e.g. pow() of a negative number, which real GPUs return as NaN
+// and SwiftShader doesn't) would be smeared by the bloom mip chain into a large black staircase block.
+function nanGuard() {
+  return new ShaderPass({ uniforms: { tDiffuse: { value: null } },
+    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position, 1.); }',
+    fragmentShader: `uniform sampler2D tDiffuse; varying vec2 vUv;
+      void main(){ vec4 c = texture2D(tDiffuse, vUv); bvec4 bad = bvec4(isnan(c.r) || isinf(c.r), isnan(c.g) || isinf(c.g), isnan(c.b) || isinf(c.b), isnan(c.a) || isinf(c.a));
+        gl_FragColor = any(bad) ? vec4(0., 0., 0., 1.) : c; }` });
 }
 
 // ?dump: step the whole 0–60 script without drawing, sample per-band activity and the active events,
@@ -146,7 +155,7 @@ function start(sc) {
 // render, synced with a 1-pixel readback; gl.finish() doesn't block in Chrome) at the same moments — relative
 // numbers only (headless SwiftShader).
 const FRAME_N = 16;
-function dumpReport(sc, EV, step, norm, dt, composer) {
+function dumpReport(sc, EV, step, norm, dt, composer, eye) {
   const { renderer, scene, camera } = S, samples = [], drawn = EV.map(() => new Set()), absorbed = EV.map(() => new Set());
   for (let t = 0; t <= 60 + 1e-6; t += dt) {
     step(t, drawn, absorbed);
@@ -156,7 +165,7 @@ function dumpReport(sc, EV, step, norm, dt, composer) {
   const draws = [5, 30, 55].map(t => {
     step(t);
     renderer.info.autoReset = false; renderer.info.reset();
-    renderer.render(scene, camera);
+    if (eye) composer.render(); else renderer.render(scene, camera);   // the eye: every band layer + its passes
     const r = { t, calls: renderer.info.render.calls, triangles: renderer.info.render.triangles,
       lod: { skipped: { ...LOD.skipped }, total: { ...LOD.total } } };   // sources set vs. not drawn (far LOD)
     renderer.info.autoReset = true; return r;
@@ -189,5 +198,14 @@ function dumpReport(sc, EV, step, norm, dt, composer) {
     samples,
   };
   const el = document.createElement('script'); el.type = 'application/json'; el.id = 'spectra-dump';
+  // spectral eye: each band's share of the displayed luminance at t 20 / 40, read back asynchronously (a synchronous
+  // readback logs a GPU-stall warning); the report is updated in place when both are in (report.shares)
+  if (eye) report.shares = [];
   el.textContent = JSON.stringify(report); document.body.appendChild(el);
+  if (eye) {   // both measured back to back (the GPU keeps the order), then collected together: few frames fit the budget
+    const at = t => { step(t); composer.render(); return eye.measure().then(r => ({ t, ...r })); };
+    const p20 = at(20), p40 = at(40);
+    Promise.all([p20, p40]).then(sh => { report.shares = sh; el.textContent = JSON.stringify(report); })
+      .catch(err => { report.sharesError = String(err); el.textContent = JSON.stringify(report); });
+  }
 }

@@ -28,7 +28,10 @@ export function buildDom(sc) {
   <span id="presets"></span>
   <button class="btn active" id="labels">Labels</button>
   <button class="btn" id="detector" title="Ground: what reaches a detector on the ground (the air absorbs far-UV, X-rays and gamma rays from space). Orbit: what a satellite would see.">Detector: Ground</button>
+  <button class="btn" id="eyemode" hidden title="Adapted: every band is seen by its own receptor, adapted to its own scene (no band privileged). Absolute: one receptor, adapted to visible light, for every band — the invisible bands at their raw level.">Eye: adapted</button>
+  <button class="btn" id="eyeset" hidden title="Eye settings: per-band brightness and what each band's brightness means">Eye ⚙</button>
 </div>
+<div id="eyepanel" hidden></div>
 <div id="events"><h3>Now happening</h3><div id="evlist"></div></div>
 <div id="hint">${sc.hint || 'Drag to look ahead and up · scroll to zoom · click a band or press 1–7 to filter · space = play/pause · lasts 2 minutes'}</div>
 <div id="spectrum"></div>`);
@@ -84,7 +87,41 @@ export function createHud({ onFilter }) {
     const key = active.map(e => e.name).join('|'); if (key === lastEv) return; lastEv = key;
     evlist.innerHTML = active.map(evHtml).join('');
   }
+  if (S.eye) eyeControls();
   return { sync, frame, setPlay, setLabels, setDetector };
+}
+
+// Spectral eye (M10): what a band's brightness and hue stand for, physically
+const LEGEND = {
+  radio: 'flux; the sky glows with galactic synchrotron · soft (100 m array) · speckle = coherent transmitters',
+  micro: 'brightness temperature: cold sea and sky dark, warm land bright · blurred (1 m dish)',
+  ir: 'radiated temperature (8–14 µm): warmer is brighter · warm-blooded bodies glow',
+  vis: 'luminance, natural colour (a little desaturated)',
+  uv: 'UV-A radiance: skylight on bright ground, glowing haze at dusk',
+  xray: 'photon counts (keV): the air absorbs them within metres',
+  gamma: 'single photon hits (MeV): their density is the rate · the air absorbs them in ~160 m',
+};
+const EYE_KEY = 'spectra.eye';
+// the eye controls: Eye: adapted / absolute, and the settings panel (per-band brightness, legend); kept per viewer
+function eyeControls() {
+  let saved = {}; try { saved = JSON.parse(localStorage.getItem(EYE_KEY) || '{}') || {}; } catch { saved = {}; }
+  const view = S.eyeView = { abs: !!(S.eyeView?.abs ?? saved.abs), w: { ...Object.fromEntries(BANDS.map(b => [b.id, 1])), ...(saved.w || {}) } };
+  const save = () => { try { localStorage.setItem(EYE_KEY, JSON.stringify(view)); } catch { /* private window: not kept */ } };
+  const mode = document.getElementById('eyemode'), set = document.getElementById('eyeset'), panel = document.getElementById('eyepanel');
+  mode.hidden = set.hidden = false;
+  const showMode = () => { mode.textContent = `Eye: ${view.abs ? 'absolute' : 'adapted'}`; mode.classList.toggle('active', view.abs); };
+  mode.onclick = () => { view.abs = !view.abs; showMode(); save(); }; showMode();
+  panel.innerHTML = `<h3>Spectral eye</h3><p class="note">Each band is one hue; its brightness is the quantity below. The hue shifts a little
+    with frequency inside the band. Adapted: every band has its own receptor.</p>` + BANDS.map(b => `
+    <label class="eyerow"><span class="eyename" style="color:${b.id === 'vis' ? '#fff' : b.color}">${b.name}</span>
+      <input type="range" min="0" max="2" step="0.05" value="${view.w[b.id]}" data-band="${b.id}"><small>${LEGEND[b.id]}</small></label>`).join('')
+    + '<button class="btn" id="eyereset">Reset</button>';
+  panel.querySelectorAll('input').forEach(inp => { inp.oninput = () => { view.w[inp.dataset.band] = +inp.value; save(); }; });
+  document.getElementById('eyereset').onclick = () => {
+    BANDS.forEach(b => { view.w[b.id] = 1; }); view.abs = false; showMode(); save();
+    panel.querySelectorAll('input').forEach(inp => { inp.value = 1; });
+  };
+  set.onclick = () => { panel.hidden = !panel.hidden; set.classList.toggle('active', !panel.hidden); };
 }
 
 // One panel entry: name + tags, note, band chips (hover: processes with frequency / wavelength), absorption note.
