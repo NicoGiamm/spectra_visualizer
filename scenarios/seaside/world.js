@@ -7,7 +7,7 @@ import { S } from 'spectra/core/state.js';
 import { dirAE } from 'spectra/core/geom.js';
 import { SPECTRUM, wavelength } from 'spectra/core/spectrum.js';
 import { solid } from 'spectra/render/instrument.js';
-import { spectral, PRESET, mixSurf, surfaceUniforms, SURF_FRAG_DECL, SURF_VERT_DECL } from 'spectra/render/surface.js';
+import { spectral, PRESET, mixSurf, surfaceUniforms, collectSurfD, SURF_FRAG_DECL, SURF_VERT_DECL } from 'spectra/render/surface.js';
 import { heightfield } from 'spectra/world/heightfield.js';
 import { HOR, HEMI, SUN_AZ, sunEl, moonDir, moonlit, GAL_C } from 'spectra/world/atmosphere.js';
 
@@ -45,13 +45,22 @@ export function heightAt(x, z) {
 //     pale sand, between 0.017 vegetation and sand) [FG]; gamma .45 (dune sand under sparse grass) — STAND-IN
 //   granite: slow to cool (μ ~2200) [Oke], gamma reference = 1 (K-40, U, Th in feldspar and zircon) [UN]; eIR .9 [Sal, EL];
 //     eMW .88 [UMF]; uvAlb .12 — STAND-IN as the engine's rock
-//   sea: the engine's water preset (eMW .45 calm sea [Wilheit])
+//   sea: the engine's water preset (eMW .45 calm sea [Wilheit]) with sea water's radio reflectivity
+// rRadio (B.w) and the reflection data D = [h, nirAlb, R0opt, slope] (M11/T2; keys [P527], [EL] in surface.js):
+//   wet sand rRadio .8 — sand saturated with sea water, ε' ~25, σ ~1 S/m: between [P527] wet ground (.48) and sea water
+//     (.91), STAND-IN; D as the engine's wetSand (swash-smoothed, a water film)
+//   beach sand rRadio .07 [P527] very dry ground; D as the engine's sand
+//   dune rRadio .07 (dry sand under sparse grass) [P527]; nirAlb .4 — marram over pale sand, between green grass and
+//     sand [EL], STAND-IN; h .05 (the grass layer), slope .3 as the engine's meadow
+//   granite rRadio .16 [Dan]; D as the engine's rock
+//   sea rRadio .91 [P527] sea water (ε' 70, σ 5 S/m); h .005 — capillary / short gravity waves below the shader's own
+//     waves, STAND-IN; slope .1 residual below Cox & Munk's ~.13 rad (surface.js header); nirAlb / R0opt as water
 export const SURF = {
-  wetSand: { A: [23, 16, 1 / 30, .96], B: [.6, .1, .55, .5], C: [.5, .05, 0, 0] },
-  sand:    { A: [35, 8, 1 / 22, .92], B: [.9, .24, .7, .3], C: [0, .05, 0, 0] },   // 35 °C at sunset, crosses the sea's 18 °C near t=22
-  dune:    { A: [27, 7, 1 / 10, .97], B: [.92, .05, .45, .2], C: [0, .05, 0, 0] },   // marram grass on the dunes
-  granite: { A: [31, 14, 1 / 45, .9], B: [.88, .12, 1, .5], C: [0, .05, 0, 0] },
-  sea:     PRESET.water,
+  wetSand: { A: [23, 16, 1 / 30, .96], B: [.6, .1, .55, .8], C: [.5, .05, 0, 0], D: PRESET.wetSand.D },
+  sand:    { A: [35, 8, 1 / 22, .92], B: [.9, .24, .7, .07], C: [0, .05, 0, 0], D: PRESET.sand.D },   // 35 °C at sunset, crosses the sea's 18 °C near t=22
+  dune:    { A: [27, 7, 1 / 10, .97], B: [.92, .05, .45, .07], C: [0, .05, 0, 0], D: [.05, .4, .04, .3] },   // marram grass on the dunes
+  granite: { A: [31, 14, 1 / 45, .9], B: [.88, .12, 1, .16], C: [0, .05, 0, 0], D: PRESET.rock.D },
+  sea:     { ...PRESET.water, B: [PRESET.water.B[0], PRESET.water.B[1], PRESET.water.B[2], .91], D: [.005, .02, .02, .1] },
 };
 
 export const sandMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .97, metalness: 0 });
@@ -92,6 +101,13 @@ float radarEcho(vec3 W, vec3 N){
 }`;
 
 function terrain() {
+  // wet sand -> dry sand -> dune grass -> granite promontories
+  const surfAt = collectSurfD((x, y, z, slope) => {
+    const d = z - coastZ(x), nz = fbm2(x * .05, z * .05, 3), L = (a, b, k) => mixSurf([[a, 1 - k], [b, k]]);
+    let s = L(SURF.wetSand, SURF.sand, sm(1, 7, d));
+    s = L(s, SURF.dune, sm(30, 90, d) * (.5 + .5 * nz));
+    return L(s, SURF.granite, clamp(sm(.15, .35, slope) + sm(12, 34, y) * .8));
+  });
   const C = { sand: [.2, .16, .11], wet: [.06, .05, .042], dune: [.07, .075, .035], rock: [.07, .065, .06] };
   const mix = (a, b, k) => a.map((v, i) => lerp(v, b[i], k));
   const g = heightfield({ heightAt, colorAt(x, y, z, slope) {
@@ -99,12 +115,8 @@ function terrain() {
     let c = mix(C.wet, C.sand, sm(1, 7, d));
     c = mix(c, C.dune, sm(30, 90, d) * (.5 + .5 * nz));
     return mix(c, C.rock, clamp(sm(.15, .35, slope) + sm(12, 34, y) * .8));
-  }, surfAt(x, y, z, slope) {        // wet sand -> dry sand -> dune grass -> granite promontories
-    const d = z - coastZ(x), nz = fbm2(x * .05, z * .05, 3), L = (a, b, k) => mixSurf([[a, 1 - k], [b, k]]);
-    let s = L(SURF.wetSand, SURF.sand, sm(1, 7, d));
-    s = L(s, SURF.dune, sm(30, 90, d) * (.5 + .5 * nz));
-    return L(s, SURF.granite, clamp(sm(.15, .35, slope) + sm(12, 34, y) * .8));
-  }, meanRadius: 250 });
+  }, surfAt, meanRadius: 250 });
+  surfAt.attach(g);                  // per-vertex reflection data (aSurfD)
   const uniforms = { uRadP: ENVSEA.radP, uRadA: ENVSEA.radA, uRadI: ENVSEA.radI, uFire: ENVSEA.fire, uHor: ENVSEA.hor, uSky: ENVSEA.sky,
     uSunDir: ENVSEA.sunDir, uSunI: ENVSEA.sunI, uMoonDir: ENVSEA.moonDir, uMoonI: ENVSEA.moonI };
   const extraDecl = RADAR_GLSL + `uniform vec4 uFire; uniform vec3 uHor, uSky, uSunDir, uMoonDir; uniform float uSunI, uMoonI;
@@ -155,10 +167,15 @@ vec3 seaBands(vec3 W, vec3 N, vec3 V, vec3 Rf, float dist, float foam, float inV
   }
   if(uSOnM > 0.){                                   // MICROWAVE: calm sea e≈0.45 (cold), foam e≈0.9 (warm lines)
     float e = mix(.45*(1. - .55*pow(1. - cosv, 3.)), .92, foam);
-    float Tb = e*(T + 273.) + (1. - e)*mix(110., 8., pow(clamp(Rf.y, 0., 1.), .3)), x = clamp((Tb - 120.)/180., 0., 1.);
+    float Tsk = mix(110., 8., pow(clamp(Rf.y, 0., 1.), .3));
+    // eye (M11/T2): the sky the sea mirrors is the band sky (surface.js skyMicroK), specular where the small-scale
+    // waves are smooth at 1.5 cm (grazing), the cos-weighted hemisphere (27 K) elsewhere
+    if(eyeSmooth > .5) Tsk = mix(27., skyMicroK(Rf), cohK(uSurfD.x, cosv, .015));
+    float Tb = e*(T + 273.) + (1. - e)*Tsk, x = clamp((Tb - 120.)/180., 0., 1.);
     float cs = max(.4, dist*.012); vec2 g = floor(W.xz/cs);
     float sp = mix(step(.88 - .3*x, h21(g + floor(uSurfTime*10.)))*(1. - inVis), 0., eyeSmooth);   // eye: none (decoration; the emission is the Tb wash)
     col += uSOnM*mix(vec3(1.,.42,0.), vec3(1.,.85,.2), h21(g*1.7))*(x*x*.22 + sp*x*x*.5);
+    if(eyeSmooth > .5) col += uSOnM*vec3(1.,.6,.1)*microTx(W, N, V, mix(uSurfB.x, .92, foam), uSurfD.x, uSurfD.w)*.35;   // eye: transmitters mirrored by the sea
     // radar sea clutter: the sea returns far less than the cliffs at grazing incidence (sigma0 tens of dB below land)
     // and only within a few km of the antenna
     float cl = radarEcho(W, vec3(0.,1.,0.))*exp(-length(W - uRadP)/1800.)*mix(step(.55, h21(floor(W.xz*.05) + floor(uSurfTime*12.))), .45, eyeSmooth);   // eye: expected value
@@ -166,6 +183,10 @@ vec3 seaBands(vec3 W, vec3 N, vec3 V, vec3 Rf, float dist, float foam, float inV
   }
   if(uSOnR > 0.){                                   // RADIO: transmitters paint the water; the sea mirrors the radio sky
     col += uSOnR*uRadioDiffuse*vec3(1.,.31,.85)*.9*txField(uTxR, W, N, 700., 9.)*1.1;
+    // eye (M11/T2): sea water (R0 .91) at λ 3 m is a mirror — Kirchhoff brightness with the mirrored synchrotron sky and
+    // the coast transmitters' images (surface.js radioRefl); the discrete sky sources' images and the cliff antenna's
+    // lobes below (Lloyd's mirror) are the same mirror seen through that antenna
+    if(eyeSmooth > .5) col += uSOnR*radioRefl(W, N, V, T, uSurfB.w, uSurfD.x, uSurfD.w);
     // Sea interferometer: each source's mirror image is as bright as the cliff antenna's fringe at the source's
     // elevation; below it, a column at the source's azimuth maps the antenna's lobe pattern against the elevation the
     // flat sea reflects there (depression = elevation), so the image slides through the lobes as the source moves.
@@ -176,11 +197,17 @@ vec3 seaBands(vec3 W, vec3 N, vec3 V, vec3 Rf, float dist, float foam, float inV
       float fr = .6*Fs.x + .4*Fs.y;                 // what the cliff antenna records from this source now
       float az = pow(max(dot(normalize(R0.xz), normalize(s.xz)), 0.), 900.)*exp(-abs(R0.y - s.y)*3.);
       img += uRS[i].w*((pow(max(dot(R0, s), 0.), 3000.)*2.5 + pow(max(dot(Rf, s), 0.), 160.)*.7)*(.1 + .9*fr) + az*lobes*.7); }
-    col += uSOnR*vec3(1.,.31,.85)*img;
+    col += uSOnR*vec3(1.,.31,.85)*img*surfSpk;
   }
   if(uSOnU > 0.){                                   // ULTRAVIOLET: sun glitter only while the low sun still has UV; foam reflects some
     float s = max(dot(Rf, uSunDir), 0.);
-    col += uSOnU*vec3(.62,.3,1.)*(uUVglit*(pow(s, 500.)*5. + pow(s, 40.)*.3) + uUVsky*(.06 + .4*foam)*.5);
+    float sky = uUVsky*(.06 + .4*foam)*.5;
+    // eye (M11/T2): the water mirrors the UV skylight by Fresnel (R0 .02 at 365 nm, → 1 at grazing: the far sea is as
+    // bright as the sky); the rest is the diffuse albedo — water body ~.04 (below [WHO]'s < .1), foam .25 [WHO] —
+    // in the surfaces' units (white Lambertian = 1.3·uUVsky, surface.js)
+    if(eyeSmooth > .5){ float F = fresnelS(uSurfD.z, cosv)*(1. - foam);
+      sky = uUVsky*1.3*(F + (1. - F)*mix(.04, .25, foam)*(.35 + .65*max(N.y, 0.))); }
+    col += uSOnU*vec3(.62,.3,1.)*(uUVglit*(pow(s, 500.)*5. + pow(s, 40.)*.3) + sky);
   }
   if(uSOnG > 0.){                                   // GAMMA: water shields the seabed — almost silent
     vec3 gc = floor(W*2.2); float h = h21(gc.xz + floor(uSurfTime*16.)*3.17);
@@ -244,13 +271,15 @@ const SEA_EYE = `
 float eyeSeaL(float r, float m, float i, float u, float g, vec3 W, vec3 N, vec3 V, vec3 Rf, float dist, float foam){
   eyeMR = r; eyeMM = m; eyeMI = i; eyeMU = u; eyeMG = g; eyeSmooth = 1.; return eyeL(seaBands(W, N, V, Rf, dist, foam, 0.)); }
 vec3 eyeTrans(){ return uSurfC.yzw; }
+#define EYE_OWN_SPECKLE
 void eyeBands(out vec4 o1, out vec4 o3){
+  surfSpk = eyeSpeckle();   // coherent radio only (the images below and the transmitters), not the Kirchhoff glow
   vec3 W, V, N, Rf; vec2 p; float dist, fd, crest, wash, foam;
   seaGeo(W, dist, V, N, Rf, p, fd, crest, wash, foam);
   o1 = vec4(eyeSeaL(0., 0., 1., 0., 0., W, N, V, Rf, dist, foam), eyeSeaL(0., 0., 0., 1., 0., W, N, V, Rf, dist, foam),
             eyeSeaL(0., 0., 0., 0., 1., W, N, V, Rf, dist, foam), 1.);
   o3 = vec4(eyeSeaL(1., 0., 0., 0., 0., W, N, V, Rf, dist, foam), eyeSeaL(0., 1., 0., 0., 0., W, N, V, Rf, dist, foam), 0., 1.);
-  eyeMR = eyeMM = eyeMI = eyeMU = eyeMG = 1.; eyeSmooth = 0.; }`;
+  eyeMR = eyeMM = eyeMI = eyeMU = eyeMG = 1.; eyeSmooth = 0.; surfSpk = 1.; }`;
 
 function sea() {
   const mat = seaMaterial(false);

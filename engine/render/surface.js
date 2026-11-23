@@ -5,6 +5,11 @@
 //   C = [gloss (0 matte … 1 water/glass: emissivity drops at grazing angles), Tradio, Tmicro, Tgamma]
 //       T* = the fraction of radio / microwave / gamma light from behind that gets through (spectral eye, M10/T6:
 //       long waves and gamma cross walls, foliage and thin matter that block light); see TRANS below
+//   D = [h (m), nirAlb, R0opt, slope (rad)] — how the surface REFLECTS (M11/T2), see REFLECTION below:
+//       h      rms height of the roughness the mesh does not model (sub-facet): sets specular vs diffuse per band
+//       nirAlb near-IR (~0.8 µm) albedo, the foliage red edge — data for night-vision near-IR (M11/T3)
+//       R0opt  normal-incidence specular reflectance at UV / optical wavelengths (Fresnel)
+//       slope  rms slope of the unresolved shape (curved car panels, sub-facet tilts): the width of a mirror image
 //
 // Temperature T(t) = Teq + (T0 − Teq)·exp(−t/tau): sand and meadows cool fast, rock and asphalt slowly,
 // water barely at all — which gives the beach its thermal crossover. Per band:
@@ -13,16 +18,47 @@
 //   Micro  brightness temperature Tb = eMW·T + (1−eMW)·50 K: calm water reads cold, land warm; plus illumination
 //          from microwave transmitters (routers, masts) registered with addTx('micro', …), and short local
 //          flashes where a ray hits a surface (multipath reflections) registered with addHits('micro', …).
-//   Radio  illumination from radio transmitters (addTx('radio', …)): 1/r², Lambert, moving dashes.
+//   Radio  illumination from radio transmitters (addTx('radio', …)): 1/r², Lambert, moving dashes (old view; the
+//          spectral eye uses the reflection model below instead).
 //   UV     uvAlb × the remaining UV skylight (fades with the Sun): snow and sand glow at dusk, grass doesn't.
 //   Gamma  sparse scintillation speckle ∝ activity: granite sparkles, the sea is almost silent.
 //   X-ray  nothing — the ground is dark in X-rays.
 // With Visible on, the same layer is added faintly (OVERLAY); with Visible off, the instrument material shows it fully.
+//
+// REFLECTION (M11/T2, spectral eye only — gated by eyeSmooth, the old view keeps the terms above). Every band has
+// its illuminators and every surface reflects them as well as emitting (Kirchhoff: e = 1 − R):
+//   reflectivity  radio R0 = B.w (Fresnel at 100 MHz from ITU-R permittivities, cited per preset); microwave
+//          R0 = 1 − eMW; thermal IR R = 1 − eIR (both Kirchhoff, from the cited emissivities); UV diffuse = uvAlb and
+//          specular R0opt (D.z); angle dependence by Schlick 1994 (Comput. Graph. Forum 13:233), R(θ) = R0 + (1 − R0)
+//          (1 − cos θ)^5, the unpolarised Fresnel average — every surface is a near-mirror at grazing incidence.
+//   specular vs diffuse  Rayleigh criterion: a surface is smooth when h < λ / (8 cos θ). The coherent (specular)
+//          fraction is S = exp(−(4π h cos θ / λ)²) (Beckmann & Spizzichino 1963, The Scattering of EM Waves from
+//          Rough Surfaces); the rest R·(1 − S) is scattered diffusely. λ: radio 3 m (100 MHz, the FM transmitters and
+//          the synchrotron sky), microwave 1.5 cm for the sky brightness (20 GHz, as the emissivities) and 12.5 cm for
+//          transmitters (2.4 GHz Wi-Fi), UV / thermal IR: the optical gloss C.x. So the ground mirrors radio (h of cm
+//          ≪ 3 m), metal and water mirror microwaves, grass and rock scatter them, canopies scatter everything.
+//   illuminators  radio: transmitters (addTx) and the band sky — galactic synchrotron, T_b from the same formula as
+//          the night sky's eye hook (engine/world/atmosphere.js, Haslam 408 MHz shape × (408/100)^2.55), without its
+//          mottling (its mean); radio brightness T_b = (1 − R)·T + R·T_reflected at .006 per 1000 K (the sky's scale).
+//          Microwave: transmitters (addTx) and the sky T_b = 2.725 K·e^(−τ) + 270 K·(1 − e^(−τ)), τ = .05 / sin el (as
+//          the sky hook): metals and calm water mirror the cold zenith (they read cold) and the warm ground below the
+//          horizon. Thermal IR: the 8–14 µm window sky (as the sky hook, Idso 1981) in the mirror direction for glossy
+//          surfaces. UV: the skylight; the sky's radiance is taken as that of a white Lambertian surface under it
+//          (uniform-sky approximation, as UV_PATH in engine/core/bands.js). Diffuse reflection sees the cos-weighted
+//          hemisphere: sky × (1 + N.y)/2, the rest the ground (the surface's own temperature: STAND-IN for whatever
+//          stands there); hemispheric sky means of the same formulas: radio ≈ 2600 K, microwave 27 K, IR −28 °C.
+//          A mirror image of a transmitter is a lobe of width s = 2·slope (≥ .03 rad) around the specular direction,
+//          flux-conserving: peak P·R·S·(.03 / s)² / (1 + L² / range²) over the reflected path L (the image cannot
+//          outshine the source; a curved panel shows a dim sheen, a mirror a point);
+//          the eye's diffraction blur (compose.js) widens it to the receptor's resolution. Near-IR (Sun / Moon /
+//          illuminators on foliage) is M11/T3: D.y holds the data. X-ray / gamma: no reflection (Compton albedo of
+//          the ground is ~1 %, below the scenes' gamma speckle).
 import * as THREE from 'three';
 import { V3, sm } from '../core/util.js';
 import { S } from '../core/state.js';
 import { COMMON } from './shaders.js';
 import { solid } from './instrument.js';
+import { GAL_C, GAL_N } from '../world/atmosphere.js';
 
 export const OVERLAY = { value: .12 };
 const MAX_TX = 8, MAX_HIT = 12;
@@ -32,6 +68,7 @@ export const SURF_U = {
   uOverlay: OVERLAY, uRadioDiffuse: { value: 1 }, uSurfT: { value: 0 }, uUVsky: { value: 0 }, uSurfTime: S.TIME,
   uTxR: { value: vec4s() }, uTxM: { value: vec4s() },
   uHitM: { value: Array.from({ length: MAX_HIT }, () => new THREE.Vector4()) },
+  uGalN: { value: GAL_N }, uGalC: { value: GAL_C },   // the radio sky's orientation, for its reflection (M11/T2)
 };
 
 // ---------------------------------------------------------------- presets (documented reference values)
@@ -56,7 +93,25 @@ export const SURF_U = {
 //         fresh snow 130, wood ~380, dry sandy soil 620, brick ~1070, asphalt ~1200, still water 1545 (mixing makes
 //         the sea effectively infinite), wet sand 2550, concrete ~2200, stone/granite ~2200. Vegetation cools fastest
 //         despite its water: the canopy is thermally decoupled from the soil (dew); forest canopies trap longwave.
-//   rRadio radio reflectivity — STAND-IN (relative, stylised): conductors and sea water high, dry ground low.
+//   rRadio normal-incidence power reflectance at 100 MHz, |(√ε − 1)/(√ε + 1)|² with ε = ε' − jσ/(ωε₀) (M11/T2; was a
+//         relative STAND-IN): [P527] ITU-R P.527-6 ground classes (sea water ε' 70, σ 5 S/m → .91; fresh water 80,
+//         .01 → .64; wet ground 30, .01 → .48; medium dry ground 15, .001 → .35; very dry ground 3, 1e-4 → .07);
+//         [P2040] ITU-R P.2040-3 Table 3 building materials at 0.1 GHz (concrete 5.24 → .16, brick 3.91 → .17, wood
+//         1.99 → .03, glass 6.31 → .19, metal σ 1e7 → 1); rock: granite ε' 5–6 [Dan] Daniels 2004, Ground Penetrating
+//         Radar (2nd ed.), Table 4.2 → .16; asphalt ε' 4–8 (Saarenketo & Scullion 2000, J. Appl. Geophys. 43:119) → .15;
+//         tissue: muscle ε' ~66, σ ~.7 S/m at 100 MHz (Gabriel, Lau & Gabriel 1996, Phys. Med. Biol. 41:2271) → .75.
+// Reflection data D = [h, nirAlb, R0opt, slope] per preset (REFL below):
+//   h      sub-facet rms height: [UMF] vol. II ch. 11–12 (bare soil / fields 0.5–4 cm); road macrotexture 0.5–2 mm
+//          (ISO 13473-1 mean texture depth); sea: capillary / short gravity waves below the sea shader's own waves
+//          (mm–cm) — STAND-IN values within those ranges; canopies and grass are volume scatterers (h ~ their depth)
+//   nirAlb ~0.8 µm reflectance [EL] (ASTER / ECOSTRESS: green grass .4–.5, conifer canopy .25–.35, soils .25–.35,
+//          dry quartz sand .4–.5, granite .25–.35, concrete .3–.4, brick .3–.45, aged asphalt .1–.15, weathered wood
+//          .35–.5); fresh snow .9 (Wiscombe & Warren 1980, J. Atmos. Sci. 37:2712); water .02 (Fresnel, the volume
+//          absorbs: Hale & Querry 1973, Appl. Opt. 12:555); skin .5 (Anderson & Parrish 1981, J. Invest. Dermatol. 77:13)
+//   R0opt  Fresnel at normal incidence, ((n − 1)/(n + 1))²: water n 1.34–1.35 at 365 nm (Hale & Querry) → .02, ice
+//          n 1.33 → .02, silicates / bitumen / paint binders / skin n 1.4–1.6 → .03–.05
+//   slope  rms unresolved slope: STAND-INS (sea residual .1 below the Cox & Munk 1954 total of ~.13 rad at 3 m/s wind,
+//          J. Opt. Soc. Am. 44:838, because the shader draws the long waves); terrain .15–.35, flat paving .05
 // Transmission [Tradio, Tmicro, Tgamma] of what a surface stands for (C.yzw), for light from behind it:
 //   ground (terrain, water, paving): radio .05 — knife-edge diffraction over a ridge costs ~13 dB at VHF (ITU-R P.526),
 //     the "bending round hills"; microwave 0 — diffraction loss grows ~10 dB per frequency decade (~25 dB at 1–3 GHz);
@@ -72,66 +127,108 @@ export const SURF_U = {
 //     smaller than its wavelength); microwave .01 — ~20 dB through a torso at 2.4 GHz (ITU-R P.2040 tissue ε″; body-loss
 //     measurements ~15–30 dB); gamma .2 — 30 cm of water at μ/ρ .058 cm²/g (1.46 MeV)
 const TRANS = { ground: [.05, 0, 0], canopy: [.9, .25, .95], facade: [.1, .002, 0], wood: [.95, .6, .88], body: [.5, .01, .2] };
-const P = (T0, Teq, tau, eIR, eMW, uvAlb, gamma, rRadio, gloss = 0, tr = TRANS.ground) => ({ A: [T0, Teq, tau ? 1 / tau : 0, eIR], B: [eMW, uvAlb, gamma, rRadio], C: [gloss, ...tr] });
+// D for a surface without reflection data (a custom {A, B, C}): ordinary rough dry ground — STAND-IN
+export const DEF_D = [.02, .3, .04, .2];
+const P = (T0, Teq, tau, eIR, eMW, uvAlb, gamma, rRadio, gloss = 0, tr = TRANS.ground) => ({ A: [T0, Teq, tau ? 1 / tau : 0, eIR], B: [eMW, uvAlb, gamma, rRadio], C: [gloss, ...tr], D: DEF_D });
 export const PRESET = {
   // sea surface: warm all night (no cooling), cold in microwave. eIR .98 [Masuda, EL]; eMW .45 calm sea [Wilheit, UMF];
-  // uvAlb .06 [WHO, FG: water < 0.1]; gamma .05 (sea water shields, K-40 only) [UN]
-  water:    P(18, 18, 0, .98, .45, .06, .05, .9, 1),
+  // uvAlb .06 [WHO, FG: water < 0.1]; gamma .05 (sea water shields, K-40 only) [UN]; rRadio .64 fresh water [P527] (the
+  // stream; the seaside's sea overrides it with sea water's .91)
+  water:    P(18, 18, 0, .98, .45, .06, .05, .64, 1),
   // eIR .96 (pore water) [EL]; eMW .6 (moist soil 0.6–0.7) [UMF]; uvAlb .12 (wet sand darker than dry) [FG];
   // gamma .25 like ordinary quartz sand [UN]; slower than dry sand (μ 2550 vs 620) [Oke], but an exception to the μ
-  // order against concrete/rock: swash and evaporation tie it to the sea's temperature (Teq near the sea's 18 °C)
-  wetSand:  P(24, 15, 22, .96, .6, .12, .25, .5, .5),
+  // order against concrete/rock: swash and evaporation tie it to the sea's temperature (Teq near the sea's 18 °C);
+  // rRadio .48 wet ground [P527]
+  wetSand:  P(24, 15, 22, .96, .6, .12, .25, .48, .5),
   // dry quartz sand: hot at sunset, radiates fast (μ 620) [Oke]. eIR .92 (quartz reststrahlen dip at 8–9.5 µm) [Sal, EL];
   // eMW .9 [UMF]; uvAlb .22 (UV-A end of 0.14–0.24) [FG]; gamma .3 — quartz is nearly inert, typical beach sand
-  // 20–40 nGy/h [UN]; heavy-mineral (monazite/zircon) sands are higher — see the seaside's local preset
-  sand:     P(34, 9, 18, .92, .9, .22, .3, .3),
+  // 20–40 nGy/h [UN]; heavy-mineral (monazite/zircon) sands are higher — see the seaside's local preset; rRadio .07 very
+  // dry ground [P527]
+  sand:     P(34, 9, 18, .92, .9, .22, .3, .07),
   // granite: slow to cool (μ ~2200) [Oke], the reference for gamma (= 1) [UN]. eIR .9 [Sal, EL]; eMW .88 [UMF];
-  // uvAlb .12 — STAND-IN (no UV albedo measurement for granite found; a bit above concrete's 0.07–0.10 [FG] for pale granite)
-  rock:     P(33, 13, 40, .9, .88, .12, 1, .5),
+  // uvAlb .12 — STAND-IN (no UV albedo measurement for granite found; a bit above concrete's 0.07–0.10 [FG] for pale granite);
+  // rRadio .16 granite ε' ~5.5 [Dan]
+  rock:     P(33, 13, 40, .9, .88, .12, 1, .16),
   // fresh snow: lowest thermal admittance (μ 130) → cools fastest [Oke]; eIR .99 [Hori]; eMW .7 dry snow at 37 GHz
-  // [Mätzler]; uvAlb .85 [WHO, Blumthaler & Ambach]; gamma .1 (snowpack shields the ground) [UN]
-  snow:     P(-2, -6, 10, .99, .7, .85, .1, .3, .2),
+  // [Mätzler]; uvAlb .85 [WHO, Blumthaler & Ambach]; gamma .1 (snowpack shields the ground) [UN]; rRadio .15 — dry snow
+  // (ε' ~1.5, Mätzler 1996) is transparent at 3 m, the frozen ground under it reflects (ε' ~5 [P527] dry ground) — STAND-IN mix
+  snow:     P(-2, -6, 10, .99, .7, .85, .1, .15, .2),
   // grass: cools fast under a clear sky (canopy decoupled, dew). eIR .97 [EL, MOD]; eMW .92 [UMF]; uvAlb .03 [FG];
-  // gamma .3 — soil beneath (~0.4), lowered by soil moisture and the organic layer [UN]
-  meadow:   P(24, 7, 10, .97, .92, .03, .3, .2),
+  // gamma .3 — soil beneath (~0.4), lowered by soil moisture and the organic layer [UN]; rRadio .35 medium dry ground
+  // [P527] (grass is transparent at 3 m)
+  meadow:   P(24, 7, 10, .97, .92, .03, .3, .35),
   // canopy keeps warmth longer (trapped longwave). eIR .97 [EL, MOD]; eMW .93 [UMF]; uvAlb .03 [FG]; gamma .25 (soil
-  // under litter) [UN]
-  forest:    P(21, 12, 25, .97, .93, .03, .25, .3),
-  // canopy: tree crowns as objects (same emission as forest; the forest floor / forested terrain stays ground)
-  canopy:    P(21, 12, 25, .97, .93, .03, .25, .3, 0, TRANS.canopy),
+  // under litter) [UN]; rRadio .35 medium dry ground under the trees [P527]
+  forest:    P(21, 12, 25, .97, .93, .03, .25, .35),
+  // canopy: tree crowns as objects (same emission as forest; the forest floor / forested terrain stays ground); rRadio
+  // .05 — STAND-IN: a crown is a lossy volume of leaves and wood (~.05 dB/m at VHF, ITU-R P.833), not an interface
+  canopy:    P(21, 12, 25, .97, .93, .03, .25, .05, 0, TRANS.canopy),
   // bare dry soil / trail. eIR .94 [Sal, MOD]; eMW .9 dry soil [UMF]; uvAlb .08 (UV-A end; 0.04–0.05 in UV-B) [FG];
-  // gamma .4 world-median soil [UN]; μ ~600–1000 [Oke] ≥ dry sand's 620, so it cools no faster than sand
-  dirt:     P(28, 10, 20, .94, .9, .08, .4, .3),
+  // gamma .4 world-median soil [UN]; μ ~600–1000 [Oke] ≥ dry sand's 620, so it cools no faster than sand; rRadio .35
+  // medium dry ground [P527]
+  dirt:     P(28, 10, 20, .94, .9, .08, .4, .35),
   // stores the day's heat (μ ~1200) [Oke]. eIR .95 [EL]; eMW .88 urban surfaces [UMF]; uvAlb .05 [WHO];
-  // gamma .3 — STAND-IN (aggregate-dependent, below concrete; RP112 tabulates no asphalt row)
-  asphalt:  P(38, 17, 30, .95, .88, .05, .3, .5),
-  // μ ~2200 [Oke]. eIR .93 [EL]; eMW .88 [UMF]; uvAlb .1 (0.07–0.10) [FG]; gamma .4 (typical concrete ~0.42 of granite) [RP112]
-  concrete: P(32, 16, 30, .93, .88, .1, .4, .6),
+  // gamma .3 — STAND-IN (aggregate-dependent, below concrete; RP112 tabulates no asphalt row); rRadio .15 (ε' 4–8, Saarenketo)
+  asphalt:  P(38, 17, 30, .95, .88, .05, .3, .15),
+  // μ ~2200 [Oke]. eIR .93 [EL]; eMW .88 [UMF]; uvAlb .1 (0.07–0.10) [FG]; gamma .4 (typical concrete ~0.42 of granite) [RP112];
+  // rRadio .16 [P2040]
+  concrete: P(32, 16, 30, .93, .88, .1, .4, .16),
   // brick/plaster walls with heated interiors behind them (Teq kept high and tau held up by the interior — STAND-IN). eIR .9
-  // (brick 0.90–0.93) [EL]; eMW .85 [UMF]; uvAlb .08 — STAND-IN (like concrete, a bit darker); gamma .5 (brick ~0.65, plaster far lower: a mix) [RP112]
-  facade:    P(26, 19, 40, .9, .85, .08, .5, .8, 0, TRANS.facade),
+  // (brick 0.90–0.93) [EL]; eMW .85 [UMF]; uvAlb .08 — STAND-IN (like concrete, a bit darker); gamma .5 (brick ~0.65, plaster far lower: a mix) [RP112];
+  // rRadio .17 brick [P2040] (the wall material; rebar and window frames are not modelled)
+  facade:    P(26, 19, 40, .9, .85, .08, .5, .17, 0, TRANS.facade),
   // μ ~380 [Oke] (below sand and soil, so it cools faster than both); eIR .9 (0.90–0.95) [EL]; eMW .9 [UMF]; uvAlb .05 — STAND-IN (dark organic surface, like soil [FG]);
-  // gamma .1 (K-40 only) [UN]
-  wood:      P(22, 14, 12, .9, .9, .05, .1, .3, 0, TRANS.wood),
+  // gamma .1 (K-40 only) [UN]; rRadio .03 [P2040]
+  wood:      P(22, 14, 12, .9, .9, .05, .1, .03, 0, TRANS.wood),
   // warm-blooded body (M10/T9): the skin / fur surface stays ~30 °C all night (metabolism: no cooling, tau 0) —
   // STAND-IN between bare skin (~33 °C) and fur / clothing (~20–30 °C on a cool night); eIR .98 — human skin 0.98
   // (Steketee 1973, Phys. Med. Biol. 18:686), animal fur 0.95–0.99; eMW .6 — STAND-IN (wet tissue reflects microwaves,
   // skin emissivity ~0.5–0.7 at 10–40 GHz); uvAlb .05 — STAND-IN (skin / fur UV-A reflectance ~5–10 %); gamma .02 —
-  // body K-40 ~60 Bq/kg vs ~1200 Bq/kg in granite [UN]; rRadio .3 — STAND-IN
-  body:      P(30, 30, 0, .98, .6, .05, .02, .3, 0, TRANS.body),
+  // body K-40 ~60 Bq/kg vs ~1200 Bq/kg in granite [UN]; rRadio .75 tissue (Gabriel 1996)
+  body:      P(30, 30, 0, .98, .6, .05, .02, .75, 0, TRANS.body),
 };
-export function mixSurf(parts) {   // [[preset, weight], ...] -> blended {A, B, C}
-  const out = { A: [0, 0, 0, 0], B: [0, 0, 0, 0], C: [0, 0, 0, 0] }; let W = 0;
-  for (const [p, w] of parts) { if (w <= 0) continue; W += w; for (const k of 'ABC') for (let i = 0; i < 4; i++) out[k][i] += p[k][i] * w; }
-  for (const k of 'ABC') for (let i = 0; i < 4; i++) out[k][i] /= W || 1;
+// Reflection data per preset, D = [h (m), nirAlb, R0opt, slope (rad)] — sources and STAND-INs in the header above PRESET.
+const REFL = {
+  water:    [.002, .02, .02, .05],   // still water / a stream: mm ripples
+  wetSand:  [.003, .25, .02, .08],   // swash-smoothed, a water film on top
+  sand:     [.005, .45, .04, .15],   // wind ripples
+  rock:     [.05, .3, .05, .35],     // outcrops, boulders below the mesh scale
+  snow:     [.01, .9, .02, .1],
+  meadow:   [.05, .45, .04, .3],     // grass layer over soil
+  forest:   [.3, .3, .04, .5],       // litter and understorey
+  canopy:   [1, .3, .04, 1],         // a crown: a volume scatterer
+  dirt:     [.02, .3, .04, .2],
+  asphalt:  [.002, .12, .04, .05],
+  concrete: [.002, .35, .04, .05],
+  facade:   [.02, .35, .04, .1],     // reveals, sills
+  wood:     [.003, .45, .04, .1],
+  body:     [.01, .5, .03, .5],      // fur / clothing on a curved body
+};
+for (const [k, d] of Object.entries(REFL)) PRESET[k].D = d;
+export const surfD = p => p.D ?? DEF_D;
+export function mixSurf(parts) {   // [[preset, weight], ...] -> blended {A, B, C, D}
+  const out = { A: [0, 0, 0, 0], B: [0, 0, 0, 0], C: [0, 0, 0, 0], D: [0, 0, 0, 0] }; let W = 0;
+  for (const [p, w] of parts) { if (w <= 0) continue; W += w; const q = { ...p, D: surfD(p) }; for (const k of 'ABCD') for (let i = 0; i < 4; i++) out[k][i] += q[k][i] * w; }
+  for (const k of 'ABCD') for (let i = 0; i < 4; i++) out[k][i] /= W || 1;
   return out;
+}
+// 'attr' surfaces (heightfields) need a per-vertex aSurfD next to aSurfA/B/C: wrap the heightfield's surfAt with
+// collectSurfD(surfAt) — heightfield() calls it once per vertex, in vertex order — then attach(geometry)
+export function collectSurfD(surfAt) {
+  const D = [];
+  const f = (...a) => { const s = surfAt(...a); D.push(...surfD(s)); return s; };
+  f.attach = g => {
+    if (D.length !== g.attributes.position.count * 4) throw new Error(`collectSurfD: ${D.length / 4} values for ${g.attributes.position.count} vertices`);
+    g.setAttribute('aSurfD', new THREE.BufferAttribute(new Float32Array(D), 4)); return g;
+  };
+  return f;
 }
 
 // ---------------------------------------------------------------- GLSL
 export const SURF_VERT_DECL = `
 varying vec3 vSurfW; varying vec3 vSurfN;
 #ifdef SURF_ATTR
-attribute vec4 aSurfA; attribute vec4 aSurfB; attribute vec4 aSurfC; varying vec4 vSurfA; varying vec4 vSurfB; varying vec4 vSurfC;
+attribute vec4 aSurfA; attribute vec4 aSurfB; attribute vec4 aSurfC; attribute vec4 aSurfD; varying vec4 vSurfA; varying vec4 vSurfB; varying vec4 vSurfC; varying vec4 vSurfD;
 #endif
 `;
 export const SURF_VERT_MAIN = `{
@@ -141,15 +238,15 @@ export const SURF_VERT_MAIN = `{
   #endif
   vSurfW = (sm_ * vec4(position, 1.)).xyz; vSurfN = normalize(mat3(sm_) * normal);
   #ifdef SURF_ATTR
-    vSurfA = aSurfA; vSurfB = aSurfB; vSurfC = aSurfC;
+    vSurfA = aSurfA; vSurfB = aSurfB; vSurfC = aSurfC; vSurfD = aSurfD;
   #endif
 }`;
 export const SURF_FRAG_DECL = COMMON + `
 varying vec3 vSurfW; varying vec3 vSurfN;
 #ifdef SURF_ATTR
-varying vec4 vSurfA; varying vec4 vSurfB; varying vec4 vSurfC;
+varying vec4 vSurfA; varying vec4 vSurfB; varying vec4 vSurfC; varying vec4 vSurfD;
 #else
-uniform vec4 uSurfA, uSurfB, uSurfC;
+uniform vec4 uSurfA, uSurfB, uSurfC, uSurfD;
 #endif
 uniform float uSOnR_, uSOnM_, uSOnI_, uSOnU_, uSOnG_, uOverlay, uRadioDiffuse, uSurfT, uUVsky, uSurfTime;
 // band switches = uniform × eye mask: the spectral eye (engine/render/compose.js) evaluates one band at a time by
@@ -158,6 +255,8 @@ float eyeMR = 1., eyeMM = 1., eyeMI = 1., eyeMU = 1., eyeMG = 1.;
 // eyeSmooth = 1 inside the spectral eye's hooks: stylised random speckle is replaced by its expected value (the eye
 // adds the real detection statistics itself, photon grain / speckle — compose.js); 0 everywhere else
 float eyeSmooth = 0.;
+// speckle of coherent radio (transmitter reflections): set by the eye's hook (compose.js eyeSpeckle), 1 elsewhere
+float surfSpk = 1.;
 #define uSOnR (uSOnR_*eyeMR)
 #define uSOnM (uSOnM_*eyeMM)
 #define uSOnI (uSOnI_*eyeMI)
@@ -180,23 +279,73 @@ float txField(vec4 tx[${MAX_TX}], vec3 W, vec3 N, float range, float dashes){
     f += g; }
   return f;
 }
+// ---- reflection (M11/T2; the formulas and sources are in the header: REFLECTION). Spectral eye only.
+uniform vec3 uGalN, uGalC;
+const vec3 SURF_LUMW = vec3(.2126, .7152, .0722), SURF_RADC = vec3(1., .31, .85);
+float fresnelS(float R0, float c){ return R0 + (1. - R0)*pow(1. - clamp(c, 0., 1.), 5.); }          // Schlick
+float cohK(float h, float c, float lam){ float g = 12.566*h*c/lam; return exp(-g*g); }             // Beckmann: specular fraction
+float upK(vec3 d){ return smoothstep(-.02, .04, d.y); }                                             // mirror ray: sky above, ground below
+// band skies in direction d — the same formulas as the night sky's eye hook (engine/world/atmosphere.js)
+float skyRadioK(vec3 d){ float g = dot(d, uGalN), core = pow(max(dot(d, uGalC), 0.), 5.); return 36.*(17. + 230.*exp(-g*g/.06)*(1. + 2.5*core)); }
+float skyMicroK(vec3 d){ float t = .05/max(d.y, .02); return 2.725*exp(-t) + 270.*(1. - exp(-t)); }
+float skyIRC(vec3 d){ return mix(-60., 10., 1. - pow(.7, 1./max(d.y, .04))); }
+// mirror images of transmitters: a lobe of width s = 2·slope (≥ .03 rad, the narrowest image drawn) around the
+// specular direction. Flux-conserving: the image of a source of power P seen over the whole reflected path
+// (tx → surface → eye, the same near-field falloff as txField) is spread over the lobe, so its peak falls as (.03/s)²
+// — a mirror shows a bright point, a curved panel a dim sheen
+float txImage(vec4 tx[${MAX_TX}], vec3 W, vec3 N, vec3 Rf, float range, float slope){
+  float s = max(2.*slope, .03), f = 0., dc = length(W - cameraPosition);
+  for(int i = 0; i < ${MAX_TX}; i++){ if(tx[i].w <= 0.) continue;
+    vec3 L = tx[i].xyz - W; float d = length(L); L /= max(d, 1e-3);
+    float p = d + dc;
+    f += tx[i].w*step(0., dot(N, L))*exp(-(1. - dot(Rf, L))/(s*s))*(.0009/(s*s))/(1. + p*p/(range*range)); }
+  return f;
+}
+// radio seen by the eye: Kirchhoff brightness (1 − R)·T + R·T_reflected (sky / ground) at the sky's .006 per 1000 K,
+// plus the transmitters' mirror images and their diffuse remainder. T in °C, R0 = B.w, h = D.x, slope = D.w
+vec3 radioRefl(vec3 W, vec3 N, vec3 V, float T, float R0, float h, float slope){
+  float c = clamp(dot(-V, N), 0., 1.), S = cohK(h, c, 3.), R = mix(R0, fresnelS(R0, c), S), Tg = T + 273.;
+  vec3 Rf = reflect(V, N);
+  float Tsp = mix(Tg, skyRadioK(Rf), upK(Rf)), Tdif = mix(Tg, 2600., .5 + .5*N.y);
+  float Tb = (1. - R)*Tg + R*mix(Tdif, Tsp, S);
+  float tx = R*S*txImage(uTxR, W, N, Rf, 700., slope) + R0*(1. - S)*txField(uTxR, W, N, 700., 0.);
+  return SURF_RADC*(6e-6*Tb/dot(SURF_RADC, SURF_LUMW) + tx*1.1*surfSpk);   // only the coherent part speckles
+}
+// microwave brightness temperature (K) with the mirrored sky (R0 = 1 − eMW), and the transmitters' reflection
+float microTb(vec3 N, vec3 V, float T, float eMW, float h){
+  float c = clamp(dot(-V, N), 0., 1.), S = cohK(h, c, .015), R0 = 1. - eMW, R = mix(R0, fresnelS(R0, c), S), Tg = T + 273.;
+  vec3 Rf = reflect(V, N);
+  float Tsp = mix(Tg, skyMicroK(Rf), upK(Rf)), Tdif = mix(Tg, 27., .5 + .5*N.y);
+  return (1. - R)*Tg + R*mix(Tdif, Tsp, S);
+}
+float microTx(vec3 W, vec3 N, vec3 V, float eMW, float h, float slope){
+  float c = clamp(dot(-V, N), 0., 1.), S = cohK(h, c, .125), R0 = 1. - eMW;
+  return fresnelS(R0, c)*S*txImage(uTxM, W, N, reflect(V, N), 22., slope) + R0*(1. - S)*txField(uTxM, W, N, 22., 0.);
+}
+// the 8–14 µm sky temperature (°C) a surface reflects: the mirror direction for its glossy part, the cos-weighted
+// hemisphere (sky mean −28 °C, the ground below at the surface's own T) for the rest
+float irReflT(vec3 N, vec3 V, float T, float gloss){
+  vec3 Rf = reflect(V, N);
+  return mix(mix(T, -28., .5 + .5*N.y), mix(T, skyIRC(Rf), upK(Rf)), gloss);
+}
 vec3 surfBands(vec3 W, vec3 N, float inVis){   // inVis = 1 for the faint overlay in visible light: smooth terms only
 #ifdef SURF_ATTR
-  vec4 A = vSurfA, B = vSurfB, C = vSurfC;
+  vec4 A = vSurfA, B = vSurfB, C = vSurfC, D = vSurfD;
 #else
-  vec4 A = uSurfA, B = uSurfB, C = uSurfC;
+  vec4 A = uSurfA, B = uSurfB, C = uSurfC, D = uSurfD;
 #endif
+  bool reflOn = eyeSmooth > .5;                                       // inside the spectral eye: reflection model on
   vec3 V = W - cameraPosition; float dist = length(V); V /= dist;
   float cosv = clamp(dot(-V, N), 0., 1.), near = (1. - smoothstep(12., 90., dist))*(1. - inVis);
   float T = A.y + (A.x - A.y)*exp(-uSurfT*A.z);
   vec3 col = vec3(0.);
   if(uSOnI > 0.){                                                     // INFRARED
-    float e = A.w*mix(1., 1. - .7*pow(1. - cosv, 4.), C.x), Tr = e*T + (1. - e)*(-35.);
+    float e = A.w*mix(1., 1. - .7*pow(1. - cosv, 4.), C.x), Tr = e*T + (1. - e)*(reflOn ? irReflT(N, V, T, C.x) : -35.);
     float x = clamp((Tr + 4.)/44., 0., 1.);
     col += uSOnI*thermal(x)*(.04 + .5*x*x);
   }
   if(uSOnM > 0.){                                                     // MICROWAVE
-    float Tb = B.x*(T + 273.) + (1. - B.x)*50., x = clamp((Tb - 120.)/180., 0., 1.);
+    float Tb = reflOn ? microTb(N, V, T, B.x, D.x) : B.x*(T + 273.) + (1. - B.x)*50., x = clamp((Tb - 120.)/180., 0., 1.);
     // crackle only up close, in cells of ~0.2° (like the emitter crackle): power-of-two world cells so they don't swim
     float cs = exp2(floor(log2(max(dist*.0035, .03)))); vec3 gc = mod(floor(W/cs), 512.);
     vec2 g = gc.xz + gc.y*17.31; float sp = mix(step(.96 - .06*x, h21(g + floor(uSurfTime*10.)))*near, 0., eyeSmooth);   // eye: none — the sparks are decoration, the emission is the Tb wash
@@ -206,13 +355,18 @@ vec3 surfBands(vec3 W, vec3 N, float inVis){   // inVis = 1 for the faint overla
     // the sparks halve; ray-hit flashes (and the Em/Rib/EmField emitters, drawn elsewhere) stay at full brightness.
     // The faint visible-light overlay keeps its old mean tint (tx unsaturated, no IR toning).
     float wash = mix((1. - .85*uSOnI)*(x*x*.12 + txs*.22), x*x*.12 + tx*.35, inVis);
+    if(reflOn) wash = x*x*.12 + microTx(W, N, V, B.x, D.x, D.w)*.35;   // eye: the transmitters reflected (diffuse + mirror image)
     col += uSOnM*(vec3(1.,.6,.1)*wash + (1. - .5*uSOnI)*c*sp*(x*.3 + txs*.9)) + uSOnM*vec3(1.,.93,.75)*hit*1.4;
   }
   if(uSOnR > 0.){                                                     // RADIO
-    col += uSOnR*uRadioDiffuse*vec3(1.,.31,.85)*B.w*txField(uTxR, W, N, 700., 9.)*1.1;
+    if(reflOn) col += uSOnR*radioRefl(W, N, V, T, B.w, D.x, D.w);
+    else col += uSOnR*uRadioDiffuse*vec3(1.,.31,.85)*B.w*txField(uTxR, W, N, 700., 9.)*1.1;
   }
   if(uSOnU > 0.){                                                     // ULTRAVIOLET
-    col += uSOnU*vec3(.62,.3,1.)*B.y*uUVsky*(.35 + .65*max(N.y, 0.))*1.3;
+    float u = B.y*(.35 + .65*max(N.y, 0.));
+    // eye: the glossy part mirrors the skylight (Fresnel R0opt = D.z), the rest is the diffuse albedo
+    if(reflOn){ float F = C.x*fresnelS(D.z, cosv); u = u*(1. - F) + F*upK(reflect(V, N)); }
+    col += uSOnU*vec3(.62,.3,1.)*u*uUVsky*1.3;
   }
   if(uSOnG > 0.){                                                     // GAMMA
     vec3 gc = floor(W*2.2); float h = h21(gc.xz + gc.y*17.31 + floor(uSurfTime*16.)*3.17);
@@ -235,7 +389,7 @@ function instrumentMaterial(props, { lines = 'none', cell = 25, extraDecl = '', 
   const attr = props === 'attr';
   return new THREE.ShaderMaterial({
     defines: attr ? { SURF_ATTR: '' } : {},
-    uniforms: { ...SURF_U, ...uniforms, ...(attr ? {} : { uSurfA: { value: toVec4(props.A) }, uSurfB: { value: toVec4(props.B) }, uSurfC: { value: toVec4(props.C) } }) },
+    uniforms: { ...SURF_U, ...uniforms, ...(attr ? {} : { uSurfA: { value: toVec4(props.A) }, uSurfB: { value: toVec4(props.B) }, uSurfC: { value: toVec4(props.C) }, uSurfD: { value: toVec4(surfD(props)) } }) },
     vertexShader: SURF_VERT_DECL + vertDecl + `void main(){ ${SURF_VERT_MAIN} ${vertMain}
       gl_Position = projectionMatrix * viewMatrix * vec4(vSurfW, 1.); }`,
     fragmentShader: SURF_FRAG_DECL + extraDecl + `
@@ -254,7 +408,7 @@ function instrumentMaterial(props, { lines = 'none', cell = 25, extraDecl = '', 
 
 function patchVisible(mat, props, { extraDecl = '', visExtra = '', instrExtra = '', uniforms = {}, vertDecl = '', vertMain = '' } = {}) {
   const attr = props === 'attr', prev = mat.onBeforeCompile, prevKey = mat.customProgramCacheKey(), id = ++variant;
-  const own = attr ? {} : { uSurfA: { value: toVec4(props.A) }, uSurfB: { value: toVec4(props.B) }, uSurfC: { value: toVec4(props.C) } };
+  const own = attr ? {} : { uSurfA: { value: toVec4(props.A) }, uSurfB: { value: toVec4(props.B) }, uSurfC: { value: toVec4(props.C) }, uSurfD: { value: toVec4(surfD(props)) } };
   mat.onBeforeCompile = (sh, r) => {
     prev.call(mat, sh, r);
     Object.assign(sh.uniforms, SURF_U, uniforms, own);
@@ -282,10 +436,12 @@ vec3 eyeSurfC(){ vec3 N = normalize(vSurfN), W = vSurfW; float dist = length(W -
   vec3 c = surfBands(W, N, 0.); ${instrExtra}
   return c; }
 float eyeSurfL(float r, float m, float i, float u, float g){ eyeMR = r; eyeMM = m; eyeMI = i; eyeMU = u; eyeMG = g; eyeSmooth = 1.; return eyeL(eyeSurfC()); }
+#define EYE_OWN_SPECKLE
 void eyeBands(out vec4 o1, out vec4 o3){
+  surfSpk = eyeSpeckle();
   o1 = vec4(eyeSurfL(0., 0., 1., 0., 0.), eyeSurfL(0., 0., 0., 1., 0.), eyeSurfL(0., 0., 0., 0., 1.), 1.);
   o3 = vec4(eyeSurfL(1., 0., 0., 0., 0.), eyeSurfL(0., 1., 0., 0., 0.), 0., 1.);
-  eyeMR = eyeMM = eyeMI = eyeMU = eyeMG = 1.; eyeSmooth = 0.; }`;
+  eyeMR = eyeMM = eyeMI = eyeMU = eyeMG = 1.; eyeSmooth = 0.; surfSpk = 1.; }`;
 
 // Registry of surfaces for the meters (activity is the weighted band response of each surface).
 const SURFACES = [];
@@ -297,6 +453,7 @@ const SURFACES = [];
 export function spectral(mesh, props, opts = {}) {
   if (typeof props === 'string' && props !== 'attr') props = PRESET[props];
   const mat = mesh.material, ud = mat.userData;
+  if (props === 'attr' && !mesh.geometry.attributes.aSurfD) throw new Error('spectral(): an \'attr\' surface needs aSurfD (collectSurfD)');
   if (!ud.surfInstr) {                                   // a material shared by several meshes is patched once
     if (!opts.custom) patchVisible(mat, props, opts);
     ud.surfInstr = instrumentMaterial(props, opts);
@@ -311,7 +468,7 @@ export function spectralGroup(group, props, opts = {}) {
   return group;
 }
 // uniforms for a custom ShaderMaterial that includes SURF_FRAG_DECL / calls surfBands()
-export const surfaceUniforms = props => ({ ...SURF_U, uSurfA: { value: toVec4(props.A) }, uSurfB: { value: toVec4(props.B) }, uSurfC: { value: toVec4(props.C) } });
+export const surfaceUniforms = props => ({ ...SURF_U, uSurfA: { value: toVec4(props.A) }, uSurfB: { value: toVec4(props.B) }, uSurfC: { value: toVec4(props.C) }, uSurfD: { value: toVec4(surfD(props)) } });
 
 // ---------------------------------------------------------------- transmitters
 const TX = { radio: [], micro: [] };

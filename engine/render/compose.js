@@ -166,7 +166,9 @@ void main(){ ${ZERO} eyeMain_();
   else if(eyeP2 > .5) discard; }`;
 // surfaces: their band emission (hook), crossed through the air; opaque ones add the UV haze in front of them and
 // write their transmission for the penetration pass
-// (a hook may #define EYE_SKY — the sky's own emission: no air in front of it — and its own spectral positions
+// (a hook may #define EYE_OWN_SPECKLE — it applies the radio speckle itself, to its coherent part only (transmitter
+// reflections; thermal emission and the mirrored synchrotron sky are incoherent: M11/T2);
+// it may #define EYE_SKY — the sky's own emission: no air in front of it — and its own spectral positions
 // EYE_POS_A = (IR, UV, gamma), EYE_POS_L = (radio, micro, X-ray))
 const SURF_MAIN = opaque => `
 #ifndef EYE_POS_A
@@ -180,7 +182,9 @@ void main(){ ${ZERO} eyeMain_(); eyeBands(eyeO1, eyeO3);
   float d = eyeDist();
   eyeO1.rgb *= vec3(eyeAtt(2, EYE_POS_A.x, d), eyeAtt(4, EYE_POS_A.y, d), eyeAtt(6, EYE_POS_A.z, d));
   eyeO3.rgb *= vec3(eyeAtt(0, EYE_POS_L.x, d), eyeAtt(1, EYE_POS_L.y, d), 1.);
+#ifndef EYE_OWN_SPECKLE
   eyeO3.r *= eyeSpeckle();                                                // coherent radio reflections
+#endif
   ${opaque ? 'eyeO1.g += eyeUVpath(d); eyeO5 = vec4(eyeTrans(), 1.);' : ''}
 #endif
   // hooks hand gamma in o1.b and X-ray in o3.b; the outputs keep gamma with the long waves (fog and cloud don't hide
