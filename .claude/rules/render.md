@@ -48,7 +48,7 @@ in `engine/render/surface.js`; the dark detector view (`engine/render/instrument
 7. **Cone-shaped sources are streamlines + a mouth ring** (`ringPts`), never one tapered ribbon — radio dashes scale
    with `uLen = length / width` and turn to confetti.
 8. **Surfaces take their physics from `PRESET`s in `engine/render/surface.js`**, packed as
-   `A = [T0, Teq, 1/tau, eIR]`, `B = [eMW, uvAlb, gamma, rRadio]`, `C = [gloss, 0, 0, 0]` (`P(...)` builds a row;
+   `A = [T0, Teq, 1/tau, eIR]`, `B = [eMW, uvAlb, gamma, rRadio]`, `C = [gloss, Tradio, Tmicro, Tgamma]` (rule 12; `P(...)` builds a row;
    `tau = 0` means no cooling). Add or tune a preset there rather than per-mesh literals. **Every value cites a source
    by the keys in the header above `PRESET`** (`[Sal]`, `[EL]`, `[MOD]`, `[UMF]`, `[FG]`, `[WHO]`, `[UN]`, `[RP112]`,
    `[Oke]`, or a named paper) **or says STAND-IN** (M7/T4); `T0`/`Teq`/`tau` are stand-ins whose order follows the

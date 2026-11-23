@@ -112,7 +112,7 @@ function terrain() {
     vec3 c = vec3(0.);
     if(uSOnM > 0.){                                   // ship radar echoes off the cliffs (microwave)
       float e = radarEcho(W, N); vec2 gc = floor(W.xz*.12);
-      c += uSOnM*vec3(1.,.55,.08)*e*(.2 + step(.55, h21(gc + floor(uSurfTime*12.))));
+      c += uSOnM*vec3(1.,.55,.08)*e*(.2 + mix(step(.55, h21(gc + floor(uSurfTime*12.))), .45, eyeSmooth));   // eye: expected value
     }
     if(uSOnI > 0. && uFire.w > 0.){                   // bonfire: hot sand around the pit
       float r = length(W.xz - uFire.xz); c += uSOnI*thermal(clamp(.95 - r*.22, 0., 1.))*uFire.w*exp(-r*r*.12)*.8;
@@ -161,7 +161,7 @@ vec3 seaBands(vec3 W, vec3 N, vec3 V, vec3 Rf, float dist, float foam, float inV
     col += uSOnM*mix(vec3(1.,.42,0.), vec3(1.,.85,.2), h21(g*1.7))*(x*x*.22 + sp*x*x*.5);
     // radar sea clutter: the sea returns far less than the cliffs at grazing incidence (sigma0 tens of dB below land)
     // and only within a few km of the antenna
-    float cl = radarEcho(W, vec3(0.,1.,0.))*exp(-length(W - uRadP)/1800.)*step(.55, h21(floor(W.xz*.05) + floor(uSurfTime*12.)));
+    float cl = radarEcho(W, vec3(0.,1.,0.))*exp(-length(W - uRadP)/1800.)*mix(step(.55, h21(floor(W.xz*.05) + floor(uSurfTime*12.))), .45, eyeSmooth);   // eye: expected value
     col += uSOnM*vec3(1.,.55,.08)*cl*.15;
   }
   if(uSOnR > 0.){                                   // RADIO: transmitters paint the water; the sea mirrors the radio sky

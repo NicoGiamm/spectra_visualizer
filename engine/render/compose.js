@@ -486,7 +486,8 @@ class EyePass extends Pass {
     const [o, ch] = SLOT[id];
     const raw = copy(LUM + `uniform sampler2D t; uniform vec4 uSel; varying vec2 vUv; void main(){ vec4 c = clean(texture2D(t, vUv)); gl_FragColor = vec4(uSel.a > 1.5 ? lum(c.rgb) : dot(c.rgb, uSel.rgb)); }`,
       { t: { value: this.mrt.texture[o] }, uSel: { value: SEL(id) } });
-    const disp = copy(this.combineQ.material.fragmentShader.replace('gl_FragColor = vec4(o, 1.); }', 'gl_FragColor = vec4(o, lum(o)); }'), this.combineQ.material.uniforms);
+    const disp = copy(this.combineQ.material.fragmentShader.replace('gl_FragColor = vec4(C*k, 1.); }', 'gl_FragColor = vec4(C*k, lum(C*k)); }'), this.combineQ.material.uniforms);
+    if (disp.every((x, k) => k % 4 !== 3 || x === 1)) throw new Error('eyeratio: the combine patch did not apply');
     const a = new Float32Array(32); renderer.readRenderTargetPixels(adaptRT, 0, 0, 8, 1, a);
     const bi = IDS.indexOf(id), La = a[bi * 4 + 2], Lr = LREF[id];
     const g = EYE.key / (Lr ** (1 - EYE.p) * Math.max(La, EYE.floorRel * Lr) ** EYE.p);
@@ -495,7 +496,7 @@ class EyePass extends Pass {
     let i2 = -1; for (let i = 0; i < w * h; i++) { const dx = i % w - i1 % w, dy = (i / w | 0) - (i1 / w | 0); if (dx * dx + dy * dy >= 144 && (i2 < 0 || L(i) > L(i2))) i2 = i; }
     const lit = []; for (let i = 0; i < w * h; i++) if (L(i) > L(i1) * .01) lit.push(i);
     lit.sort((x, y) => L(x) - L(y)); const i3 = lit[lit.length >> 1];
-    const pair = (x, y) => ({ px: [[x % w, x / w | 0], [y % w, y / w | 0]], raw: [L(x), L(y)], rawRatio: L(x) / L(y), adaptedRatio: (L(x) * g) / (L(y) * g), displayed: [D(x), D(y)] });
+    const pair = (x, y) => ({ px: [[x % w, x / w | 0], [y % w, y / w | 0]], raw: [L(x), L(y)], rawRatio: L(x) / L(y), adaptedRatio: (L(x) * g) / (L(y) * g) /* one scalar per band: equal to rawRatio by construction */, displayed: [D(x), D(y)] });
     const el = document.createElement('script'); el.type = 'application/json'; el.id = 'eye-ratio';
     el.textContent = JSON.stringify({ band: id, gain: g, La, pairs: [pair(i1, i2), pair(i1, i3)], brightestRGB: RGB(i1) }); document.body.appendChild(el);
   }

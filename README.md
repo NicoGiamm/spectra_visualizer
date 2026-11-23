@@ -193,7 +193,8 @@ Python code is formatted and linted with [ruff](https://docs.astral.sh/ruff/) an
 - an event gantt with each event's bands;
 - per-band meter fill (`1 − exp(−activity / norm)`, as the HUD draws it), with its typical value, its peak and the
   script seconds it spends above 0.9;
-- draw calls at t = 5, 30 and 55;
+- draw calls of the whole frame at t = 5, 30 and 55;
+- each band's share of the displayed luminance in the spectral eye at t = 20 and 40;
 - a physics check: every event's declared bands must match the bands of the processes it lists and the bands it
   actually draws. The check runs in Orbit mode and again in Ground mode, where an absorbed band drawn from the
   ground is also flagged.
