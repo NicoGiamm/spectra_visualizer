@@ -16,6 +16,10 @@ const gain = band => (S.eye ? 1 : GAIN[band]);
 // spectral position of a source inside its band (0 long-wave … 1 short-wave, spectrum.js bandPos): the mean over the
 // current event's processes in that band, .5 when it declares none; the eye shifts the band hue with it (uSpec)
 const POS = new Map();
+// per frame: Σ I and Σ I·position of the sources set in each band (the eye's diffraction blur picks the band's
+// wavelength from it, engine/render/compose.js); reset in hideAllSources()
+export const SPEC = Object.fromEntries(Object.keys(GAIN).map(b => [b, { w: 0, wp: 0 }]));
+const specAdd = (band, I, pos) => { const s = SPEC[band]; s.w += I; s.wp += I * pos; };
 function specPos(band) {
   const e = S.curEvent; if (!e) return .5;
   let m = POS.get(e); if (!m) POS.set(e, m = {});
@@ -76,7 +80,7 @@ export class Em {
     if (absorbed(this.band, this.origin)) { ghost(this, pos); return this; }
     S.act[this.band] += I; LOD.total.em++;
     if (size * pxPerUnit(pos) < LOD.minPx) { LOD.skipped.em++; this.m.visible = false; return this; }
-    const u = this.m.material.uniforms; this.m.position.copy(pos); u.uSize.value = size; u.uI.value = I * gain(this.band); u.uSpec.value = specPos(this.band);
+    const u = this.m.material.uniforms; this.m.position.copy(pos); u.uSize.value = size; u.uI.value = I * gain(this.band); u.uSpec.value = specPos(this.band); specAdd(this.band, I, u.uSpec.value);
     this.m.visible = S.on[this.band]; return this;
   }
 }
@@ -116,7 +120,7 @@ export class Rib {
     }
     pos.needsUpdate = uv.needsUpdate = true;
     this.m.geometry.setDrawRange(0, (m - 1) * 6);
-    const U = this.m.material.uniforms; U.uI.value = I * gain(this.band); U.uSpec.value = specPos(this.band); U.uFade.value = fade; U.uLen.value = total / Math.max(1e-3, (w0 + w1) / 2);
+    const U = this.m.material.uniforms; U.uI.value = I * gain(this.band); U.uSpec.value = specPos(this.band); specAdd(this.band, I * .5, U.uSpec.value); U.uFade.value = fade; U.uLen.value = total / Math.max(1e-3, (w0 + w1) / 2);
     this.m.visible = S.on[this.band]; return this;
   }
 }
@@ -157,7 +161,7 @@ export class EmField {
     if (absorbed(this.band, this.origin)) { ghost(this, pos); return this; }
     S.act[this.band] += I; LOD.total.field++;
     if (size * pxPerUnit(pos) < LOD.minPx) { LOD.skipped.field++; if (this.aI.array[i]) { this.aI.array[i] = 0; this.aI.needsUpdate = true; } return this; }
-    this.aPos.setXYZ(i, pos.x, pos.y, pos.z); this.aSize.array[i] = size; this.aI.array[i] = I * gain(this.band); this.m.material.uniforms.uSpec.value = specPos(this.band);
+    this.aPos.setXYZ(i, pos.x, pos.y, pos.z); this.aSize.array[i] = size; this.aI.array[i] = I * gain(this.band); this.m.material.uniforms.uSpec.value = specPos(this.band); specAdd(this.band, I, this.m.material.uniforms.uSpec.value);
     this.aPos.needsUpdate = this.aSize.needsUpdate = this.aI.needsUpdate = true;
     this.dirty = true; this.m.visible = S.on[this.band]; return this;
   }
@@ -168,4 +172,4 @@ export class EmField {
   }
 }
 
-export function hideAllSources() { lodFrame(); S.ghosts.clear(); EMS.forEach(e => e.m.visible = false); RIBS.forEach(r => r.m.visible = false); FIELDS.forEach(f => f.clear()); }
+export function hideAllSources() { lodFrame(); S.ghosts.clear(); for (const b in SPEC) SPEC[b].w = SPEC[b].wp = 0; EMS.forEach(e => e.m.visible = false); RIBS.forEach(r => r.m.visible = false); FIELDS.forEach(f => f.clear()); }

@@ -34,6 +34,16 @@ export const GAIN = { radio: 2.2, micro: 2.0, ir: 1.6, vis: 1, uv: 1.9, xray: 2.
 // IR .021, visible .042, UV 5.6e-4, X-ray 4.6e-6, gamma .0044) and rejected: they track how much of the frame a
 // band fills, not how bright its sources are, and would amplify the sparse bands (X-ray, UV, radio) 100–10 000×.
 // .37 is the visible field at dusk (seaside t 5), the photopic design point, so the night is darker than dusk.
+// Spectral eye (M10/T4): each band's receptor aperture D (m), which sets its diffraction blur θ ≈ 1.22 λ / D
+// (engine/render/compose.js; Gaussian σ ≈ 0.42 λ / D for the Airy core). A human-sized pupil cannot image radio at
+// all (λ ≫ D), so the enhanced eye has a receptor organ per band — stand-ins at instrument scale, not one value:
+//   ir/vis/uv  0.007  the dark-adapted human pupil (~7 mm): visible is sharper than a pixel, 10 µm IR ≈ 1 px
+//   micro      1      a dish of satellite-TV size (60–120 cm Ku/Ka-band dishes): 20 GHz ≈ 1°, 2.4 GHz ≈ 9° soft
+//   radio      100    an interferometric array the size of a LOFAR station (~30–90 m, van Haarlem et al. 2013,
+//                     A&A 556, A2): FM ≈ 2°, Jupiter's 20 MHz ≈ 10°, VLF sferics only a glow
+//   xray/gamma 0      no diffraction limit: those photons are imaged by masks / pinholes, not lenses
+export const APERTURE = { radio: 100, micro: 1, ir: .007, vis: .007, uv: .007, xray: 0, gamma: 0 };
+
 export const LREF = { radio: .37, micro: .37, ir: .37, vis: .37, uv: .37, xray: .37, gamma: .37 };
 
 // Meter normalisation (activity that fills a bar). Scenarios may override via `meterNorm`.

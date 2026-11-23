@@ -37,6 +37,14 @@
 //      rotated slightly with the light's position in the band (±hueShift/2 rad around the grey axis: FM radio vs a
 //      VLF sferic, 10 µm thermal glow vs near-IR); the visible layer keeps its colour, slightly desaturated (night
 //      vision is less coloured).
+//   2b. Sharpness. Each band is blurred by diffraction at its receptor aperture (APERTURE, bands.js): a Gaussian of
+//      σ ≈ 0.42 λ / D (the Airy core; first null at 1.22 λ / D) in screen pixels for the current field of view. λ is
+//      the band's wavelength this frame: the intensity-weighted spectral position of its sources (sources.js SPEC)
+//      and of its surfaces (SURF_POS, weighted by their meter activity), mapped back to a wavelength (posLambda).
+//      Radio (100 m array) and microwave (1 m dish) are soft, IR at 10 µm through a 7 mm pupil about a pixel,
+//      visible / UV sharper than a pixel (not blurred), X-ray / gamma not diffraction-limited. Built as one
+//      downsample to 2^k of the frame and a separable Gaussian there (σ' = σ / 2^k in [2, 4)), sampled bilinearly
+//      in the combine; σ is capped at a quarter of the frame height (beyond that the band is only a glow).
 //   3. Combine. The hue-coded layers are summed and stretched with the colour-preserving asinh of Lupton et al.
 //      2004 (PASP 116:133): out = C · asinh(β I) / (β I), I = mean(C), clipped by the brightest channel so hues
 //      survive. Faint things stay linear, bright ones compress logarithmically — no band can wash out the others.
@@ -53,10 +61,11 @@ import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 import { S } from '../core/state.js';
-import { BANDS, LREF } from '../core/bands.js';
+import { BANDS, LREF, APERTURE } from '../core/bands.js';
 import { applyVisMode } from './instrument.js';
 import { SURF_U, OVERLAY } from './surface.js';
-import { bandPos } from '../core/spectrum.js';
+import { bandPos, posLambda } from '../core/spectrum.js';
+import { SPEC } from './sources.js';
 
 const IDS = BANDS.map(b => b.id);                    // 0 radio, 1 micro, 2 ir, 3 vis, 4 uv, 5 xray, 6 gamma (uBand order)
 // where each band lives in the MRT: [output, channel]
@@ -136,7 +145,20 @@ void main(){ int b = int(gl_FragCoord.x); vec4 p = texelFetch(tPrev, ivec2(b, 0)
   if(b > 6){ gl_FragColor = p; return; }
   vec4 c = cur(b); gl_FragColor = mix(p, c, c.b > p.b ? uUp : uDown); }`;
 
-const COMBINE_FS = LUM + `uniform sampler2D tV, tB1, tS1, tB2, tS2, tA; varying vec2 vUv;
+// diffraction blur: one band's (luminance, luminance × position) from the MRT, box-averaged over 2^k × 2^k pixels
+// with 4×4 bilinear taps
+const DOWN_FS = LUM + `uniform sampler2D tL, tS; uniform vec4 uSel; uniform vec2 uPx; uniform float uB; varying vec2 vUv;
+void main(){ vec2 a = vec2(0.);
+  for(int j = 0; j < 4; j++) for(int i = 0; i < 4; i++){ vec2 o = (vec2(float(i), float(j)) - 1.5)*.25*uB*uPx;
+    a += vec2(dot(clean(texture2D(tL, vUv + o)).rgb, uSel.rgb), dot(clean(texture2D(tS, vUv + o)).rgb, uSel.rgb)); }
+  gl_FragColor = vec4(a/16., 0., 1.); }`;
+const GAUSS_FS = `uniform sampler2D t; uniform vec2 uDir; uniform float uSigma; varying vec2 vUv;
+void main(){ vec4 a = vec4(0.); float w = 0.; float R = ceil(3.*uSigma);
+  for(int i = -16; i <= 16; i++){ float x = float(i); if(abs(x) > R) continue;
+    float k = exp(-.5*x*x/(uSigma*uSigma)); a += k*texture2D(t, vUv + x*uDir); w += k; }
+  gl_FragColor = a/w; }`;
+
+const COMBINE_FS = LUM + `uniform sampler2D tV, tB1, tS1, tB2, tS2, tA, tBl0, tBl1, tBl2, tBl4; uniform vec4 uBl; varying vec2 vUv;
 uniform vec3 uHue[7]; uniform float uOn[7], uLref[7]; uniform float uKey, uP, uFloorRel, uBeta, uSatVis, uShift;
 float gain(int b){ float La = texelFetch(tA, ivec2(b, 0), 0).b;
   return uKey/(pow(uLref[b], 1. - uP)*pow(max(La, uFloorRel*uLref[b]), uP)); }
@@ -149,10 +171,13 @@ vec3 bandC(int b, float l, float ls){
 void main(){
   vec3 v = clean(texture2D(tV, vUv)).rgb;
   vec4 b1 = clean(texture2D(tB1, vUv)), s1 = clean(texture2D(tS1, vUv)), b2 = clean(texture2D(tB2, vUv)), s2 = clean(texture2D(tS2, vUv));
+  // diffraction-blurred bands (uBl: radio, micro, IR, UV) replace their sharp channel
+  vec2 bR = uBl.x > .5 ? texture2D(tBl0, vUv).rg : vec2(b2.r, s2.r), bM = uBl.y > .5 ? texture2D(tBl1, vUv).rg : vec2(b2.g, s2.g);
+  vec2 bI = uBl.z > .5 ? texture2D(tBl2, vUv).rg : vec2(b1.r, s1.r), bU = uBl.w > .5 ? texture2D(tBl4, vUv).rg : vec2(b1.g, s1.g);
   v *= gain(3);
   vec3 C = uOn[3]*mix(vec3(lum(v)), v, uSatVis)
-         + bandC(0, b2.r, s2.r) + bandC(1, b2.g, s2.g) + bandC(2, b1.r, s1.r)
-         + bandC(4, b1.g, s1.g) + bandC(5, b2.b, s2.b) + bandC(6, b1.b, s1.b);
+         + bandC(0, bR.x, bR.y) + bandC(1, bM.x, bM.y) + bandC(2, bI.x, bI.y)
+         + bandC(4, bU.x, bU.y) + bandC(5, b2.b, s2.b) + bandC(6, b1.b, s1.b);
   float I = (C.r + C.g + C.b)/3.;
   vec3 o = I > 1e-6 ? C*asinh(uBeta*I)/(uBeta*I) : C;
   o *= uBeta/asinh(uBeta);                                  // I = 1 maps to 1
@@ -163,12 +188,14 @@ const rtOpts = { type: THREE.HalfFloatType, minFilter: THREE.NearestFilter, magF
 // hue = the band colour scaled to a brightest channel of 1 (normalising to equal luminance instead multiplies a deep
 // red like IR's by ~3.7, so every IR pixel above ~0.1 clipped to flat red)
 const hueOf = id => { const c = new THREE.Color(BANDS.find(b => b.id === id).color); const m = Math.max(c.r, c.g, c.b); return new THREE.Vector3(c.r / m, c.g / m, c.b / m); };
+const BLUR = ['radio', 'micro', 'ir', 'uv'];       // bands with an aperture (vis is sub-pixel and RGB: never blurred)
+const lin = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, type: THREE.HalfFloatType, depthBuffer: false };
 const SEL = id => { const [o, ch] = SLOT[id]; return o === 0 ? new THREE.Vector4(0, 0, 0, 2) : new THREE.Vector4(ch === 0 ? 1 : 0, ch === 1 ? 1 : 0, ch === 2 ? 1 : 0, 0); };
 
 class EyePass extends Pass {
   constructor(scene, camera, q) {
     super();
-    Object.assign(this, { scene, camera, first: true, dbg: q.has('eyedbg'), ratio: q.has('eyeratio') ? 0 : -1, chains: {} });
+    Object.assign(this, { scene, camera, first: true, dbg: q.has('eyedbg'), dbgN: 0, ratio: q.has('eyeratio') ? 0 : -1, chains: {} });
     for (const [k, n] of [['ekey', 'key'], ['ep', 'p'], ['efloor', 'floorRel'], ['ebeta', 'beta']]) if (q.has(k)) EYE[n] = +q.get(k);
     this.mrt = new THREE.WebGLMultipleRenderTargets(1, 1, 5, { type: THREE.HalfFloatType });
     this.reduceQ = new FullScreenQuad(new THREE.ShaderMaterial({ vertexShader: VS, fragmentShader: REDUCE_FS,
@@ -179,7 +206,39 @@ class EyePass extends Pass {
     this.combineQ = new FullScreenQuad(new THREE.ShaderMaterial({ vertexShader: VS, fragmentShader: COMBINE_FS, uniforms: {
       tV: { value: null }, tB1: { value: null }, tS1: { value: null }, tB2: { value: null }, tS2: { value: null }, tA: { value: null }, uShift: { value: EYE.hueShift },
       uHue: { value: IDS.map(hueOf) }, uOn: { value: IDS.map(() => 0) }, uLref: { value: IDS.map(id => LREF[id]) },
-      uKey: { value: 0 }, uP: { value: 0 }, uFloorRel: { value: 0 }, uBeta: { value: 0 }, uSatVis: { value: EYE.satVis } } }));
+      uKey: { value: 0 }, uP: { value: 0 }, uFloorRel: { value: 0 }, uBeta: { value: 0 }, uSatVis: { value: EYE.satVis },
+      tBl0: { value: null }, tBl1: { value: null }, tBl2: { value: null }, tBl4: { value: null }, uBl: { value: new THREE.Vector4() } } }));
+    this.downQ = new FullScreenQuad(new THREE.ShaderMaterial({ vertexShader: VS, fragmentShader: DOWN_FS,
+      uniforms: { tL: { value: null }, tS: { value: null }, uSel: { value: new THREE.Vector4() }, uPx: { value: new THREE.Vector2() }, uB: { value: 1 } } }));
+    this.gaussQ = new FullScreenQuad(new THREE.ShaderMaterial({ vertexShader: VS, fragmentShader: GAUSS_FS,
+      uniforms: { t: { value: null }, uDir: { value: new THREE.Vector2() }, uSigma: { value: 1 } } }));
+    this.blur = Object.fromEntries(BLUR.map(b => [b, { sigma: 0, k: -1, a: null, c: null }]));
+  }
+  // σ (px) of band b's diffraction blur this frame, from its wavelength mix and its aperture
+  sigmaPx(b) {
+    const D = APERTURE[b]; if (!D) return 0;
+    const sp = SPEC[b], wSurf = Math.max(0, S.act[b] - sp.w), w = sp.w + wSurf;
+    const pos = w > 1e-9 ? (sp.wp + wSurf * SURF_POS[b]) / w : SURF_POS[b];
+    const radPx = THREE.MathUtils.degToRad(this.camera.fov) / this.camera.zoom / this.mrt.height;
+    return Math.min(.42 * posLambda(b, pos) / D / radPx, this.mrt.height / 4);
+  }
+  // downsample band b to 2^k and blur it there (H then V); returns the texture, or null when σ < 0.5 px
+  blurBand(renderer, b) {
+    const sig = this.sigmaPx(b), B = this.blur[b]; B.sigma = sig;
+    if (!(sig >= .5) || !S.on[b]) return null;
+    const k = Math.max(0, Math.floor(Math.log2(sig / 2))), w = Math.ceil(this.mrt.width / 2 ** k), h = Math.ceil(this.mrt.height / 2 ** k);
+    if (B.k !== k || !B.a || B.a.width !== w || B.a.height !== h) {
+      B.a?.dispose(); B.c?.dispose(); B.k = k;
+      B.a = new THREE.WebGLRenderTarget(w, h, lin); B.c = new THREE.WebGLRenderTarget(w, h, lin);
+    }
+    const [o] = SLOT[b], du = this.downQ.material.uniforms, gu = this.gaussQ.material.uniforms;
+    du.tL.value = this.mrt.texture[o]; du.tS.value = this.mrt.texture[o + 1]; du.uSel.value = SEL(b);
+    du.uPx.value.set(1 / this.mrt.width, 1 / this.mrt.height); du.uB.value = 2 ** k;
+    renderer.setRenderTarget(B.a); this.downQ.render(renderer);
+    gu.uSigma.value = sig / 2 ** k;
+    gu.t.value = B.a.texture; gu.uDir.value.set(1 / w, 0); renderer.setRenderTarget(B.c); this.gaussQ.render(renderer);
+    gu.t.value = B.c.texture; gu.uDir.value.set(0, 1 / h); renderer.setRenderTarget(B.a); this.gaussQ.render(renderer);
+    return B.a.texture;
   }
   setSize(w, h) {
     this.mrt.setSize(w, h);
@@ -216,10 +275,13 @@ class EyePass extends Pass {
     au.uUp.value = this.first ? 1 : 1 - Math.exp(-step / EYE.tauUp); au.uDown.value = this.first ? 1 : 1 - Math.exp(-step / EYE.tauDown);
     this.first = false;
     renderer.setRenderTarget(next); this.adaptQ.render(renderer); this.adapt.reverse();
-    if (this.dbg) this.readout(renderer, next);
+    if (this.dbg && this.dbgN++ < 3) this.readout(renderer, next);   // first frames only: adapted from frame 1, readback stalls
     const cu = this.combineQ.material.uniforms;
     cu.tV.value = tex[0]; cu.tB1.value = tex[1]; cu.tS1.value = tex[2]; cu.tB2.value = tex[3]; cu.tS2.value = tex[4]; cu.tA.value = next.texture;
     IDS.forEach((id, i) => cu.uOn.value[i] = S.on[id] ? 1 : 0);
+    const bl = BLUR.map(b => this.blurBand(renderer, b));
+    [cu.tBl0.value, cu.tBl1.value, cu.tBl2.value, cu.tBl4.value] = bl;
+    cu.uBl.value.set(...bl.map(t => (t ? 1 : 0)));
     cu.uKey.value = EYE.key; cu.uP.value = EYE.p; cu.uFloorRel.value = EYE.floorRel; cu.uBeta.value = EYE.beta;
     renderer.setRenderTarget(this.renderToScreen ? null : writeBuffer); this.combineQ.render(renderer);
     if (this.ratio >= 0 && ++this.ratio === 1) this.ratioCheck(renderer, next);
@@ -255,7 +317,7 @@ class EyePass extends Pass {
     const px = new Float32Array(32); renderer.readRenderTargetPixels(rt, 0, 0, 8, 1, px);
     let el = document.getElementById('eye-dbg');
     if (!el) { el = document.createElement('script'); el.type = 'application/json'; el.id = 'eye-dbg'; document.body.appendChild(el); }
-    el.textContent = JSON.stringify(Object.fromEntries(IDS.map((id, i) => [id, { logavg: Math.exp(px[i * 4]), max: px[i * 4 + 1], mean: px[i * 4 + 2] }])));
+    el.textContent = JSON.stringify(Object.fromEntries(IDS.map((id, i) => [id, { logavg: Math.exp(px[i * 4]), max: px[i * 4 + 1], mean: px[i * 4 + 2], sigmaPx: this.blur[id] ? +this.blur[id].sigma.toFixed(2) : 0 }])));
   }
 }
 
