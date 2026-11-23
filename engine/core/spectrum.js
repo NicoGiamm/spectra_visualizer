@@ -87,6 +87,7 @@ export const SPECTRUM = {
   thermal290:      { name: 'thermal emission ~290 K (ground, water)', lam: 10e-6 },
   thermal310:      { name: 'thermal emission ~310 K (bodies)', lam: 9.3e-6 },
   thermal700:      { name: 'thermal emission ~700 K (exhaust, chimney)', lam: 4.1e-6 },
+  wetExhaust:      { name: 'wet diesel exhaust: gas and cooling water (~330 K)', lam: 8.8e-6 },   // raw-water-cooled exhaust ~50–60 °C (ABYC P-1; temperature a STAND-IN); Wien 2898 µm·K / 330 K
   flame:           { name: 'flame light (glowing soot)', lam: 600e-9 },
   thermal1200:     { name: 'thermal emission ~1200 K (flames, embers)', lam: 2.4e-6 },
   // --- artificial light ---
@@ -107,6 +108,7 @@ export const SPECTRUM = {
   wxRadar:         { name: 'airborne weather radar (X-band)', f: 9.3e9 },
   xbandRadar:      { name: 'ship X-band radar', f: 9.4e9 },
   kuDownlink:      { name: 'satellite Ku-band downlink', f: 12e9 },
+  iridium:         { name: 'Iridium satellite phone / data burst (L band, 1616–1626.5 MHz)', f: 1621e6 },   // ITU-R M.1184; FCC IB Docket 02-364; TDD 90 ms frames, 8.28 ms bursts
   lte:             { name: 'LTE/5G phone uplink', f: 1.8e9 },
   nr35:            { name: '5G NR 3.5 GHz', f: 3.5e9 },
   lte800:          { name: 'LTE 800 MHz', f: 800e6 },
