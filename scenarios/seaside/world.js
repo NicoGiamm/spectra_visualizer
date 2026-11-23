@@ -157,7 +157,7 @@ vec3 seaBands(vec3 W, vec3 N, vec3 V, vec3 Rf, float dist, float foam, float inV
     float e = mix(.45*(1. - .55*pow(1. - cosv, 3.)), .92, foam);
     float Tb = e*(T + 273.) + (1. - e)*mix(110., 8., pow(clamp(Rf.y, 0., 1.), .3)), x = clamp((Tb - 120.)/180., 0., 1.);
     float cs = max(.4, dist*.012); vec2 g = floor(W.xz/cs);
-    float sp = mix(step(.88 - .3*x, h21(g + floor(uSurfTime*10.)))*(1. - inVis), .12 + .3*x, eyeSmooth);   // eye: expected value
+    float sp = mix(step(.88 - .3*x, h21(g + floor(uSurfTime*10.)))*(1. - inVis), 0., eyeSmooth);   // eye: none (decoration; the emission is the Tb wash)
     col += uSOnM*mix(vec3(1.,.42,0.), vec3(1.,.85,.2), h21(g*1.7))*(x*x*.22 + sp*x*x*.5);
     // radar sea clutter: the sea returns far less than the cliffs at grazing incidence (sigma0 tens of dB below land)
     // and only within a few km of the antenna

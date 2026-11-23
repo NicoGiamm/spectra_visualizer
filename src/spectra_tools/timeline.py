@@ -60,8 +60,19 @@ def render(rep: dict) -> str:
         f"{rep['sources']['rib']} Rib, {rep['sources']['fields']} fields ({rep['sources']['fieldInstances']} instances)",
         "draw calls (whole frame; spectral eye: MRT scene pass + eye/post passes): "
         + ", ".join(f"t={d['t']}: {d['calls']}" for d in rep["draws"]),
-        "",
     ]
+    # spectral eye: each band's share of the displayed luminance (exact per pixel: the stretch is one scalar per pixel)
+    for sh in rep.get("shares") or []:
+        tot = sum(sh["bands"].values()) or 1.0
+        top = max(sh["bands"], key=lambda b: sh["bands"][b])
+        lines.append(
+            f"displayed luminance share t={sh['t']}: "
+            + "  ".join(f"{b} {100 * sh['bands'][b] / tot:.0f}%" for b in BANDS)
+            + f"  (largest: {top})"
+        )
+    if rep.get("shares") == []:
+        lines.append("displayed luminance share: not measured (the asynchronous readback did not finish in time)")
+    lines.append("")
     axis = "".join(str(t // 10) if t % 10 == 0 else ("·" if t % 5 == 0 else " ") for t in range(61))
     lines.append(f"{'':<{W}} {axis}")
     order = sorted(range(len(rep["events"])), key=lambda i: (rep["events"][i]["t0"], rep["events"][i]["t1"]))

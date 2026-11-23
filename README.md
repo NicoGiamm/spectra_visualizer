@@ -17,6 +17,10 @@ It aims for **physics first, stylisation second**: every glowing thing declares 
 it (frequency, wavelength, whether it can reach the ground through the atmosphere), and anything compressed in
 time, rare or stylised is labelled as such in the interface.
 
+You see it through a **spectral eye**: one unified view in which every band is what an eye with a receptor for that
+band would see — each band adapts to its own scene, is as sharp as its wavelength allows, arrives as photons or as
+coherent waves, crosses (or doesn't cross) the air and matter in front of it, and has its own sky.
+
 ## Scenes
 
 | Scene | Where you are |
@@ -54,9 +58,10 @@ server).
 | Band presets | *All*, *Human eye*, *Invisible only*, *Thermal*, *Radio telescope*, *High energy* |
 | Play / pause, scrub | **Space**, the time slider |
 | Detector | *Orbit* (default: everything drawn) or *Ground* (what is absorbed by the atmosphere is hidden behind a marker that says where and why) |
+| Eye | *adapted* (default: every band has its own receptor) or *absolute* (one receptor, adapted to visible light, for every band); **Eye ⚙** opens per-band brightness sliders and a legend of what each band's brightness means (kept per browser) |
 
-Hover an event's band chips in the side panel to see its physical processes with frequency and wavelength. With
-the Visible band off, the scene turns into a dark detector display where only the selected bands remain.
+Hover an event's band chips in the side panel to see its physical processes with frequency and wavelength.
+Filtering a band off removes its layer from the eye.
 
 ### Link to a moment
 
@@ -67,6 +72,8 @@ Every scene page accepts URL parameters, handy for sharing a view:
 ```
 
 `t` is script time 0–60, `yaw` ±1.35 rad (positive looks left), `pitch` −0.1…1.5 rad, `bands` the bands to keep on.
+`eye=absolute` starts in absolute mode; `eye=0` shows the pre-eye view (one pass, fixed per-band gains, the dark
+detector display with Visible off), kept for comparison.
 
 ## How it works
 
@@ -94,17 +101,35 @@ Two layers make each band: **sources** (things that glow: a phone, a meteor, a r
 microwave emissivity, UV albedo, natural gamma activity and radio reflectivity, so the ground shows the spectrum
 too).
 
+### The spectral eye
+
+`engine/render/compose.js` turns the scene into one view (its header has every formula and citation):
+
+| Step | What happens |
+|---|---|
+| Layers | the scene is drawn once into several outputs: visible light, and each invisible band's emission (surfaces through a per-band hook, sources by their band) |
+| Air | ground-level light is attenuated over its distance per band: microwave barely, IR through the 8–14 µm window, UV by Rayleigh + haze (which also glows at dusk), X-rays within metres, terrestrial gamma within ~160 m |
+| Matter | radio, microwave and gamma pass through what blocks light, by each material's transmission: radio through buildings and round hills, microwave through foliage |
+| Sky | every band has its own sky: galactic synchrotron in radio, a dark microwave sky with a glowing horizon (the CMB is too faint to show next to warm ground), a warm IR horizon, UV twilight and airglow, a near-black X-ray / gamma sky |
+| Adaptation | each band's receptor adapts (partly) to its own field, from one shared model with no per-band gains; night stays darker than dusk |
+| Sharpness | each band is blurred by diffraction, 1.22 λ/D, for its receptor aperture (7 mm pupil, a 1 m dish for microwave, a 100 m array for radio) |
+| Statistics | light is counted as photons: X-ray and gamma (few, energetic photons) flicker as single hits; coherent radio shows speckle |
+| Colour | each band is one hue (shifting a little with frequency inside the band), visible keeps its colour; an asinh stretch (Lupton et al. 2004) combines them so no band washes out the others |
+
+`spectra timeline` reports each band's share of the displayed luminance at t 20 / 40.
+
 ### Spectral surfaces
 
 The landscape's own emission comes from the `PRESET` table in `engine/render/surface.js`: `water`, `wetSand`,
-`sand`, `rock`, `snow`, `meadow`, `forest`, `dirt`, `asphalt`, `concrete`, `facade` and `wood`. Each preset packs
+`sand`, `rock`, `snow`, `meadow`, `forest`, `canopy` (tree crowns), `dirt`, `asphalt`, `concrete`, `facade`, `wood`
+and `body` (warm-blooded animals and people). Each preset packs
 its physics into three vectors that reach the shaders as uniforms or per-vertex attributes:
 
 | Vector | Fields |
 |---|---|
 | `A` | `T0` (°C at sunset), `Teq` (°C night equilibrium), `1/tau` (cooling rate per script second), `eIR` (8–14 µm emissivity) |
 | `B` | `eMW` (microwave emissivity), `uvAlb` (UV albedo), `gamma` (terrestrial activity, granite = 1), `rRadio` (radio reflectivity) |
-| `C` | `gloss` (0 matte … 1 water/glass: emissivity drops at grazing angles) |
+| `C` | `gloss` (0 matte … 1 water/glass: emissivity drops at grazing angles), `Tradio`, `Tmicro`, `Tgamma` (what passes through from behind, for the eye) |
 
 Every value cites a source, by the short keys listed above the table (`[Sal]`, `[EL]`, `[UMF]`, `[FG]`, `[WHO]`,
 `[UN]`, `[RP112]`, `[Oke]`), or is marked STAND-IN. The temperatures and cooling times are stand-ins chosen per
@@ -114,8 +139,9 @@ paint).
 
 `spectral(mesh, preset, { lines: 'topo' | 'grid', weight, … })` makes a mesh spectral. The preset is a name, an
 `{A, B, C}` object (`mixSurf()` blends several) or `'attr'` for a terrain that carries its blend per vertex.
-`spectralGroup()` does the same for every mesh in a group. With Visible on, the surface layer is added faintly
-over the normal look; with Visible off, it is all that's left of the landscape. Each band shows:
+`spectralGroup()` does the same for every mesh in a group. The spectral eye reads each band from the surface
+separately; in the old view (`?eye=0`) the surface layer is added faintly over the normal look with Visible on, and is
+all that's left of the landscape with Visible off. Each band shows:
 
 | Band | What the ground shows |
 |---|---|
@@ -123,7 +149,7 @@ over the normal look; with Visible off, it is all that's left of the landscape. 
 | Microwave | brightness temperature `eMW·T + (1 − eMW)·50 K`, so calm water reads cold and land warm, lit up by microwave transmitters (routers, masts) and by short flashes where a ray hits a surface (multipath) |
 | Radio | light from radio transmitters only: falls off as 1/r², Lambertian, with moving dashes |
 | UV | `uvAlb` × the UV skylight left after sunset: snow and sand glow at dusk, grass doesn't |
-| Gamma | sparse scintillation speckle in proportion to activity: granite sparkles, the sea is almost silent |
+| Gamma | emission in proportion to activity (the eye turns it into single photon hits; the old view draws a speckle): granite sparkles, the sea is almost silent |
 | X-ray | nothing: the ground is dark in X-rays |
 
 Surfaces also feed the band meters with the same formulas the shaders use, scaled by each surface's `weight`.

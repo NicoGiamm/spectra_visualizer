@@ -114,7 +114,7 @@ function start(sc) {
       const gh = S.ghosts.get(e); if (gh) gh.bands.forEach(b => absorbed[i].add(b));
     });
   }
-  if (q.has('dump')) dumpReport(sc, EV, step, norm, +(q.get('dstep') || .5), out, !!eye);
+  if (q.has('dump')) dumpReport(sc, EV, step, norm, +(q.get('dstep') || .5), out, eye);
   if (q.has('t')) S.t = clamp(+q.get('t'), 0, 60); else S.t = 0;
   document.getElementById('loading').remove();
 
@@ -198,5 +198,14 @@ function dumpReport(sc, EV, step, norm, dt, composer, eye) {
     samples,
   };
   const el = document.createElement('script'); el.type = 'application/json'; el.id = 'spectra-dump';
+  // spectral eye: each band's share of the displayed luminance at t 20 / 40, read back asynchronously (a synchronous
+  // readback logs a GPU-stall warning); the report is updated in place when both are in (report.shares)
+  if (eye) report.shares = [];
   el.textContent = JSON.stringify(report); document.body.appendChild(el);
+  if (eye) {   // both measured back to back (the GPU keeps the order), then collected together: few frames fit the budget
+    const at = t => { step(t); composer.render(); return eye.measure().then(r => ({ t, ...r })); };
+    const p20 = at(20), p40 = at(40);
+    Promise.all([p20, p40]).then(sh => { report.shares = sh; el.textContent = JSON.stringify(report); })
+      .catch(err => { report.sharesError = String(err); el.textContent = JSON.stringify(report); });
+  }
 }

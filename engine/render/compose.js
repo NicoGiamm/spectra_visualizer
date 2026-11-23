@@ -275,15 +275,17 @@ float photons(int b, float l, float ls, vec2 p){
   if(l <= 0.) return 0.;
   float lam = exp(uLogLam[b].y - clamp(ls/l, 0., 1.)*(uLogLam[b].y - uLogLam[b].x)), N = l*uK*lam/1.23984e-6*uCell*uCell;
   return N > 1e5 ? l : l*poisson(N, floor(p/uCell))/N; }
-uniform vec3 uHue[7]; uniform float uOn[7], uLref[7]; uniform float uKey, uP, uFloorRel, uBeta, uSatVis, uShift;
-float gain(int b){ float La = texelFetch(tA, ivec2(b, 0), 0).b;
+uniform vec3 uHue[7]; uniform float uOn[7], uLref[7], uW[7]; uniform float uKey, uP, uFloorRel, uBeta, uSatVis, uShift, uAbs, uShare;
+// adapted: each band's receptor adapts to its own layer; absolute (uAbs): one receptor, adapted to the visible field,
+// for every band — the invisible bands then show at their raw level next to visible light
+float gain(int b){ float La = texelFetch(tA, ivec2(uAbs > .5 ? 3 : b, 0), 0).b;
   return uKey/(pow(uLref[b], 1. - uP)*pow(max(La, uFloorRel*uLref[b]), uP)); }
 // band b's colour: its hue rotated around the grey axis by (position − .5)·uShift (Rodrigues), brightest channel 1
 vec3 bandC(int b, float l, float ls){
   if(l <= 0.) return vec3(0.);
   float a = (clamp(ls/l, 0., 1.) - .5)*uShift, c = cos(a), s = sin(a); vec3 k = vec3(.57735), h = uHue[b];
   h = max(h*c + cross(k, h)*s + k*dot(k, h)*(1. - c), 0.); h /= max(max(h.r, h.g), max(h.b, 1e-4));
-  return uOn[b]*h*l*gain(b); }
+  return uOn[b]*uW[b]*h*l*gain(b); }
 void main(){
   vec3 v = clean(texture2D(tV, vUv)).rgb;
   vec4 b1 = clean(texture2D(tB1, vUv)), s1 = clean(texture2D(tS1, vUv)), b2 = clean(texture2D(tB2, vUv)), s2 = clean(texture2D(tS2, vUv));
@@ -296,14 +298,40 @@ void main(){
   float lx = photons(5, b2.b, s2.b, px + 3007.), lg = photons(6, b1.b, s1.b, px + 4001.);
   b2.b = lx; b1.b = lg;
   v *= gain(3);
-  vec3 C = uOn[3]*mix(vec3(lum(v)), v, uSatVis)
-         + bandC(0, bR.x, bR.y) + bandC(1, bM.x, bM.y) + bandC(2, bI.x, bI.y)
-         + bandC(4, bU.x, bU.y) + bandC(5, b2.b, s2.b) + bandC(6, b1.b, s1.b);
-  float I = (C.r + C.g + C.b)/3.;
-  vec3 o = I > 1e-6 ? C*asinh(uBeta*I)/(uBeta*I) : C;
-  o *= uBeta/asinh(uBeta);                                  // I = 1 maps to 1
-  float m = max(o.r, max(o.g, o.b)); if(m > 1.) o /= m;      // keep the hue where a pixel saturates
-  gl_FragColor = vec4(o, 1.); }`;
+  vec3 cV = uOn[3]*uW[3]*mix(vec3(lum(v)), v, uSatVis), c0 = bandC(0, bR.x, bR.y), c1 = bandC(1, bM.x, bM.y), c2 = bandC(2, bI.x, bI.y),
+       c4 = bandC(4, bU.x, bU.y), c5 = bandC(5, b2.b, s2.b), c6 = bandC(6, b1.b, s1.b);
+  vec3 C = cV + c0 + c1 + c2 + c4 + c5 + c6;
+  // the stretch is one scalar per pixel: k = asinh(βI)/(βI) · β/asinh(β) (I = 1 maps to 1), divided by the brightest
+  // channel where a pixel saturates (keeps the hue) — so each band's share of the displayed pixel is lum(c_b)·k
+  float I = (C.r + C.g + C.b)/3., k = (I > 1e-6 ? asinh(uBeta*I)/(uBeta*I) : 1.)*uBeta/asinh(uBeta);
+  float m = max(C.r, max(C.g, C.b))*k; if(m > 1.) k /= m;
+  if(uShare > .5){   // share pass (?dump): displayed luminance per band, radio micro IR vis | UV X-ray gamma total
+    gl_FragColor = uShare < 1.5 ? vec4(lum(c0), lum(c1), lum(c2), lum(cV))*k : vec4(lum(c4), lum(c5), lum(c6), lum(C))*k; return; }
+  gl_FragColor = vec4(C*k, 1.); }`;
+
+// mean of a SHARE_W × SHARE_H float target (x < 1: target A, x ≥ 1: target B) into a 2×1 target
+const SHARE_W = 128, SHARE_H = 80;
+const MEAN_FS = `uniform sampler2D tA, tB;
+void main(){ vec4 a = vec4(0.); bool first = gl_FragCoord.x < 1.;
+  for(int y = 0; y < ${SHARE_H}; y++) for(int x = 0; x < ${SHARE_W}; x++) a += first ? texelFetch(tA, ivec2(x, y), 0) : texelFetch(tB, ivec2(x, y), 0);
+  gl_FragColor = a/${(SHARE_W * SHARE_H).toFixed(1)}; }`;
+// read w×h RGBA floats of the bound target asynchronously (pixel-pack buffer + fence, collected on a later frame):
+// a synchronous readPixels stalls the GPU and logs a console warning, which fails `spectra timeline`
+function readAsync(gl, w, h) {
+  const n = w * h * 4, buf = gl.createBuffer();
+  gl.bindBuffer(gl.PIXEL_PACK_BUFFER, buf); gl.bufferData(gl.PIXEL_PACK_BUFFER, n * 4, gl.STREAM_READ);
+  gl.readPixels(0, 0, w, h, gl.RGBA, gl.FLOAT, 0); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+  const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0); gl.flush();
+  return new Promise(res => {
+    const poll = () => {
+      if (gl.clientWaitSync(sync, 0, 0) === gl.TIMEOUT_EXPIRED) { requestAnimationFrame(poll); return; }
+      gl.deleteSync(sync); const out = new Float32Array(n);
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, buf); gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, out); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+      gl.deleteBuffer(buf); res(out);
+    };
+    requestAnimationFrame(poll);
+  });
+}
 
 const rtOpts = { type: THREE.HalfFloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false };
 // hue = the band colour scaled to a brightest channel of 1 (normalising to equal luminance instead multiplies a deep
@@ -335,6 +363,7 @@ class EyePass extends Pass {
       tV: { value: null }, tB1: { value: null }, tS1: { value: null }, tB2: { value: null }, tS2: { value: null }, tA: { value: null }, uShift: { value: EYE.hueShift },
       uHue: { value: IDS.map(hueOf) }, uOn: { value: IDS.map(() => 0) }, uLref: { value: IDS.map(id => LREF[id]) },
       uKey: { value: 0 }, uP: { value: 0 }, uFloorRel: { value: 0 }, uBeta: { value: 0 }, uSatVis: { value: EYE.satVis },
+      uW: { value: IDS.map(() => 1) }, uAbs: { value: 0 }, uShare: { value: 0 },
       tBl0: { value: null }, tBl1: { value: null }, tBl2: { value: null }, tBl4: { value: null }, uBl: { value: new THREE.Vector4() },
       uLogLam: { value: IDS.map(id => { const [lo, hi] = bandEdges(id); return new THREE.Vector2(Math.log(lo), Math.log(hi)); }) },
       uK: { value: EYE.quanta }, uCell: { value: EYE.cell }, uSeed: { value: 0 } } }));
@@ -433,6 +462,8 @@ class EyePass extends Pass {
     const cu = this.combineQ.material.uniforms;
     cu.tV.value = tex[0]; cu.tB1.value = tex[1]; cu.tS1.value = tex[2]; cu.tB2.value = tex[3]; cu.tS2.value = tex[4]; cu.tA.value = next.texture;
     IDS.forEach((id, i) => cu.uOn.value[i] = S.on[id] ? 1 : 0);
+    const view = S.eyeView;                                              // HUD: adapted / absolute, per-band weights
+    cu.uAbs.value = view && view.abs ? 1 : 0; IDS.forEach((id, i) => cu.uW.value[i] = view && view.w ? view.w[id] ?? 1 : 1);
     const bl = BLUR.map(b => this.blurBand(renderer, b));
     [cu.tBl0.value, cu.tBl1.value, cu.tBl2.value, cu.tBl4.value] = bl;
     cu.uBl.value.set(...bl.map(t => (t ? 1 : 0)));
@@ -468,6 +499,23 @@ class EyePass extends Pass {
     const el = document.createElement('script'); el.type = 'application/json'; el.id = 'eye-ratio';
     el.textContent = JSON.stringify({ band: id, gain: g, La, pairs: [pair(i1, i2), pair(i1, i3)], brightestRGB: RGB(i1) }); document.body.appendChild(el);
   }
+  // each band's mean share of the displayed luminance for the frame just rendered (BANDS order + total), read back
+  // asynchronously; used by ?dump (spectra timeline)
+  measure(renderer) {
+    if (!this.share) {
+      const o = { ...rtOpts, type: THREE.FloatType };
+      this.share = { a: new THREE.WebGLRenderTarget(SHARE_W, SHARE_H, o), b: new THREE.WebGLRenderTarget(SHARE_W, SHARE_H, o), m: new THREE.WebGLRenderTarget(2, 1, o),
+        q: new FullScreenQuad(new THREE.ShaderMaterial({ vertexShader: VS, fragmentShader: MEAN_FS, uniforms: { tA: { value: null }, tB: { value: null } } })) };
+    }
+    const sh = this.share, cu = this.combineQ.material.uniforms;
+    cu.uShare.value = 1; renderer.setRenderTarget(sh.a); this.combineQ.render(renderer);
+    cu.uShare.value = 2; renderer.setRenderTarget(sh.b); this.combineQ.render(renderer);
+    cu.uShare.value = 0;
+    sh.q.material.uniforms.tA.value = sh.a.texture; sh.q.material.uniforms.tB.value = sh.b.texture;
+    renderer.setRenderTarget(sh.m); sh.q.render(renderer);
+    const p = readAsync(renderer.getContext(), 2, 1); renderer.setRenderTarget(null);
+    return p.then(px => { const v = [px[0], px[1], px[2], px[3], px[4], px[5], px[6]]; return { bands: Object.fromEntries(IDS.map((id, i) => [id, v[i]])), total: px[7] }; });
+  }
   // ?eyedbg: per band [log-average, max, mean] luminance into <script id="eye-dbg"> (readback stalls: debug only)
   readout(renderer, rt) {
     const px = new Float32Array(32); renderer.readRenderTargetPixels(rt, 0, 0, 8, 1, px);
@@ -482,7 +530,8 @@ export function createEye(renderer, scene, camera, nanGuard) {
   const q = new URLSearchParams(location.search), PR = S.PR;
   const rt = new THREE.WebGLRenderTarget(innerWidth * PR, innerHeight * PR, { type: THREE.HalfFloatType });
   const composer = new EffectComposer(renderer, rt);
-  composer.addPass(new EyePass(scene, camera, q));       // addPass / setSize size the MRT and the reductions (× pixel ratio)
+  const pass = new EyePass(scene, camera, q);
+  composer.addPass(pass);                                // addPass / setSize size the MRT and the reductions (× pixel ratio)
   composer.addPass(nanGuard());
   composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), .55, .3, .9));
   const fxaa = new ShaderPass(FXAAShader), res = (w, h) => fxaa.material.uniforms.resolution.value.set(1 / (w * PR), 1 / (h * PR));
@@ -490,5 +539,6 @@ export function createEye(renderer, scene, camera, nanGuard) {
   composer.addPass(new OutputPass());
   renderer.toneMapping = THREE.NoToneMapping;      // the asinh stretch is the tone curve
   S.eye = true;                                    // sources drop GAIN (engine/render/sources.js)
-  return { composer, setSize: (w, h) => { composer.setSize(w, h); res(w, h); } };
+  if (q.get('eye') === 'absolute') S.eyeView = { ...(S.eyeView || {}), abs: true };
+  return { composer, setSize: (w, h) => { composer.setSize(w, h); res(w, h); }, measure: () => pass.measure(renderer) };
 }

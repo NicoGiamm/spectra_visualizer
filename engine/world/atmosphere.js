@@ -108,7 +108,7 @@ export function createAtmosphere(opts = {}) {
   //   radio  galactic synchrotron T_b at 100 MHz: the Haslam et al. 1982 (A&AS 47, 1) 408 MHz all-sky shape — cold
   //          sky ~17 K, plane ~250 K, towards the centre ×3.5 — scaled by (408/100)^2.55 ≈ 36 (synchrotron spectral
   //          index −2.55): ~600 K at the poles, ~9000 K in the plane, brighter than the ~250 K ground (sky noise
-  //          dominates receivers at VHF). Its amplitude in shader units (.012 per 1000 K) is a STAND-IN: radio has no
+  //          dominates receivers at VHF). Its amplitude in shader units (.006 per 1000 K) is a STAND-IN: radio has no
   //          thermal surface term to compare with; the shape and the plane/pole contrast are physical. Incoherent: no
   //          speckle (that belongs to transmitters and their reflections). Key 'synchrotron'.
   //   micro  T_b = 2.725 K·e^(−τ) + 270 K·(1 − e^(−τ)), τ = .05 / sin(el) near the 22 GHz water line (ITU-R P.676) —
@@ -134,7 +134,7 @@ void eyeBands(out vec4 o1, out vec4 o3){
   vec3 d = normalize(vDir); float above = smoothstep(-.03, .12, d.y), sel = max(d.y, .02);
   float g = dot(d, uGalN), core = pow(max(dot(d, uGalC), 0.), 5.);
   float Tr = 36.*(17. + 230.*exp(-g*g/.06)*(1. + 2.5*core)*(.8 + .4*fbm3(d*4.)));
-  float r = .012*Tr/1000.;
+  float r = .006*Tr/1000.;
   float tau = .05/sel, Tm = 2.725*exp(-tau) + 270.*(1. - exp(-tau)), xm = clamp((Tm - 120.)/180., 0., 1.);
   float m = eyeL(vec3(1., .6, .1))*xm*xm*.12;
   float e = 1. - pow(.25, 1./max(sel, .04)), Ti = mix(-60., 10., e), xi = clamp((Ti + 4.)/44., 0., 1.);
