@@ -81,7 +81,7 @@ export const deer = () => event({ name: 'Deer crossing', t0: 13, t1: 27, bands: 
     const head = new THREE.Mesh(new THREE.CapsuleGeometry(.1, .26, 3, 6), m); head.position.set(.88, 1.66, 0); head.rotation.z = Math.PI / 2 - .4; G.add(head);
     [[-1, .3], [1, .3], [-1, -.2], [1, -.2]].forEach(([s, a]) => { const an = new THREE.Mesh(new THREE.CylinderGeometry(.015, .02, .45, 4), m); an.position.set(.82 + a * .1, 1.95, s * .1); an.rotation.set(s * .4, 0, a); G.add(an); });
     this.legs = [[.45, .15], [.45, -.15], [-.45, .15], [-.45, -.15]].map(([x, z]) => { const L = new THREE.Group(); L.position.set(x, .9, z); const c = new THREE.Mesh(new THREE.CylinderGeometry(.045, .03, .9, 5), m); c.position.y = -.45; L.add(c); G.add(L); return L; });
-    this.g = solid(G); S.scene.add(G); G.visible = false;
+    this.g = spectralGroup(G, 'body', { weight: 0 }); S.scene.add(G); G.visible = false;   // warm surface (M10/T9); its IR is metered by the sources
     this.a = new V3(30, 0, -2); this.b = new V3(-32, 0, -13); this.body = new Rib('ir', null, 4, 1); this.headIR = new Em('ir', null, 1);
   },
   update() {
@@ -242,7 +242,7 @@ export const cows = () => event({ name: 'Cows on the alp', t0: 3, t1: 42, bands:
       this.c.push({ x, z, y: heightAt(x, z), a: R() * 6.28, s: .9 + R() * .2, ph: R() * 6 });
     }
     this.mesh = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ color: new THREE.Color(.05, .038, .03), roughness: .95 }), this.c.length);
-    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); S.scene.add(solid(this.mesh));
+    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); S.scene.add(spectralGroup(this.mesh, 'body', { weight: 0 }));   // warm coats (M10/T9)
     this.ir = new EmField('ir', this.c.length * 3, null, 1); this.tmp = new THREE.Object3D(); this.p = null;
   },
   update() { const { t, T } = S, I = env(t, 3, 42, 2);

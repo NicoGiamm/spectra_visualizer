@@ -68,7 +68,10 @@ export const SURF_U = {
 //     P.1238 order of magnitude); microwave .002 — ≥ 25–30 dB at 2–5 GHz across a building; gamma 0
 //   wood (boardwalks, huts: a few cm): radio .95, microwave .6 — ~2 dB through 3–5 cm of wood at 2.4 GHz (ITU-R P.2040
 //     dry wood ε'≈2, loss tangent ~.05); gamma .88 — 2.5 g/cm² at μ/ρ .052
-const TRANS = { ground: [.05, 0, 0], canopy: [.9, .2, .6], facade: [.1, .002, 0], wood: [.95, .6, .88] };
+//   body (an animal or a person: ~30 cm of tissue ≈ water): radio .5 — the body absorbs/scatters VHF but is smaller
+//     than its wavelength; microwave .01 — ~20 dB through a torso at 2.4 GHz (ITU-R P.2040 tissue ε″; body-loss
+//     measurements ~15–30 dB); gamma .2 — 30 cm of water at μ/ρ .058 cm²/g (1.46 MeV)
+const TRANS = { ground: [.05, 0, 0], canopy: [.9, .2, .6], facade: [.1, .002, 0], wood: [.95, .6, .88], body: [.5, .01, .2] };
 const P = (T0, Teq, tau, eIR, eMW, uvAlb, gamma, rRadio, gloss = 0, tr = TRANS.ground) => ({ A: [T0, Teq, tau ? 1 / tau : 0, eIR], B: [eMW, uvAlb, gamma, rRadio], C: [gloss, ...tr] });
 export const PRESET = {
   // sea surface: warm all night (no cooling), cold in microwave. eIR .98 [Masuda, EL]; eMW .45 calm sea [Wilheit, UMF];
@@ -110,6 +113,12 @@ export const PRESET = {
   // μ ~380 [Oke] (below sand and soil, so it cools faster than both); eIR .9 (0.90–0.95) [EL]; eMW .9 [UMF]; uvAlb .05 — STAND-IN (dark organic surface, like soil [FG]);
   // gamma .1 (K-40 only) [UN]
   wood:      P(22, 14, 12, .9, .9, .05, .1, .3, 0, TRANS.wood),
+  // warm-blooded body (M10/T9): the skin / fur surface stays ~30 °C all night (metabolism: no cooling, tau 0) —
+  // STAND-IN between bare skin (~33 °C) and fur / clothing (~20–30 °C on a cool night); eIR .98 — human skin 0.98
+  // (Steketee 1973, Phys. Med. Biol. 18:686), animal fur 0.95–0.99; eMW .6 — STAND-IN (wet tissue reflects microwaves,
+  // skin emissivity ~0.5–0.7 at 10–40 GHz); uvAlb .05 — STAND-IN (skin / fur UV-A reflectance ~5–10 %); gamma .02 —
+  // body K-40 ~60 Bq/kg vs ~1200 Bq/kg in granite [UN]; rRadio .3 — STAND-IN
+  body:      P(30, 30, 0, .98, .6, .05, .02, .3, 0, TRANS.body),
 };
 export function mixSurf(parts) {   // [[preset, weight], ...] -> blended {A, B, C}
   const out = { A: [0, 0, 0, 0], B: [0, 0, 0, 0], C: [0, 0, 0, 0] }; let W = 0;
