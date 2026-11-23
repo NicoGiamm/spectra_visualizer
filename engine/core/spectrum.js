@@ -28,6 +28,20 @@ export const SPECTRUM = {
   cmb:             { name: 'cosmic microwave background (2.7 K, peak)', f: 160e9 },
   dustFIR:         { name: 'warm interstellar dust', lam: 100e-6 },
   synchrotron:     { name: 'galactic synchrotron', f: 100e6 },
+  // --- the sky's own background per band (spectral eye, M10/T7: engine/world/atmosphere.js) ---
+  // atmospheric O₂ / H₂O thermal emission seen through ~20 GHz, near the 22.235 GHz water line (ITU-R P.676-13);
+  // with the 2.725 K CMB behind it (Fixsen 2009, ApJ 707, 916: the 'cmb' key)
+  skyMicrowave:    { name: 'sky brightness temperature (atmosphere + CMB)', f: 22.235e9 },
+  // clear-sky thermal emission in the 8–14 µm window: ≈ air temperature at the horizon, colder at the zenith
+  // (Idso 1981, Water Resour. Res. 17, 295; Berdahl & Fromberg 1982)
+  skyThermalIR:    { name: 'clear-sky thermal emission (8–14 µm)', lam: 10e-6 },
+  // O₂ Herzberg I bands, 250–400 nm, from ~95 km (Chamberlain 1961, Physics of the Aurora and Airglow; ~400 R)
+  uvAirglow:       { name: 'UV airglow (O₂ Herzberg bands)', lam: 340e-9 },
+  // cosmic X-ray background, peak νFν near 30 keV (Gruber et al. 1999, ApJ 520, 124); absorbed by the air column
+  cxb:             { name: 'cosmic X-ray background', E: 3e4, ground: false },
+  // diffuse Galactic gamma rays from cosmic-ray interactions, concentrated in the plane (Fermi-LAT: Ackermann et al.
+  // 2012, ApJ 750, 3); absorbed by the air column
+  gammaDiffuse:    { name: 'diffuse Galactic gamma rays', E: 1e8, ground: false },
   pulsarRadio:     { name: 'pulsar radio beam', f: 150e6 },
   pulsarOptical:   { name: 'pulsar optical pulses', lam: 500e-9 },
   pulsarXray:      { name: 'pulsar X-rays', E: 1e3, ground: false },

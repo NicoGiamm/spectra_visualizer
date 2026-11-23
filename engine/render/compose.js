@@ -66,9 +66,10 @@
 //      the darkest visible night sky (L ≈ .01, 2 eV) keeps < 2 % shot noise (the visible scene stays smooth); the
 //      photon energy alone then makes X-ray (~keV, ×500) grainy at its faint edges and gamma (~MeV, ×5·10⁵) a
 //      sparse flicker of single hits whose density follows the source's rate. IR / microwave photons are so
-//      cheap that N is astronomically large: smooth. Radio is coherent (wave, not photon-counting): it shows speckle —
-//      a fully developed speckle field (exponential intensity, mean 1) with the grain of its resolution element
-//      (2.35 σ of the diffraction blur), drifting slowly (scintillation). Seeds are visual-only (render rule 9).
+//      cheap that N is astronomically large: smooth. Radio is coherent (wave, not photon-counting): transmitters and
+//      their reflections show speckle — a fully developed field (exponential intensity, mean 1) with the grain of the
+//      radio resolution element, drifting slowly (scintillation), applied per emitter in the material wrappers
+//      (eyeSpeckle); the incoherent sky (galactic synchrotron) has none. Seeds are visual-only (render rule 9).
 //   3. Combine. The hue-coded layers are summed and stretched with the colour-preserving asinh of Lupton et al.
 //      2004 (PASP 116:133): out = C · asinh(β I) / (β I), I = mean(C), clipped by the brightest channel so hues
 //      survive. Faint things stay linear, bright ones compress logarithmically — no band can wash out the others.
@@ -89,6 +90,7 @@ import { BANDS, LREF, APERTURE, EXTINCTION, XCOM_AIR, UV_PATH } from '../core/ba
 import { applyVisMode } from './instrument.js';
 import { SURF_U, OVERLAY } from './surface.js';
 import { bandPos, posLambda, bandEdges } from '../core/spectrum.js';
+import { ENV } from '../world/atmosphere.js';
 import { COMMON } from './shaders.js';
 import { SPEC, EMS, RIBS, FIELDS } from './sources.js';
 
@@ -114,7 +116,7 @@ layout(location = 2) out highp vec4 eyeO2;
 layout(location = 3) out highp vec4 eyeO3;
 layout(location = 4) out highp vec4 eyeO4;
 layout(location = 5) out highp vec4 eyeO5;
-uniform float eyeNear, eyeFar, eyeTanY, eyeAspect, eyeUV, eyeP2, eyeAtm; uniform vec2 eyeRes; uniform sampler2D eyeTZ;
+uniform float eyeNear, eyeFar, eyeTanY, eyeAspect, eyeUV, eyeP2, eyeAtm, eyeGround, eyeSpk, eyeTime; uniform vec2 eyeRes; uniform sampler2D eyeTZ;
 float eyeL(vec3 c){ return dot(c, vec3(.2126, .7152, .0722)); }
 // distance (m) from the eye to this fragment, from its depth
 float eyeDist(){ float z = gl_FragCoord.z*2. - 1., zv = 2.*eyeNear*eyeFar/(eyeFar + eyeNear - z*(eyeFar - eyeNear));
@@ -132,6 +134,15 @@ float eyeAtt(int b, float pos, float d){
   if(b == 5 || b == 6){ vec2 L = b == 5 ? ${EDGE('xray')} : ${EDGE('gamma')};
     a = eyeMuAir(1.23984e-9/exp(L.y - pos*(L.y - L.x))); }
   return exp(-a*d*eyeAtm); }
+// coherent radio (transmitters and their reflections) shows speckle: a fully developed field (|complex Gaussian|²,
+// mean ≈ 1) with the grain of its resolution element, drifting slowly; applied before the diffraction blur, so the
+// grain is 3 σ of it. The incoherent sky (galactic synchrotron) has none.
+float eyeH(vec2 p){ p = fract(p*vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x*p.y); }
+float eyeN(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3. - 2.*f);
+  return mix(mix(eyeH(i), eyeH(i + vec2(1, 0)), f.x), mix(eyeH(i + vec2(0, 1)), eyeH(i + vec2(1, 1)), f.x), f.y); }
+float eyeSpeckle(){ vec2 q = gl_FragCoord.xy/max(eyeSpk, 1.) + vec2(eyeTime*.11, eyeTime*.07);
+  float a = eyeN(q) - .5, c = eyeN(q + vec2(31.7, 11.3)) - .5, d = eyeN(q*1.7 + vec2(5.1, 47.)) - .5, e = eyeN(q*1.7 + vec2(19.3, 3.9)) - .5;
+  return ((a + .6*d)*(a + .6*d) + (c + .6*e)*(c + .6*e))/.1; }
 float eyeUVpath(float d){ return eyeAtm*eyeUV*${glf(UV_PATH)}*(1. - exp(-${glf(EXTINCTION.uv)}*d)); }
 `;
 const ZERO = 'eyeO1 = vec4(0.); eyeO2 = vec4(0.); eyeO3 = vec4(0.); eyeO4 = vec4(0.); eyeO5 = vec4(0.);';
@@ -141,6 +152,7 @@ void main(){ ${ZERO} eyeMain_();
   if(uBand != 3){ float l = eyeL(gl_FragColor.rgb); gl_FragColor = vec4(0.);
     float d = eyeDist();
     if(uOrigin < .5) l *= eyeAtt(uBand, uSpec, d);                       // ground-origin light crosses the air to the eye
+    if(uBand == 0) l *= eyeSpeckle();                                      // coherent radio
     if(eyeP2 > .5){                                                       // second pass: in front of the frontmost opaque
       vec4 tz = texelFetch(eyeTZ, ivec2(gl_FragCoord.xy), 0);                //   surface → as is; behind it → × its T
       bool hidden = d > tz.w*1.0005;
@@ -153,14 +165,25 @@ void main(){ ${ZERO} eyeMain_();
   else if(eyeP2 > .5) discard; }`;
 // surfaces: their band emission (hook), crossed through the air; opaque ones add the UV haze in front of them and
 // write their transmission for the penetration pass
+// (a hook may #define EYE_SKY — the sky's own emission: no air in front of it — and its own spectral positions
+// EYE_POS_A = (IR, UV, gamma), EYE_POS_L = (radio, micro, X-ray))
 const SURF_MAIN = opaque => `
+#ifndef EYE_POS_A
+#define EYE_POS_A ${v3(SURF_POS.ir, SURF_POS.uv, SURF_POS.gamma)}
+#endif
+#ifndef EYE_POS_L
+#define EYE_POS_L ${v3(SURF_POS.radio, SURF_POS.micro, SURF_POS.xray)}
+#endif
 void main(){ ${ZERO} eyeMain_(); eyeBands(eyeO1, eyeO3);
+#ifndef EYE_SKY
   float d = eyeDist();
-  eyeO1.rgb *= vec3(eyeAtt(2, ${glf(SURF_POS.ir)}, d), eyeAtt(4, ${glf(SURF_POS.uv)}, d), eyeAtt(6, ${glf(SURF_POS.gamma)}, d));
-  eyeO3.rgb *= vec3(eyeAtt(0, ${glf(SURF_POS.radio)}, d), eyeAtt(1, ${glf(SURF_POS.micro)}, d), 1.);
+  eyeO1.rgb *= vec3(eyeAtt(2, EYE_POS_A.x, d), eyeAtt(4, EYE_POS_A.y, d), eyeAtt(6, EYE_POS_A.z, d));
+  eyeO3.rgb *= vec3(eyeAtt(0, EYE_POS_L.x, d), eyeAtt(1, EYE_POS_L.y, d), 1.);
+  eyeO3.r *= eyeSpeckle();                                                // coherent radio reflections
   ${opaque ? 'eyeO1.g += eyeUVpath(d); eyeO5 = vec4(eyeTrans(), 1.);' : ''}
-  eyeO2 = vec4(eyeO1.rgb*${v3(SURF_POS.ir, SURF_POS.uv, SURF_POS.gamma)}, eyeO1.a);
-  eyeO4 = vec4(eyeO3.rgb*${v3(SURF_POS.radio, SURF_POS.micro, SURF_POS.xray)}, eyeO3.a); }`;
+#endif
+  eyeO2 = vec4(eyeO1.rgb*EYE_POS_A, eyeO1.a);
+  eyeO4 = vec4(eyeO3.rgb*EYE_POS_L, eyeO3.a); }`;
 // everything else: an opaque prop is black in every band (it occludes), with the UV haze in front of it and T_PROP;
 // a transparent one writes nothing
 const PLAIN_MAIN = opaque => `
@@ -187,7 +210,7 @@ function patch(m) {
 }
 // uniforms every patched material shares (set once per frame by the EyePass)
 const EYE_U = { eyeNear: { value: .2 }, eyeFar: { value: 4e4 }, eyeTanY: { value: 1 }, eyeAspect: { value: 1 }, eyeRes: { value: new THREE.Vector2(1, 1) },
-  eyeUV: SURF_U.uUVsky, eyeP2: { value: 0 }, eyeTZ: { value: null }, eyeAtm: { value: 1 } };
+  eyeUV: SURF_U.uUVsky, eyeP2: { value: 0 }, eyeTZ: { value: null }, eyeAtm: { value: 1 }, eyeGround: { value: 0 }, eyeSpk: { value: 1 }, eyeTime: { value: 0 } };
 const patchScene = scene => scene.traverse(o => { if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(patch); });
 
 // ---------------------------------------------------------------- reduce / adapt / combine
@@ -237,7 +260,7 @@ void main(){ vec4 a = vec4(0.); float w = 0.; float R = ceil(3.*uSigma);
   gl_FragColor = a/w; }`;
 
 const COMBINE_FS = COMMON + LUM + `uniform sampler2D tV, tB1, tS1, tB2, tS2, tA, tBl0, tBl1, tBl2, tBl4; uniform vec4 uBl; varying vec2 vUv;
-uniform vec2 uLogLam[7]; uniform float uK, uSeed, uSpk, uTime, uCell;
+uniform vec2 uLogLam[7]; uniform float uK, uSeed, uCell;
 float hs(vec2 p, float k){ return fract(sin(dot(p + uSeed*vec2(91.7, 37.3) + k*vec2(13.1, 71.9), vec2(12.9898, 78.233)))*43758.5453); }
 // photons counted this frame at a pixel that expects N: Poisson by inversion (N ≤ 12) or its Gaussian limit
 float poisson(float N, vec2 p){
@@ -252,10 +275,6 @@ float photons(int b, float l, float ls, vec2 p){
   if(l <= 0.) return 0.;
   float lam = exp(uLogLam[b].y - clamp(ls/l, 0., 1.)*(uLogLam[b].y - uLogLam[b].x)), N = l*uK*lam/1.23984e-6*uCell*uCell;
   return N > 1e5 ? l : l*poisson(N, floor(p/uCell))/N; }
-// fully developed speckle: |complex Gaussian field|², mean ≈ 1, grain ≈ uSpk px, drifting slowly
-float speckle(vec2 px){ vec2 q = px/max(uSpk, 1.) + vec2(uTime*.11, uTime*.07);
-  float a = n2(q) - .5, c = n2(q + vec2(31.7, 11.3)) - .5, d = n2(q*1.7 + vec2(5.1, 47.)) - .5, e = n2(q*1.7 + vec2(19.3, 3.9)) - .5;
-  return ((a + .6*d)*(a + .6*d) + (c + .6*e)*(c + .6*e))/.1; }
 uniform vec3 uHue[7]; uniform float uOn[7], uLref[7]; uniform float uKey, uP, uFloorRel, uBeta, uSatVis, uShift;
 float gain(int b){ float La = texelFetch(tA, ivec2(b, 0), 0).b;
   return uKey/(pow(uLref[b], 1. - uP)*pow(max(La, uFloorRel*uLref[b]), uP)); }
@@ -271,9 +290,8 @@ void main(){
   // diffraction-blurred bands (uBl: radio, micro, IR, UV) replace their sharp channel
   vec2 bR = uBl.x > .5 ? texture2D(tBl0, vUv).rg : vec2(b2.r, s2.r), bM = uBl.y > .5 ? texture2D(tBl1, vUv).rg : vec2(b2.g, s2.g);
   vec2 bI = uBl.z > .5 ? texture2D(tBl2, vUv).rg : vec2(b1.r, s1.r), bU = uBl.w > .5 ? texture2D(tBl4, vUv).rg : vec2(b1.g, s1.g);
-  // detection statistics: radio speckle (coherent), photon counting everywhere else (smooth where N is large)
+  // detection statistics: photon counting (smooth where N is large); radio speckle is applied per coherent emitter
   vec2 px = gl_FragCoord.xy;
-  bR.x *= speckle(px);
   bM.x = photons(1, bM.x, bM.y, px); bI.x = photons(2, bI.x, bI.y, px + 1001.); bU.x = photons(4, bU.x, bU.y, px + 2011.);
   float lx = photons(5, b2.b, s2.b, px + 3007.), lg = photons(6, b1.b, s1.b, px + 4001.);
   b2.b = lx; b1.b = lg;
@@ -319,7 +337,7 @@ class EyePass extends Pass {
       uKey: { value: 0 }, uP: { value: 0 }, uFloorRel: { value: 0 }, uBeta: { value: 0 }, uSatVis: { value: EYE.satVis },
       tBl0: { value: null }, tBl1: { value: null }, tBl2: { value: null }, tBl4: { value: null }, uBl: { value: new THREE.Vector4() },
       uLogLam: { value: IDS.map(id => { const [lo, hi] = bandEdges(id); return new THREE.Vector2(Math.log(lo), Math.log(hi)); }) },
-      uK: { value: EYE.quanta }, uCell: { value: EYE.cell }, uSeed: { value: 0 }, uSpk: { value: 1 }, uTime: { value: 0 } } }));
+      uK: { value: EYE.quanta }, uCell: { value: EYE.cell }, uSeed: { value: 0 } } }));
     this.downQ = new FullScreenQuad(new THREE.ShaderMaterial({ vertexShader: VS, fragmentShader: DOWN_FS,
       uniforms: { tL: { value: null }, tS: { value: null }, uSel: { value: new THREE.Vector4() }, uPx: { value: new THREE.Vector2() }, uB: { value: 1 } } }));
     this.gaussQ = new FullScreenQuad(new THREE.ShaderMaterial({ vertexShader: VS, fragmentShader: GAUSS_FS,
@@ -368,6 +386,11 @@ class EyePass extends Pass {
     applyVisMode(true);
     for (const k of ['uSOnR_', 'uSOnM_', 'uSOnI_', 'uSOnU_', 'uSOnG_']) SURF_U[k].value = this.penOnly ? 0 : 1;   // epen=only: no surface emission either
     OVERLAY.value = 0; SURF_U.uRadioDiffuse.value = 0;
+    // the stylised CMB haze of the old view draws into the visible output; the eye shows the physical microwave sky
+    if (ENV.nightMat) ENV.nightMat.uniforms.uCMB.value = 0;
+    EYE_U.eyeGround.value = S.detector === 'ground' ? 1 : 0;
+    EYE_U.eyeSpk.value = Math.max(1, 3 * this.blur.radio.sigma); EYE_U.eyeTime.value = S.T;   // last frame's σ
+    if (ENV.setVis) ENV.setVis(true);   // the day sky carries the UV twilight (haze path radiance) even with Visible filtered off
     patchScene(this.scene);
     const cam = this.camera, tanY = Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2) / cam.zoom;
     Object.assign(EYE_U.eyeNear, { value: cam.near }); EYE_U.eyeFar.value = cam.far; EYE_U.eyeTanY.value = tanY;
@@ -413,8 +436,8 @@ class EyePass extends Pass {
     const bl = BLUR.map(b => this.blurBand(renderer, b));
     [cu.tBl0.value, cu.tBl1.value, cu.tBl2.value, cu.tBl4.value] = bl;
     cu.uBl.value.set(...bl.map(t => (t ? 1 : 0)));
-    cu.uSeed.value = Math.random(); cu.uTime.value = S.T;                 // visual-only noise seed (render rule 9)
-    cu.uSpk.value = Math.max(1, 2.35 * this.blur.radio.sigma);         // speckle grain = the radio resolution element
+    cu.uSeed.value = Math.random();                                      // visual-only noise seed (render rule 9)
+
     cu.uKey.value = EYE.key; cu.uP.value = EYE.p; cu.uFloorRel.value = EYE.floorRel; cu.uBeta.value = EYE.beta;
     renderer.setRenderTarget(this.renderToScreen ? null : writeBuffer); this.combineQ.render(renderer);
     if (this.ratio >= 0 && ++this.ratio === 1) this.ratioCheck(renderer, next);
