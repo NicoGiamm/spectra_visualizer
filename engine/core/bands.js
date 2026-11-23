@@ -48,7 +48,7 @@ export const APERTURE = { radio: 100, micro: 1, ir: .007, vis: .007, uv: .007, x
 // between a ground-level emitter and the eye (exp(−α d), engine/render/compose.js). Visible is left to the scene's
 // own fog. Sky sources (origin 'high' / 'space') are not attenuated here: their path is the detector's (TRANSMIT).
 //   radio  0        the troposphere is transparent at 10 MHz–1 GHz
-//   micro  1.2e-5   ~0.05 dB/km: O₂ + H₂O gas absorption at 3–20 GHz, sea level (ITU-R P.676-13); cloud and fog add
+//   micro  1.2e-5   ~0.05 dB/km: O₂ + H₂O gas absorption at ~20 GHz, sea level (~0.007 dB/km at 3 GHz) (ITU-R P.676-13); cloud and fog add
 //                   ~0.1 dB/km per g/m³ of liquid water at 20 GHz (ITU-R P.840) — negligible over these ranges
 //   ir     2e-4     8–14 µm window, horizontal sea-level path: ~0.6–0.9 transmittance per km depending on humidity
 //                   (LOWTRAN 7, Kneizys et al. 1988, AFGL-TR-88-0177) → 1–5e-4/m; mid value

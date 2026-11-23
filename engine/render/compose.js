@@ -6,9 +6,10 @@
 // a single scene pass:
 //
 //   output 0  visible RGB                       (what the material draws today, minus the 12 % band overlay)
-//   output 1  (IR, UV, gamma, coverage)         optical-ish bands: fog, smoke, cloud hide them
+//   output 1  (IR, UV, X-ray, coverage)         optical bands: fog, smoke, cloud hide them (X-ray sits here harmlessly:
+//                                               the air absorbs it within metres, long before any fog bank)
 //   output 2  output 1 × spectral position      (where in its band the light is: 0 long-wave … 1 short-wave)
-//   output 3  (radio, microwave, X-ray, cov.)   long waves (and X-ray, absorbed by matter, not by thin media)
+//   output 3  (radio, microwave, gamma, cov.)   long waves and gamma: they cross fog and cloud (0.01–0.1 g/cm² of water)
 //   output 4  output 3 × spectral position
 //
 // The alpha of outputs 1–4 is the coverage a transparent medium has in that group (blending uses each output's
@@ -96,7 +97,7 @@ import { SPEC, EMS, RIBS, FIELDS } from './sources.js';
 
 const IDS = BANDS.map(b => b.id);                    // 0 radio, 1 micro, 2 ir, 3 vis, 4 uv, 5 xray, 6 gamma (uBand order)
 // where each band lives in the MRT: [output, channel]
-export const SLOT = { radio: [3, 0], micro: [3, 1], ir: [1, 0], vis: [0, -1], uv: [1, 1], xray: [3, 2], gamma: [1, 2] };
+export const SLOT = { radio: [3, 0], micro: [3, 1], ir: [1, 0], vis: [0, -1], uv: [1, 1], xray: [1, 2], gamma: [3, 2] };
 export const EYE = { key: .05, p: .5, floorRel: .01, beta: 6, satVis: .7, tauUp: .15, tauDown: 1.5, hueShift: .6, quanta: 5e5, cell: 2 };
 // spectral position of the landscape's own emission, from what the surface terms model (surface.js header):
 // IR = 10 µm thermal (8–14 µm window), UV = 365 nm skylight (UV-A), gamma = 1.46 MeV (K-40 line; U/Th lines nearby),
@@ -159,7 +160,7 @@ void main(){ ${ZERO} eyeMain_();
       if(!hidden && eyeP2 > 1.5) discard;                                   //   (?epen=only / glass: just the hidden part)
       if(hidden) l *= uBand == 0 ? tz.r : uBand == 1 ? tz.g : tz.b; }
     vec3 v = vec3(0.), w = vec3(0.);
-    if(uBand == 2) v.r = l; else if(uBand == 4) v.g = l; else if(uBand == 6) v.b = l;
+    if(uBand == 2) v.r = l; else if(uBand == 4) v.g = l; else if(uBand == 5) v.b = l;
     else if(uBand == 0) w.r = l; else if(uBand == 1) w.g = l; else w.b = l;
     eyeO1 = vec4(v, 1.); eyeO2 = vec4(v*uSpec, 1.); eyeO3 = vec4(w, 1.); eyeO4 = vec4(w*uSpec, 1.); }
   else if(eyeP2 > .5) discard; }`;
@@ -182,8 +183,11 @@ void main(){ ${ZERO} eyeMain_(); eyeBands(eyeO1, eyeO3);
   eyeO3.r *= eyeSpeckle();                                                // coherent radio reflections
   ${opaque ? 'eyeO1.g += eyeUVpath(d); eyeO5 = vec4(eyeTrans(), 1.);' : ''}
 #endif
-  eyeO2 = vec4(eyeO1.rgb*EYE_POS_A, eyeO1.a);
-  eyeO4 = vec4(eyeO3.rgb*EYE_POS_L, eyeO3.a); }`;
+  // hooks hand gamma in o1.b and X-ray in o3.b; the outputs keep gamma with the long waves (fog and cloud don't hide
+  // it) and X-ray with the optical bands
+  float hg = eyeO1.b; eyeO1.b = eyeO3.b; eyeO3.b = hg;
+  eyeO2 = vec4(eyeO1.rgb*vec3(EYE_POS_A.xy, EYE_POS_L.z), eyeO1.a);
+  eyeO4 = vec4(eyeO3.rgb*vec3(EYE_POS_L.xy, EYE_POS_A.z), eyeO3.a); }`;
 // everything else: an opaque prop is black in every band (it occludes), with the UV haze in front of it and T_PROP;
 // a transparent one writes nothing
 const PLAIN_MAIN = opaque => `
@@ -295,11 +299,10 @@ void main(){
   // detection statistics: photon counting (smooth where N is large); radio speckle is applied per coherent emitter
   vec2 px = gl_FragCoord.xy;
   bM.x = photons(1, bM.x, bM.y, px); bI.x = photons(2, bI.x, bI.y, px + 1001.); bU.x = photons(4, bU.x, bU.y, px + 2011.);
-  float lx = photons(5, b2.b, s2.b, px + 3007.), lg = photons(6, b1.b, s1.b, px + 4001.);
-  b2.b = lx; b1.b = lg;
+  float lx = photons(5, b1.b, s1.b, px + 3007.), lg = photons(6, b2.b, s2.b, px + 4001.);
   v *= gain(3);
   vec3 cV = uOn[3]*uW[3]*mix(vec3(lum(v)), v, uSatVis), c0 = bandC(0, bR.x, bR.y), c1 = bandC(1, bM.x, bM.y), c2 = bandC(2, bI.x, bI.y),
-       c4 = bandC(4, bU.x, bU.y), c5 = bandC(5, b2.b, s2.b), c6 = bandC(6, b1.b, s1.b);
+       c4 = bandC(4, bU.x, bU.y), c5 = bandC(5, lx, s1.b), c6 = bandC(6, lg, s2.b);
   vec3 C = cV + c0 + c1 + c2 + c4 + c5 + c6;
   // the stretch is one scalar per pixel: k = asinh(βI)/(βI) · β/asinh(β) (I = 1 maps to 1), divided by the brightest
   // channel where a pixel saturates (keeps the hue) — so each band's share of the displayed pixel is lum(c_b)·k

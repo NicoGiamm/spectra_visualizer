@@ -29,9 +29,9 @@ export const SPECTRUM = {
   dustFIR:         { name: 'warm interstellar dust', lam: 100e-6 },
   synchrotron:     { name: 'galactic synchrotron', f: 100e6 },
   // --- the sky's own background per band (spectral eye, M10/T7: engine/world/atmosphere.js) ---
-  // atmospheric O₂ / H₂O thermal emission seen through ~20 GHz, near the 22.235 GHz water line (ITU-R P.676-13);
-  // with the 2.725 K CMB behind it (Fixsen 2009, ApJ 707, 916: the 'cmb' key)
-  skyMicrowave:    { name: 'sky brightness temperature (atmosphere + CMB)', f: 22.235e9 },
+  // atmospheric O₂ / H₂O thermal emission at ~20 GHz, near the 22.235 GHz water line (ITU-R P.676-13); with the
+  // 2.725 K CMB behind it (Fixsen 2009, ApJ 707, 916: the 'cmb' key)
+  skyMicrowave:    { name: 'sky brightness temperature (atmosphere + CMB)', f: 20e9 },
   // clear-sky thermal emission in the 8–14 µm window: ≈ air temperature at the horizon, colder at the zenith
   // (Idso 1981, Water Resour. Res. 17, 295; Berdahl & Fromberg 1982)
   skyThermalIR:    { name: 'clear-sky thermal emission (8–14 µm)', lam: 10e-6 },

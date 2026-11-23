@@ -143,7 +143,7 @@ uniform float uSunI, uMoonI, uBio, uMist, uAirT, uUVglit; uniform vec3 uHor, uSk
 // Lloyd's-mirror response at sin(elevation) s, 200 MHz in .x and 100 MHz in .y, normalised to 0..1 (0 below the horizon)
 vec2 lloyd(float s){ return s > 0. ? .5 - .5*cos(uLloyd*s) : vec2(0.); }
 vec2 wave(vec2 p, vec2 k, float w, float a){ float ph = dot(k,p) + w*uSurfTime; return a*k*cos(ph); }   // gradient of a*sin
-float skyT(float y){ float e = 1. - pow(.25, 1./max(y, .04)); return mix(-60., uAirT, e); }               // 8–14 µm sky brightness temp
+float skyT(float y){ float e = 1. - pow(.7, 1./max(y, .04)); return mix(-60., uAirT, e); }                // 8–14 µm sky brightness temp: zenith window transmittance ~.7 (ε ≈ .3, Idso 1981)
 vec3 seaBands(vec3 W, vec3 N, vec3 V, vec3 Rf, float dist, float foam, float inVis){
   vec3 col = vec3(0.); float cosv = clamp(dot(-V, N), 0., 1.), gz = pow(1. - cosv, 5.);
   float T = uSurfA.x + .6*(n2(W.xz*.004) - .5), mistK = uMist*(1. - exp(-dist/700.));

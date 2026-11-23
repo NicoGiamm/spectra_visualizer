@@ -63,7 +63,8 @@ in `engine/render/surface.js`; the dark detector view (`engine/render/instrument
     (compose.js, the surface hooks) may declare identifiers starting with `eye`** (the wrapper's namespace: a table named `eyeMU` once collided with the UV mask). Sources route by their
     `uBand`; a surface made with `spectral()` gets its band hook from `eyeBandsGLSL`; **a custom `ShaderMaterial`
     surface needs its own `material.userData.eyeBands`** (`void eyeBands(out vec4 o1, out vec4 o3)`: o1 = (IR, UV,
-    gamma, coverage), o3 = (radio, micro, X-ray, coverage) as luminance; see the sea, the trail mist, the night sky).
+    gamma, coverage), o3 = (radio, micro, X-ray, coverage) as luminance; the wrapper then stores gamma with the long
+    waves so fog doesn't hide it; see the sea, the trail mist, the night sky).
     Any other material writes nothing in the bands: black if opaque (it occludes), nothing if transparent.
 11. **Surface band switches are macros** (`#define uSOnR (uSOnR_*eyeMR)`): read them as `uSOnR`…, set the uniforms as
     `SURF_U.uSOnR_`…; stylised random terms (speckle, crackle) take `mix(stylised, expectedValue, eyeSmooth)` so the eye

@@ -107,29 +107,32 @@ export function createAtmosphere(opts = {}) {
   // sky and ground compare physically inside the band:
   //   radio  galactic synchrotron T_b at 100 MHz: the Haslam et al. 1982 (A&AS 47, 1) 408 MHz all-sky shape — cold
   //          sky ~17 K, plane ~250 K, towards the centre ×3.5 — scaled by (408/100)^2.55 ≈ 36 (synchrotron spectral
-  //          index −2.55): ~600 K at the poles, ~9000 K in the plane, brighter than the ~250 K ground (sky noise
+  //          index −2.55, Guzmán et al. 2011, A&A 525, A138): ~600 K at the poles, ~9000 K in the plane, brighter than the ~250 K ground (sky noise
   //          dominates receivers at VHF). Its amplitude in shader units (.006 per 1000 K) is a STAND-IN: radio has no
   //          thermal surface term to compare with; the shape and the plane/pole contrast are physical. Incoherent: no
   //          speckle (that belongs to transmitters and their reflections). Key 'synchrotron'.
-  //   micro  T_b = 2.725 K·e^(−τ) + 270 K·(1 − e^(−τ)), τ = .05 / sin(el) near the 22 GHz water line (ITU-R P.676) —
+  //   micro  T_b = 2.725 K·e^(−τ) + 270 K·(1 − e^(−τ)), τ = .05 / sin(el) at ~20 GHz, near the 22 GHz water line (ITU-R P.676) —
   //          the CMB (2.725 K, Fixsen 2009) behind the atmosphere — through the surfaces' microwave wash: a dark sky with
   //          a glowing horizon; the CMB itself is ~100× fainter than the 280 K ground and stays invisible. 'skyMicrowave'.
-  //   ir     8–14 µm window sky: e = 1 − .25^(1/sin el), T = mix(−60 °C, 10 °C, e) (the seaside's skyT; air 10 °C
-  //          STAND-IN), through the surfaces' thermal mapping: warm horizon, cold zenith. 'skyThermalIR'.
-  //   uv     after sunset only airglow (O₂ Herzberg, ~95 km, ×(1 + 3(1 − sin el)^5) toward the horizon, van Rhijn);
+  //   ir     8–14 µm window sky: zenith window transmittance ~.7 (effective emissivity ~.3 for moderate humidity,
+  //          Idso 1981), e = 1 − .7^(1/sin el), T = mix(−60 °C, 10 °C, e) (as the seaside's skyT; air 10 °C STAND-IN):
+  //          zenith ≈ −40 °C, warm only near the horizon. 'skyThermalIR'.
+  //   uv     after sunset only airglow (O₂ Herzberg, ~95 km, ×(1 + 3(1 − sin el)^5) toward the horizon, ≈ van Rhijn);
   //          the twilight UV sky is the haze's path radiance on the day sky (compose.js). 'uvAirglow'.
-  //   xray   cosmic X-ray background, isotropic, ~30 keV: ~10 photons cm⁻² s⁻¹ sr⁻¹ at 2–10 keV (Gruber 1999) — a
-  //          7 mm pupil (0.385 cm²) would catch ~0.06 per frame (1/60 s) per steradian. The amplitude is set so the
-  //          eye's photon counting (compose.js: N = L·K/E per 2×2 px cell) expects exactly that: L = 6.4e-9. 'cxb'.
+  //   xray   cosmic X-ray background, isotropic: ~10 photons cm⁻² s⁻¹ sr⁻¹ at 2–10 keV (Gruber 1999; its νFν peaks
+  //          near 30 keV) — a 7 mm pupil (0.385 cm²) would catch ~0.06 per frame (1/60 s) per steradian. Counted at
+  //          ~5 keV (the 2–10 keV band the rate is quoted for), the amplitude L = 1.1e-9 makes the eye's photon counting
+  //          (compose.js: N = L·K/E per 2×2 px cell) expect that at the default view (65°, ~850 px; N per cell does not
+  //          scale with the cell's solid angle, so zooming changes it). 'cxb'.
   //   gamma  diffuse Galactic gamma rays above 100 MeV, ~1e-3 photons cm⁻² s⁻¹ sr⁻¹ in the inner plane (Fermi-LAT,
-  //          Ackermann 2012) → ~6e-6 per frame per sr through the pupil: L = 2.3e-9 in the plane. 'gammaDiffuse'.
+  //          Ackermann 2012) → ~6e-6 per frame per sr through the pupil: L ≈ 2.3e-9 toward the inner Galaxy. 'gammaDiffuse'.
   //          Both are honestly near-black: a human-sized eye almost never catches one.
   // X-ray / gamma come from space: absorbed in Ground mode. The UV airglow amplitude is a STAND-IN (faint).
   const pos = (lam, E) => bandPos(E ? { E } : { lam });
   nightMat.userData.eyeBands = `
 #define EYE_SKY
 #define EYE_POS_A vec3(${pos(10e-6).toFixed(4)}, ${pos(340e-9).toFixed(4)}, ${pos(0, 1e8).toFixed(4)})
-#define EYE_POS_L vec3(${bandPos({ f: 100e6 }).toFixed(4)}, ${bandPos({ f: 20e9 }).toFixed(4)}, ${pos(0, 3e4).toFixed(4)})
+#define EYE_POS_L vec3(${bandPos({ f: 100e6 }).toFixed(4)}, ${bandPos({ f: 20e9 }).toFixed(4)}, ${pos(0, 5e3).toFixed(4)})
 void eyeBands(out vec4 o1, out vec4 o3){
   vec3 d = normalize(vDir); float above = smoothstep(-.03, .12, d.y), sel = max(d.y, .02);
   float g = dot(d, uGalN), core = pow(max(dot(d, uGalC), 0.), 5.);
@@ -137,10 +140,10 @@ void eyeBands(out vec4 o1, out vec4 o3){
   float r = .006*Tr/1000.;
   float tau = .05/sel, Tm = 2.725*exp(-tau) + 270.*(1. - exp(-tau)), xm = clamp((Tm - 120.)/180., 0., 1.);
   float m = eyeL(vec3(1., .6, .1))*xm*xm*.12;
-  float e = 1. - pow(.25, 1./max(sel, .04)), Ti = mix(-60., 10., e), xi = clamp((Ti + 4.)/44., 0., 1.);
+  float e = 1. - pow(.7, 1./max(sel, .04)), Ti = mix(-60., 10., e), xi = clamp((Ti + 4.)/44., 0., 1.);
   float i = eyeL(thermal(xi))*(.04 + .5*xi*xi);
   float u = 2e-4*(1. + 3.*pow(1. - sel, 5.));
-  float space = 1. - eyeGround, x = space*6.4e-9, gm = space*2.3e-9*(.1 + exp(-g*g/.008)*(1. + 3.*core)/4.);
+  float space = 1. - eyeGround, x = space*1.1e-9, gm = space*2.3e-9*(.1 + exp(-g*g/.008)*(1. + 3.*core)/4.);
   o1 = vec4(i, u, gm, 1.)*above; o1.a = 1.;
   o3 = vec4(r, m, x, 1.)*above; o3.a = 1.; }`;
   const nightSky = new THREE.Mesh(new THREE.SphereGeometry(15000, 64, 32), nightMat); nightSky.renderOrder = -9; scene.add(nightSky);

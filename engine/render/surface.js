@@ -59,19 +59,19 @@ export const SURF_U = {
 //   rRadio radio reflectivity — STAND-IN (relative, stylised): conductors and sea water high, dry ground low.
 // Transmission [Tradio, Tmicro, Tgamma] of what a surface stands for (C.yzw), for light from behind it:
 //   ground (terrain, water, paving): radio .05 — knife-edge diffraction over a ridge costs ~13 dB at VHF (ITU-R P.526),
-//     the "bending round hills"; microwave 0 — diffraction loss grows ~10 dB per frequency decade, ≥ 30 dB at GHz;
+//     the "bending round hills"; microwave 0 — diffraction loss grows ~10 dB per frequency decade (~25 dB at 1–3 GHz);
 //     gamma 0 — metres of rock/soil (1.46 MeV in rock: ~6 cm attenuation length)
 //   canopy (a tree crown, ~10 m of foliage): radio .9 — ~0.05 dB/m at 100 MHz (ITU-R P.833); microwave .2 —
-//     Weissberger model L = 1.33 f^0.284 d^0.588 dB ≈ 7 dB at 2.4 GHz, 10 m; gamma .6 — STAND-IN (crown biomass
-//     ~1 kg/m³, μ/ρ .052 cm²/g at 1.46 MeV)
-//   facade (a whole building: several walls and floors): radio .1 — ~10 dB building penetration at VHF (ITU-R P.2040 /
-//     P.1238 order of magnitude); microwave .002 — ≥ 25–30 dB at 2–5 GHz across a building; gamma 0
+//     Weissberger 1982 (ECAC-TR-81-101), d < 14 m branch L = 0.45 f^0.284 d dB ≈ 6 dB at 2.4 GHz, 10 m (T ≈ .25);
+//     gamma .95 — crown biomass ~1 kg/m³ × 10 m = 1 g/cm² at μ/ρ .052 cm²/g (1.46 MeV); the biomass is a STAND-IN
+//   facade (a whole building: several walls and floors): radio .1 — ~10 dB building entry loss at VHF (ITU-R P.2109
+//     order of magnitude); microwave .002 — ≥ 25–30 dB at 2–5 GHz across a building; gamma 0
 //   wood (boardwalks, huts: a few cm): radio .95, microwave .6 — ~2 dB through 3–5 cm of wood at 2.4 GHz (ITU-R P.2040
 //     dry wood ε'≈2, loss tangent ~.05); gamma .88 — 2.5 g/cm² at μ/ρ .052
-//   body (an animal or a person: ~30 cm of tissue ≈ water): radio .5 — the body absorbs/scatters VHF but is smaller
-//     than its wavelength; microwave .01 — ~20 dB through a torso at 2.4 GHz (ITU-R P.2040 tissue ε″; body-loss
+//   body (an animal or a person: ~30 cm of tissue ≈ water): radio .5 — STAND-IN (the body absorbs/scatters VHF but is
+//     smaller than its wavelength); microwave .01 — ~20 dB through a torso at 2.4 GHz (ITU-R P.2040 tissue ε″; body-loss
 //     measurements ~15–30 dB); gamma .2 — 30 cm of water at μ/ρ .058 cm²/g (1.46 MeV)
-const TRANS = { ground: [.05, 0, 0], canopy: [.9, .2, .6], facade: [.1, .002, 0], wood: [.95, .6, .88], body: [.5, .01, .2] };
+const TRANS = { ground: [.05, 0, 0], canopy: [.9, .2, .95], facade: [.1, .002, 0], wood: [.95, .6, .88], body: [.5, .01, .2] };
 const P = (T0, Teq, tau, eIR, eMW, uvAlb, gamma, rRadio, gloss = 0, tr = TRANS.ground) => ({ A: [T0, Teq, tau ? 1 / tau : 0, eIR], B: [eMW, uvAlb, gamma, rRadio], C: [gloss, ...tr] });
 export const PRESET = {
   // sea surface: warm all night (no cooling), cold in microwave. eIR .98 [Masuda, EL]; eMW .45 calm sea [Wilheit, UMF];
