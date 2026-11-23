@@ -242,12 +242,12 @@ function seaMaterial(instr) {
 const SEA_EYE = `
 float eyeSeaL(float r, float m, float i, float u, float g, vec3 W, vec3 N, vec3 V, vec3 Rf, float dist, float foam){
   eyeMR = r; eyeMM = m; eyeMI = i; eyeMU = u; eyeMG = g; return eyeL(seaBands(W, N, V, Rf, dist, foam, 0.)); }
-void eyeBands(out vec4 o1, out vec4 o2){
+void eyeBands(out vec4 o1, out vec4 o3){
   vec3 W, V, N, Rf; vec2 p; float dist, fd, crest, wash, foam;
   seaGeo(W, dist, V, N, Rf, p, fd, crest, wash, foam);
   o1 = vec4(eyeSeaL(0., 0., 1., 0., 0., W, N, V, Rf, dist, foam), eyeSeaL(0., 0., 0., 1., 0., W, N, V, Rf, dist, foam),
             eyeSeaL(0., 0., 0., 0., 1., W, N, V, Rf, dist, foam), 1.);
-  o2 = vec4(eyeSeaL(1., 0., 0., 0., 0., W, N, V, Rf, dist, foam), eyeSeaL(0., 1., 0., 0., 0., W, N, V, Rf, dist, foam), 0., 1.);
+  o3 = vec4(eyeSeaL(1., 0., 0., 0., 0., W, N, V, Rf, dist, foam), eyeSeaL(0., 1., 0., 0., 0., W, N, V, Rf, dist, foam), 0., 1.);
   eyeMR = eyeMM = eyeMI = eyeMU = eyeMG = 1.; }`;
 
 function sea() {

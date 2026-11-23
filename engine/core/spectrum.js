@@ -212,6 +212,15 @@ const RANGES = [['radio', 1, Infinity], ['micro', 1e-3, 1], ['ir', 700e-9, 1e-3]
 
 export const wavelength = p => p.lam ?? (p.f ? C / p.f : HC / p.E);
 export function bandOf(p) { const l = wavelength(p); return RANGES.find(([, lo, hi]) => l >= lo && l < hi)[0]; }
+// Where a process sits inside its band: 0 = the long-wave (low-frequency) edge, 1 = the short-wave edge, linear in
+// log wavelength. The open ends are closed at the extremes of this table: radio at 100 km (3 kHz, VLF sferics;
+// mains hum at 50 Hz clamps to 0), gamma at 1.24e-15 m (1 GeV, air-shower photons). Used by the spectral eye to
+// shift a band's hue slightly with frequency (engine/render/compose.js).
+const OPEN = { radio: [1, 1e5], gamma: [1.24e-15, 1e-11] };
+export function bandPos(p) {
+  const l = wavelength(p), b = bandOf(p), r = RANGES.find(x => x[0] === b), [lo, hi] = OPEN[b] || [r[1], r[2]];
+  return Math.min(1, Math.max(0, (Math.log(hi) - Math.log(l)) / (Math.log(hi) - Math.log(lo))));
+}
 
 const si = (v, units) => { for (const [k, u] of units) if (v >= k) return `${+(v / k).toPrecision(3)} ${u}`; return `${v.toPrecision(3)} ${units.at(-1)[1]}`; };
 // "2.4 GHz · 12.5 cm" — used by the panel

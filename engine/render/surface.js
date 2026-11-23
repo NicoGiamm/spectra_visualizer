@@ -239,16 +239,16 @@ function patchVisible(mat, props, { extraDecl = '', visExtra = '', instrExtra = 
 
 // The spectral eye's hook (engine/render/compose.js): the surface's emission per band, the same terms as the
 // instrument view (surfBands + instrExtra, full detail) without its dark base and lines, one band at a time via
-// the eye masks, as luminance into the eye's band outputs: o1 = (IR, UV, gamma, coverage), o2 = (radio, micro,
+// the eye masks, as luminance into the eye's band outputs: o1 = (IR, UV, gamma, coverage), o3 = (radio, micro,
 // X-ray, coverage). The ground is dark in X-rays and opaque in every band (coverage 1).
 export const eyeBandsGLSL = (instrExtra = '') => `
 vec3 eyeSurfC(){ vec3 N = normalize(vSurfN), W = vSurfW; float dist = length(W - cameraPosition), line = 0.;
   vec3 c = surfBands(W, N, 0.); ${instrExtra}
   return c; }
 float eyeSurfL(float r, float m, float i, float u, float g){ eyeMR = r; eyeMM = m; eyeMI = i; eyeMU = u; eyeMG = g; return eyeL(eyeSurfC()); }
-void eyeBands(out vec4 o1, out vec4 o2){
+void eyeBands(out vec4 o1, out vec4 o3){
   o1 = vec4(eyeSurfL(0., 0., 1., 0., 0.), eyeSurfL(0., 0., 0., 1., 0.), eyeSurfL(0., 0., 0., 0., 1.), 1.);
-  o2 = vec4(eyeSurfL(1., 0., 0., 0., 0.), eyeSurfL(0., 1., 0., 0., 0.), 0., 1.);
+  o3 = vec4(eyeSurfL(1., 0., 0., 0., 0.), eyeSurfL(0., 1., 0., 0., 0.), 0., 1.);
   eyeMR = eyeMM = eyeMI = eyeMU = eyeMG = 1.; }`;
 
 // Registry of surfaces for the meters (activity is the weighted band response of each surface).

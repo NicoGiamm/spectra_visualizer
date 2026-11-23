@@ -169,7 +169,7 @@ export const valleyFog = () => event({ name: 'Valley fog', t0: 30, t1: 60, bands
       void main(){ if(uSOnI < .5) discard; float a = fogA(); gl_FragColor = vec4(thermal(.06 + .05*(vQ.y*.5 + .5))*.22, a*.92); }` });
     // spectral eye (engine/render/compose.js): the same cold fog top in the IR channel, with its own coverage, so it
     // hides the warm ground in IR only (radio, microwave and gamma pass through fog)
-    vis.userData.eyeBands = `void eyeBands(out vec4 o1, out vec4 o2){ float a = fogA(); o1 = vec4(eyeL(thermal(.06 + .05*(vQ.y*.5 + .5))*.22), 0., 0., a*.92); o2 = vec4(0.); }`;
+    vis.userData.eyeBands = `void eyeBands(out vec4 o1, out vec4 o3){ float a = fogA(); o1 = vec4(eyeL(thermal(.06 + .05*(vQ.y*.5 + .5))*.22), 0., 0., a*.92); o3 = vec4(0.); }`;
     this.mesh = new THREE.Mesh(g, vis); this.mesh.frustumCulled = false; this.mesh.renderOrder = 4; S.scene.add(solid(this.mesh, ir));
     const near = banks.reduce((a, b) => (Math.hypot(b.x - c0.x, b.z - c0.z) < Math.hypot(a.x - c0.x, a.z - c0.z) ? b : a), banks[0]);
     this.p = near ? new V3(near.x, near.y + 4, near.z) : null;
