@@ -71,7 +71,7 @@ export const SURF_U = {
 //   body (an animal or a person: ~30 cm of tissue ≈ water): radio .5 — STAND-IN (the body absorbs/scatters VHF but is
 //     smaller than its wavelength); microwave .01 — ~20 dB through a torso at 2.4 GHz (ITU-R P.2040 tissue ε″; body-loss
 //     measurements ~15–30 dB); gamma .2 — 30 cm of water at μ/ρ .058 cm²/g (1.46 MeV)
-const TRANS = { ground: [.05, 0, 0], canopy: [.9, .2, .95], facade: [.1, .002, 0], wood: [.95, .6, .88], body: [.5, .01, .2] };
+const TRANS = { ground: [.05, 0, 0], canopy: [.9, .25, .95], facade: [.1, .002, 0], wood: [.95, .6, .88], body: [.5, .01, .2] };
 const P = (T0, Teq, tau, eIR, eMW, uvAlb, gamma, rRadio, gloss = 0, tr = TRANS.ground) => ({ A: [T0, Teq, tau ? 1 / tau : 0, eIR], B: [eMW, uvAlb, gamma, rRadio], C: [gloss, ...tr] });
 export const PRESET = {
   // sea surface: warm all night (no cooling), cold in microwave. eIR .98 [Masuda, EL]; eMW .45 calm sea [Wilheit, UMF];

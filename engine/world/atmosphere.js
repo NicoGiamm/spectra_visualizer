@@ -4,7 +4,7 @@
 // so sky events from engine/events/sky.js line up with it wherever they are reused.
 import * as THREE from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
-import { bandPos } from '../core/spectrum.js';
+import { bandPos, SPECTRUM } from '../core/spectrum.js';
 import { V3, DEG, sm, lerp, kf } from '../core/util.js';
 import { S } from '../core/state.js';
 import { dirAE } from '../core/geom.js';
@@ -132,7 +132,7 @@ export function createAtmosphere(opts = {}) {
   nightMat.userData.eyeBands = `
 #define EYE_SKY
 #define EYE_POS_A vec3(${pos(10e-6).toFixed(4)}, ${pos(340e-9).toFixed(4)}, ${pos(0, 1e8).toFixed(4)})
-#define EYE_POS_L vec3(${bandPos({ f: 100e6 }).toFixed(4)}, ${bandPos({ f: 20e9 }).toFixed(4)}, ${pos(0, 5e3).toFixed(4)})
+#define EYE_POS_L vec3(${bandPos({ f: 100e6 }).toFixed(4)}, ${bandPos({ f: 20e9 }).toFixed(4)}, ${bandPos(SPECTRUM.cxb).toFixed(4)})
 void eyeBands(out vec4 o1, out vec4 o3){
   vec3 d = normalize(vDir); float above = smoothstep(-.03, .12, d.y), sel = max(d.y, .02);
   float g = dot(d, uGalN), core = pow(max(dot(d, uGalC), 0.), 5.);

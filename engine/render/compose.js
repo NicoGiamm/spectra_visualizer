@@ -327,7 +327,7 @@ function readAsync(gl, w, h) {
   const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0); gl.flush();
   return new Promise(res => {
     const poll = () => {
-      if (gl.clientWaitSync(sync, 0, 0) === gl.TIMEOUT_EXPIRED) { requestAnimationFrame(poll); return; }
+      if (gl.clientWaitSync(sync, 0, 0) === gl.TIMEOUT_EXPIRED) { setTimeout(poll, 0); return; }   // timers, not frames: no frame render between polls
       gl.deleteSync(sync); const out = new Float32Array(n);
       gl.bindBuffer(gl.PIXEL_PACK_BUFFER, buf); gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, out); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
       gl.deleteBuffer(buf); res(out);

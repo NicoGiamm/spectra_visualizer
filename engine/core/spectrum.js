@@ -37,8 +37,9 @@ export const SPECTRUM = {
   skyThermalIR:    { name: 'clear-sky thermal emission (8–14 µm)', lam: 10e-6 },
   // O₂ Herzberg I bands, 250–400 nm, from ~95 km (Chamberlain 1961, Physics of the Aurora and Airglow; ~400 R)
   uvAirglow:       { name: 'UV airglow (O₂ Herzberg bands)', lam: 340e-9 },
-  // cosmic X-ray background, peak νFν near 30 keV (Gruber et al. 1999, ApJ 520, 124); absorbed by the air column
-  cxb:             { name: 'cosmic X-ray background', E: 3e4, ground: false },
+  // cosmic X-ray background at ~5 keV, the 2–10 keV band its photon rate is quoted for (~10 ph cm⁻² s⁻¹ sr⁻¹; its νFν
+  // peaks near 30 keV — Gruber et al. 1999, ApJ 520, 124); absorbed by the air column
+  cxb:             { name: 'cosmic X-ray background', E: 5e3, ground: false },
   // diffuse Galactic gamma rays from cosmic-ray interactions, concentrated in the plane (Fermi-LAT: Ackermann et al.
   // 2012, ApJ 750, 3); absorbed by the air column
   gammaDiffuse:    { name: 'diffuse Galactic gamma rays', E: 1e8, ground: false },
