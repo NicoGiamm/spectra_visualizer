@@ -157,11 +157,11 @@ void main(){ float lit, h = shellH(lit), disc = h < 0. ? .25 : 1.; h = max(h, 0.
   vec3 col = vec3(.22, .42, 1.)*day*exp(-h/.8)*1.2*disc;
   col += (vec3(1., .32, .08)*exp(-h/.35) + vec3(.9, .55, .3)*exp(-h/.9)*.4)*tw*disc;
   float dark = 1. - smoothstep(-.2, .02, lit);
-  col += uAirglow*dark*(vec3(.25, 1., .35)*exp(-pow((h - 9.5)/.55, 2.))*.5 + vec3(1., .2, .12)*exp(-pow((h - 25.)/2., 2.))*.02)*disc;
+  col += uAirglow*dark*(vec3(.25, 1., .35)*exp(-((h - 9.5)/.55)*((h - 9.5)/.55))*.5 + vec3(1., .2, .12)*exp(-((h - 25.)/2.)*((h - 25.)/2.))*.02)*disc;
   gl_FragColor = vec4(col, 1.); }`;
 const SHELL_EYE = `void eyeBands(out vec4 o1, out vec4 o3){ float lit, h = shellH(lit), disc = h < 0. ? .25 : 1.; h = max(h, 0.);
   float day = smoothstep(-.12, .2, lit), dark = 1. - smoothstep(-.2, .02, lit);
-  float ir = day*exp(-h/1.2)*.25*disc + uAirglow*dark*exp(-pow((h - 8.7)/.6, 2.))*.9*disc;
+  float ir = day*exp(-h/1.2)*.25*disc + uAirglow*dark*exp(-((h - 8.7)/.6)*((h - 8.7)/.6))*.9*disc;
   float uv = day*exp(-h/1.)*.35*disc;
   o1 = vec4(ir, uv, 0., 1.); o3 = vec4(0., 0., 0., 1.); }`;
 function shell() {

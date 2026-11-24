@@ -177,11 +177,16 @@ export const volcanicLightning = () => event({ name: 'Volcanic lightning', t0: 2
     this.sp = new EmField('vis', 8, '#dfe4ff');
   },
   update() {
-    const { t, T } = S, I = env(t, 26, 42, 2); if (I <= 0) return;
+    const { t, T } = S, I = env(t, 26, 42, 2);
+    // the flash light: the brightest active bolt sets it; switched back off once no bolt is lit (scrubbing included)
+    let best = 0, at = null;
+    if (I <= 0) { if (this.lit) ENV.flashLight.intensity = 0; this.lit = false; return; }
     for (const b of this.bolts) { const age = t - b.t0; if (age < 0 || age > .9) continue;
       const f = age < .2 ? (Math.sin(T * 97 + b.t0) > -.4 ? 1 : .3) * (1 - age / .2) : 0;
       this.bv.set(b.pts, 7, 5, f * 2.2); this.glow.set(b.pts[4], 500, f * .6); this.ra.set(b.pts[0], 700, 1 - age / .9);
-      ENV.flashLight.position.copy(b.pts[4]); ENV.flashLight.intensity = S.on.vis ? f * 2 : 0; }
+      if (f > best) { best = f; at = b.pts[4]; } }
+    if (best > 0) { ENV.flashLight.position.copy(at); ENV.flashLight.intensity = S.on.vis ? best * 2 : 0; } else if (this.lit) ENV.flashLight.intensity = 0;
+    this.lit = best > 0;
     // near-vent sparks: tiny, many, every few tenths of a second (visual flicker only)
     for (let i = 0; i < 8; i++) { const ph = (T * 3.1 + i * .37) % 1; if (ph < .12) this.sp.set(i, this.base.clone().add(P(Math.sin(i * 7.1) * 40, -120 + Math.cos(i * 3.3) * 50, Math.cos(i * 5.3) * 40)), 18, I * (1 - ph / .12)); }
     this.vhf.set(this.base.clone().add(P(0, -80, 0)), 300, I * (.5 + .3 * Math.sin(T * 9)));
@@ -229,6 +234,11 @@ export const monitoringStation = () => event({ name: 'Volcano monitoring station
     this.wifi.set(this.cam, 2.2, .5 + .2 * Math.sin(T * 5));
     this.beam.set(Array.from({ length: 12 }, (_, i) => this.cam.clone().add(P(0, i * .3, 4 + i * 6))), .6, 3, .35);
     this.ledE.set(this.led, .25, T % 2 < .15 ? 1 : 0);
-    this.sats.forEach((s, i) => this.gnss.set(i, skyP(s.az + t * 1.2 * (i % 2 ? 1 : -1), s.el + t * .4 * Math.sin(i)), deg(.7), .2));
+    // each point drifts along its own track and wraps inside FOV_SKY (az 214–326, el 12–56), fading at the edges, as a
+    // satellite setting out of the cone is replaced by another rising into it (as the ocean's gnss())
+    const W = 112, wrap = (x, a, w) => a + (((x - a) % w) + w) % w;
+    this.sats.forEach((s, i) => { const az = wrap(s.az + t * 1.2 * (i % 2 ? 1 : -1), FOV_SKY.az0 + 4, W), el = wrap(s.el + t * .4 * Math.sin(i), 12, 44);
+      const edge = Math.min(az - FOV_SKY.az0 - 4, FOV_SKY.az0 + 4 + W - az, el - 12, 56 - el);
+      this.gnss.set(i, skyP(az, el), deg(.7), .2 * sm(0, 3, edge)); });
   },
   where() { return this.top; } });

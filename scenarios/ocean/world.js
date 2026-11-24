@@ -71,7 +71,7 @@ float skyT(float y){ float e = 1. - pow(.7, 1./max(y, .04)); return mix(-60., uA
 // (tan = .354) from the bow, the stern wake; 0..1
 float washAt(vec2 xz){
   vec2 d = xz - uBoatP; float u = dot(d, uBoatF), v = dot(d, vec2(-uBoatF.y, uBoatF.x)), av = abs(v);
-  float hb = (u > 6.2 || u < -6.) ? 0. : 1.95*sqrt(max(0., 1. - pow((u + .6)/6.8, 2.)));
+  float hb = (u > 6.2 || u < -6.) ? 0. : 1.95*sqrt(max(0., 1. - ((u + .6)/6.8)*((u + .6)/6.8)));
   float side = (u > -6.5 && u < 6.4) ? exp(-max(av - hb, 0.)/.9) : 0.;
   float b = 6.2 - u, arm = u < 6.2 ? exp(-abs(av - b*.354)/(.5 + .04*b))*exp(-b/70.) : 0.;
   float stern = u < -5.5 ? exp(-av/(1.4 + .12*(-5.5 - u)))*exp((u + 5.5)/90.) : 0.;

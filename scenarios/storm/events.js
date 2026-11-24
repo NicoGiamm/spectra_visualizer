@@ -167,7 +167,8 @@ export const whistlers = () => event({ name: 'Whistlers', t0: 32, t1: 60, bands:
   init() { this.s = STRIKES.filter(s => s.t > 32 && s.i % 2 === 0); this.r = new Rib('radio', null, 10); this.e = new Em('radio'); },
   update() { this.p = null;
     for (const s of this.s) { const a = S.t - s.t; if (a < 1 || a > 3.4) continue;
-      const p = (a - 1) / 2.4, head = 58 - 42 * p, I = .75 * Math.sin(Math.PI * p) * sm(30, 40, S.t);
+      const p = (a - 1) / 2.4, head = 48 - 34 * p,   // ribbon top = head + 9.9 ≤ 58°: inside FOV_SKY (el ≤ 60)
+         I = .75 * Math.sin(Math.PI * p) * sm(30, 40, S.t);
       const pts = Array.from({ length: 10 }, (_, i) => { const el = head + i * 1.1; return skyP(318 - 5 * Math.sin(el * .07), el); });
       this.r.set(pts, deg(.9), deg(.3), I); this.e.set(pts[0], deg(2.2), I); this.p = pts[0]; } },
   where() { return this.p; } });

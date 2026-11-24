@@ -81,10 +81,10 @@ export const auroraNearUV = cur => event({ name: 'Aurora near-UV (N₂ 337 nm)',
 // ionosphere: it almost never reaches the ground (rare detections in the dark Antarctic winter: LaBelle & Anderson 2011,
 // Geophys. Res. Lett. 38, L04104) — not the air's absorption, which is what the Ground / Orbit switch models. So it is
 // never drawn as a source here; the label marks the direction of its source (almost overhead, a little south of the
-// magnetic zenith, out of view) while the breakup drives it. (Drawn, its 1.2 km wavelength would also set the radio
+// magnetic zenith, out of view: the label stands in at the upper-left edge of the view) while the breakup drives it. (Drawn, its 1.2 km wavelength would also set the radio
 // band's diffraction blur and smear the whole radio view: compose.js sigmaPx.)
 export const akr = cur => event({ name: 'Auroral kilometric radiation', t0: cur.t0 + 20, t1: cur.t1 - 4, bands: ['radio'], freq: ['akr'],
-  note: 'During the breakup, electrons spiralling down the field lines thousands of kilometres above the aurora act as a natural maser at ~250 kHz — the Earth\'s strongest radio emission, discovered by satellites. Its source is almost overhead, a little to the south and out of view. It is beamed out into space and turned back by the ionosphere, so it almost never reaches the ground (only a few detections, in the dark Antarctic winter): the label only marks where it comes from.',
+  note: 'During the breakup, electrons spiralling down the field lines thousands of kilometres above the aurora act as a natural maser at ~250 kHz — the Earth\'s strongest radio emission, discovered by satellites. Its source is almost overhead, a little to the south and out of view. It is beamed out into space and turned back by the ionosphere, so it almost never reaches the ground (only a few detections, in the dark Antarctic winter): the label stands in for it at the upper edge of the view, toward its source.',
   update() { const st = cur.st, I = st ? env(S.t, this.t0, this.t1, 2) * clamp(st.bk + .35 * st.rc) * night() : 0;
     this.p = I > .05 ? skyP(212, 58) : null; },
   where() { return this.p; } });

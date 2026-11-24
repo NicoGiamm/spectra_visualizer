@@ -10,10 +10,16 @@ contracts for writing scenes and events. The front page is the [README](../READM
 | **Mountain trail** | Walking ~80 m along an alpine trail: a hut, a deer on a thermal camera, cows, fireflies, bats, a campfire, distant hikers' headlamps, a valley cell mast. |
 | **Seaside** | On a west-facing beach. The Sun sets into the sea (with a green flash), the sand and the sea swap places in infrared, a lighthouse sweeps the bay, a container ship's radar paints the cliffs, sea mist rolls in. |
 | **City** | Out of a street canyon into a park: traffic, pedestrians with phones, Wi-Fi and 5G with multipath reflections, a tram arcing, LiDAR delivery robots, security cameras with near-IR illuminators, fireworks under a light-polluted sky. |
+| **Arctic evening aurora** | A snowfield near Tromsø (69.65° N) on an October evening: an auroral substorm builds along the geomagnetic east–west and breaks up, the snow turns green and UV-bright under it, a frozen lake, a cabin, a riometer, auroral kilometric radiation that almost never reaches the ground. |
+| **Thunderstorm on the plains** | Open grassland as a supercell passes over at sunset: close lightning with leader X-rays, a terrestrial gamma-ray flash, sferics and whistlers, a weather radar, rain warm in microwave, hail, power-line corona and a farmhouse losing power. |
+| **Volcano at dusk** | A ridge facing a lava lake and a fountaining vent: lava blazing in infrared and microwave, cooling flows, an SO₂ plume dark in UV, volcanic lightning, faint radon gamma at a fumarole, a monitoring station. |
+| **Open ocean** | The cockpit of a yacht ~1000 km from land: almost no human radio (GPS, a satphone, the boat's AIS), a cargo ship's radar painting your mast, a bioluminescent wake, the darkest sky of all. |
+| **Above the atmosphere** | The space station's cupola over one 93-minute orbit: no air, so every band arrives — the Sun in X-rays, the Earth's limb in gamma rays, airglow, cities, storms and sprites from above, the South Atlantic Anomaly. |
 
-All three share one sky: sunset and twilight, Venus, an airliner, satellites, the Milky Way and the cosmic
+The trail, seaside and city share one sky: sunset and twilight, Venus, an airliner, satellites, the Milky Way and the cosmic
 microwave background, meteors, a pulsar, a comet, aurora, a setting waxing Moon and halos, cosmic-ray air showers, a
-thunderstorm, a fast radio burst, a supernova and a gamma-ray burst.
+thunderstorm, a fast radio burst, a supernova and a gamma-ray burst. The newer scenes reuse what fits their place
+and date, and the aurora and the orbit run on their own Sun and Moon tracks (see *Writing a scene* below).
 
 ## Controls
 
