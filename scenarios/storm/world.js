@@ -11,8 +11,9 @@ import { ENV } from 'spectra/world/atmosphere.js';
 import { heightfield } from 'spectra/world/heightfield.js';
 
 // ---------------------------------------------------------------- the storm's track (time-compressed)
-// A supercell moving east at ~15 m/s would cross 4 km in ~4–5 minutes; here the rain front advances 160 m per
-// script-second, so the whole passage (front, core, trailing rain) fits the 60-s sunset-to-night axis.
+// 1 script unit = 3.4 min (engine/world/atmosphere.js, no site): the rain front advances 160 m per unit (~0.8 m/s,
+// a real supercell moves ~10–15 m/s), and the rain area is drawn only ~3.5 km deep, ~10× smaller than a real one,
+// so the passage keeps a realistic length: rain at the viewer t 22.5–44 ≈ 73 min.
 export const STORM = {
   frontZ: t => -3600 + 160 * t,          // leading edge of the rain (z; west = −z), reaches the viewer at t ≈ 22.5
   rearZ: t => -3600 + 160 * t - 3500,    // trailing edge: the rain stops here at t ≈ 44

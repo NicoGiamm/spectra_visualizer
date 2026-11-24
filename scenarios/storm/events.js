@@ -1,7 +1,9 @@
 // Events of the thunderstorm on the plains (sky events come from the engine library).
-// Script time is compressed (~90 real seconds per script-second): a lightning flash that really lasts ~0.2 s is
-// drawn over ~0.8 script-s, the strike rate is that of an active supercell (several close flashes a minute) squeezed
-// onto the axis, and the storm's ~45-minute passage takes the middle of the minute.
+// Clock: with no atmosphere `site`, 1 script unit = 3.4 min of sky time (engine/world/atmosphere.js, the Moon track),
+// so the 0–60 axis spans ~3.4 h; playback runs 0.5 script units per real second. Derived durations: rain at the viewer
+// t 22.5–44 ≈ 73 min, hail t 25–30 ≈ 17 min, power outage t 31.5–40 ≈ 29 min. A lightning flash (really ~0.2–0.3 s)
+// is drawn over ~0.8 script units, i.e. ~1.6 s on screen: slowed about five- to tenfold. The strikes are a sample of
+// the storm's flashes (a real supercell gives several a minute).
 import * as THREE from 'three';
 import { V3, DEG, clamp, lerp, sm, env, kf, R } from 'spectra/core/util.js';
 import { S } from 'spectra/core/state.js';
@@ -83,7 +85,7 @@ export const approach = () => event({ name: 'Supercell approach', t0: 0, t1: 26,
 
 // ---------------------------------------------------------------- close lightning
 export const lightning = () => event({ name: 'Close lightning', t0: 3, t1: 56, bands: ['vis', 'ir', 'uv', 'radio'], freq: ['lightning', 'o7774', 'airArcUV', 'lightningVHF', 'sferics'], tags: ['time-compressed'],
-  note: 'Cloud-to-ground strikes from a few kilometres to a few hundred metres away, then "spider" lightning crawling under the trailing anvil. The ~30 000 K channel shines across the visible, brightest in the near-IR oxygen line at 777.4 nm (the line lightning satellites watch) and in near-UV N₂ bands; each stepped leader crackles in VHF (60–66 MHz) and every return stroke sends a VLF "sferic" racing outward along the ground, heard thousands of km away. Slowed about a hundredfold so each flash and its 3–4 return strokes can be seen.',
+  note: 'Cloud-to-ground strikes from a few kilometres to a few hundred metres away, then "spider" lightning crawling under the trailing anvil. The ~30 000 K channel shines across the visible, with one of its brightest lines in the near-IR, the oxygen line at 777.4 nm (the line lightning satellites watch) and in near-UV N₂ bands; each stepped leader crackles in VHF (60–66 MHz) and every return stroke sends a VLF "sferic" racing outward at nearly the speed of light, guided for thousands of km between the ground and the ionosphere (drawn as a ring spreading vastly slowed). Flashes slowed about five- to tenfold so each flash and its 3–4 return strokes can be seen.',
   init() {
     buildStrikes();
     this.pool = [0, 1].map(() => ({ v: new Rib('vis', '#e6ecff', 18), b1: new Rib('vis', '#d8e2ff', 7), b2: new Rib('vis', '#d8e2ff', 7), ir: new Rib('ir', null, 18), uv: new Rib('uv', null, 18),
@@ -104,7 +106,8 @@ export const lightning = () => event({ name: 'Close lightning', t0: 3, t1: 56, b
           P.v.set(s.pts, w, w * 1.2, b * 2.4); P.ir.set(s.pts, w * 1.6, w * 1.6, b * 1.3); P.uv.set(s.pts, w * 1.3, w * 1.3, b * .9 * Math.exp(-s.d / 4000));
           if (a < STROKES[1]) { P.b1.set(s.br[0], w * .6, w * .3, b * 1.3); P.b2.set(s.br[1], w * .6, w * .3, b * 1.1); }
           P.glow.set(s.top, 700, b * .8);
-          // VLF/LF sferic: the return stroke's current radiates; drawn as the ground wave spreading outward
+          // VLF/LF sferic: the return stroke's current radiates; it travels thousands of km in the Earth–ionosphere waveguide —
+          // drawn as a ring spreading outward, vastly slowed (really ~300 km per ms)
           const r = 20 + (a - LEAD) * 2600, ring = Array.from({ length: 33 }, (_, i) => { const q = i / 32 * Math.PI * 2; return new V3(s.g.x + Math.cos(q) * r, s.g.y + 3, s.g.z + Math.sin(q) * r); });
           P.ring.set(ring, 8 + r * .02, 8 + r * .02, .7 * fade); P.sf.set(s.g.clone().add(new V3(0, 40, 0)), clamp(s.d * .08, 60, 600), .9 * fade);
         }
@@ -128,9 +131,9 @@ export const lightning = () => event({ name: 'Close lightning', t0: 3, t1: 56, b
 // Stepped and dart leaders emit bursts of ~30 keV–few MeV X-rays just before each return stroke (Moore et al. 2001,
 // Geophys. Res. Lett. 28, 2141; Dwyer et al. 2003, Science 299, 694; Dwyer et al. 2005, GRL 32, L01803). In sea-level
 // air a 100 keV photon's mean free path is ~55 m (NIST XCOM μ/ρ 0.154 cm²/g), 1 MeV ~130 m: the bursts reach a
-// detector only from the bottom few hundred metres of a channel a few hundred metres away, never from far strikes.
-export const leaderXrays = () => event({ name: 'Leader X-rays', t0: 28, t1: 32.5, bands: ['xray'], freq: ['leaderXray'],
-  note: 'As the stepped leader of a nearby strike nears the ground, and again with each dart leader before the next return stroke, it emits short bursts of X-rays. Air stops them within a few hundred metres, so only a strike within ~100–200 m (here one 110 m away) can be detected from the ground.',
+// detector only from the bottom of a channel within ~100–200 m, never from far strikes.
+export const leaderXrays = () => event({ name: 'Leader X-rays', t0: 28, t1: 32.5, bands: ['xray'], freq: ['leaderXray'], tags: ['time-compressed'],
+  note: 'As the stepped leader of a nearby strike nears the ground, and again with each dart leader before the next return stroke, it emits short bursts of X-rays. Air stops them within ~100–200 m (a 100 keV photon goes ~55 m), so only a strike within ~100–200 m (here one 110 m away) can be detected from the ground.',
   init() { this.s = STRIKES.filter(s => s.xray); this.e = new Em('xray'); this.e2 = new Em('xray'); if (this.s.length) { this.t0 = this.s[0].t; this.t1 = this.s.at(-1).t + 1; } },
   update() { this.p = null;   // the air's attenuation (NIST XCOM) is applied by the spectral eye per line of sight
     for (const s of this.s) { const a = t_(s); if (a < 0 || a > .8) continue;
@@ -143,15 +146,15 @@ const t_ = s => S.t - s.t;
 // ---------------------------------------------------------------- terrestrial gamma-ray flash (downward)
 // TGFs are sub-millisecond bursts of gamma rays up to tens of MeV from runaway electron avalanches in thunderstorm
 // fields, discovered from orbit (Fishman et al. 1994, Science 264, 1313; Fermi GBM: Briggs et al. 2010, JGR 115,
-// A07323). Most beam upward out of the cloud tops and are seen only by satellites; downward TGFs during the first
-// milliseconds of a downward negative leader, from ~1–3 km up, have been recorded on the ground at the Telescope
+// A07323). Most beam upward out of the cloud tops and are seen only by satellites; downward TGFs from ~3–5 km up, in
+// the first 1–2 ms of a downward negative leader, have been recorded on the ground at the Telescope
 // Array (Abbasi et al. 2018, JGR Atmos. 123, 6864) and under Japanese winter storms (Enoto et al. 2017, Nature 551,
 // 481). Their footprint is a few km wide.
-export const tgf = () => event({ name: 'Terrestrial gamma-ray flash', t0: SPECIAL.tgf, t1: SPECIAL.tgf + 1, bands: ['gamma'], freq: ['tgf'], tags: ['rare'],
-  note: 'A downward burst of gamma rays from the leader of a strike 700 m away, its footprint sweeping over you, lasting less than a millisecond. Satellites record thousands of (upward) TGFs a year; a ground detector catches one only rarely, from a strike within a few km.',
+export const tgf = () => event({ name: 'Terrestrial gamma-ray flash', t0: SPECIAL.tgf, t1: SPECIAL.tgf + 1, bands: ['gamma'], freq: ['tgf'], tags: ['rare', 'time-compressed'],
+  note: 'A downward burst of gamma rays from ~4 km up, at the very start of the leader of a strike 700 m away, its footprint sweeping over you; it lasts less than a millisecond (drawn far longer). Satellites record thousands of (upward) TGFs a year; a ground detector catches one only rarely, from a strike within a few km. Here, at sea level under ~4 km of air (a 10 MeV photon goes ~380 m), almost nothing of it arrives: in the gamma view it barely rises above the ground\'s own speckle — what a ground observer would really get.',
   init() { this.s = STRIKES.find(s => s.tgf); this.c = new Em('gamma'); this.lines = Array.from({ length: 5 }, () => new Rib('gamma', null, 8)); this.ring = new Rib('gamma', null, 33); },
-  update() { const s = this.s, a = S.t - s.t; this.p = null; if (a < .12 || a > .34) return;
-    const k = 1 - (a - .12) / .22, src = s.pts[4], R0 = 1200;
+  update() { const s = this.s, a = S.t - s.t; this.p = null; if (a < 0 || a > .08) return;
+    const k = 1 - a / .08, src = s.c, R0 = 1200;   // inside the cloud, ~3.9 km up, as the leader starts
     this.c.set(src, 260, 6 * k); this.p = src;
     this.lines.forEach((L, i) => { const q = i / 5 * Math.PI * 2 + .3, end = new V3(s.g.x + Math.cos(q) * R0, s.g.y + 2, s.g.z + Math.sin(q) * R0);
       L.set(Array.from({ length: 8 }, (_, j) => src.clone().lerp(end, j / 7)), 25, 40, 2 * k); });
@@ -160,7 +163,7 @@ export const tgf = () => event({ name: 'Terrestrial gamma-ray flash', t0: SPECIA
 
 // ---------------------------------------------------------------- whistlers
 export const whistlers = () => event({ name: 'Whistlers', t0: 32, t1: 60, bands: ['radio'], freq: ['whistler'], tags: ['stylised'],
-  note: 'Part of each stroke\'s VLF energy escapes up through the night-time ionosphere, runs along Earth\'s magnetic field to the other hemisphere and back, and returns dispersed into a falling whistle (~10 → 1 kHz, about a second) that a VLF receiver turns into sound; they are far more common at night. Drawn as the tone sliding down from high in the north-west sky; the delay is stretched.',
+  note: 'Part of some strokes\' VLF energy escapes up through the night-time ionosphere, runs along Earth\'s magnetic field to the other hemisphere and back (a two-hop whistler), and returns dispersed into a falling whistle (~10 → 1 kHz, dispersion ~2 s) that a VLF receiver turns into sound; they are far more common at night. Drawn as the tone sliding down from high in the north-west sky; the delay is stretched.',
   init() { this.s = STRIKES.filter(s => s.t > 32 && s.i % 2 === 0); this.r = new Rib('radio', null, 10); this.e = new Em('radio'); },
   update() { this.p = null;
     for (const s of this.s) { const a = S.t - s.t; if (a < 1 || a > 3.4) continue;
@@ -171,7 +174,7 @@ export const whistlers = () => event({ name: 'Whistlers', t0: 32, t1: 60, bands:
 
 // ---------------------------------------------------------------- weather radar
 export const radar = () => event({ name: 'Weather radar (NEXRAD)', t0: 0, t1: 60, bands: ['micro'], freq: ['nexrad'], tags: ['stylised'],
-  note: 'A WSR-88D Doppler radar under its dome 2 km to the south-west sweeps 10-cm (2.8 GHz) pulses around the horizon. Each time the beam passes you it flashes; where it crosses the rain the drops scatter it back to the radar (and a little toward you), which is how forecasters see the storm\'s hook and hail core. The sweep is drawn slowed to one turn every 8 s; the beam is drawn only where rain scatters it.',
+  note: 'A WSR-88D Doppler radar under its dome 2 km to the south-west sweeps 10-cm (2.8 GHz) pulses around the horizon. Each time the beam passes you it flashes; where it crosses the rain the drops scatter it back to the radar (and a little toward you), which is how forecasters see the storm\'s hook and hail core. The sweep is drawn turning once every 8 s (a real one takes ~10–20 s per turn at low tilt; not compressed with the storm); the beam is drawn only where rain scatters it.',
   init() { this.d = SPOTS.radar; this.lobe = new Em('micro'); this.side = new Em('micro'); this.beam = new Rib('micro', null, 12); },
   update() { const { t, T } = S, d = this.d, phi = (T / 8) % 1 * Math.PI * 2;
     const dang = (x, y) => Math.abs(((x - y) % (2 * Math.PI) + 3 * Math.PI) % (2 * Math.PI) - Math.PI);
@@ -203,14 +206,14 @@ export const rain = () => event({ name: 'Rain shafts', t0: 3, t1: 50, bands: ['v
 
 // ---------------------------------------------------------------- rain-cooled ground (the terrain shader does the drawing)
 export const coldGround = () => event({ name: 'Rain-cooled ground', t0: 8, t1: 60, bands: ['ir', 'micro'], freq: ['coldPool', 'wetSoilMW'],
-  note: 'Cold, rain-chilled outflow and evaporation leave the wet prairie several degrees colder: on a thermal camera a dark front sweeps toward you with the rain and stays behind it. Wet soil also looks colder in microwave, because water lowers its emissivity — the trick soil-moisture satellites use.',
+  note: 'Cold, rain-chilled outflow and evaporation leave the wet prairie several degrees colder: on a thermal camera a dark front sweeps toward you with the rain and stays behind it. Wet soil also looks colder in microwave (at L-band, ~1.4 GHz, where the reflected sky is only ~5 K), because water lowers its emissivity — the trick soil-moisture satellites use.',
   update() { const { t } = S, wet = clamp((STORM.frontZ(t) + 3000) / 3500); S.act.ir += .35 * wet; S.act.micro += .12 * wet;
     const z = clamp(STORM.frontZ(t) - 220, -2500, -40); this.p = new V3(-30, heightAt(-30, z) + 1, z); },
   where() { return this.p; } });
 
 // ---------------------------------------------------------------- hail
 export const hail = () => event({ name: 'Hail burst', t0: 25, t1: 30, bands: ['vis', 'ir'], freq: ['lightning', 'coldPool'],
-  note: 'For a few minutes the storm\'s hail core passes overhead: stones the size of marbles, seen only in the lightning flashes, and on a thermal camera a white-grey ground turns into a 0 °C patch until it melts.',
+  note: 'For about a quarter of an hour the storm\'s hail core passes overhead: stones the size of marbles, seen only in the lightning flashes; the ground turns white-grey, and on a thermal camera into a 0 °C patch until it melts.',
   init() { this.h = Array.from({ length: 220 }, () => ({ x: (R() - .5) * 70, z: -4 - R() * 60, y: R() * 25, s: .8 + R() * .4 })); this.f = new EmField('vis', this.h.length, '#e8f0ff'); },
   update() { const { t, T } = S, I = env(t, 25, 30, .6); if (I <= 0) return;
     const f = STORM.flash;
@@ -220,7 +223,7 @@ export const hail = () => event({ name: 'Hail burst', t0: 25, t1: 30, bands: ['v
 
 // ---------------------------------------------------------------- power line: corona in the rain, flashover, St. Elmo's fire
 export const powerLine = () => event({ name: 'Power-line corona & flashover', t0: 18, t1: 44, bands: ['radio', 'uv', 'vis'], freq: ['coronaRF', 'airArcUV', 'arcLight'],
-  note: 'Rain drops on the 115 kV conductors and insulators break the air into corona: faint near-UV (the N₂ 337 nm band UV corona cameras look for) and a broadband radio hiss. At t ≈ 31 lightning hits the line: an insulator flashes over in a blue-white arc, the breaker trips and locks out, the line goes dead and the corona stops until power is restored. Before that, the strong field under the storm core makes the farm mast\'s lightning rod glow violet — St. Elmo\'s fire.',
+  note: 'Rain drops on the 115 kV conductors and insulators break the air into corona: faint near-UV, strongest in the N₂ 337 nm band (daytime corona cameras use the weaker 240–280 nm solar-blind part), and a broadband radio hiss. At t ≈ 31 lightning hits the line: an insulator flashes over in a blue-white arc, the breaker trips and locks out, the line goes dead — the substation feed to the farm drops out with it — and the corona stops until power is restored. Meanwhile, the strong field under the storm core makes the farm mast\'s lightning rod glow violet — St. Elmo\'s fire.',
   init() { this.poles = POLES.slice(0, 10); this.uv = new EmField('uv', 30); this.rf = new EmField('radio', 10);
     this.arcV = new Em('vis', '#cfd6ff'); this.arcU = new Em('uv'); this.arcR = new Em('radio'); this.elmoV = new Em('vis', '#9b8cff'); this.elmoU = new Em('uv'); },
   update() { const { t } = S, live = !(t > SPECIAL.line + LEAD && t < 40), w = rainHere(t) * env(t, this.t0, this.t1, 1.5); this.p = null;
@@ -247,8 +250,8 @@ export const farmhouse = () => event({ name: 'Farmhouse', t0: 0, t1: 60, bands: 
   where() { return SPOTS.farmRoof; } });
 
 // ---------------------------------------------------------------- after the storm
-export const fireflies = () => event({ name: 'Fireflies after the rain', t0: 47, t1: 60, bands: ['vis'], freq: ['luciferin'], tags: ['common'],
-  note: 'Once the rain has gone east, fireflies rise from the wet grass — cold light with almost no infrared.',
+export const fireflies = () => event({ name: 'Fireflies after the rain', t0: 47, t1: 60, bands: ['vis'], freq: ['luciferin'],
+  note: 'Once the rain has gone east, a few fireflies flash over the wet grass. This late (2–3 h after an early-August sunset) most species have stopped; the late-night flashers are Photuris. Cold light with almost no infrared.',
   init() { this.f = Array.from({ length: 90 }, () => { const z = -8 - R() * 120, x = (R() - .5) * 90; return { b: new V3(x, heightAt(x, z) + .3 + R() * 1.8, z), s: .5 + R(), p: R() * 6, r: 1.3 + R() * 2 }; }); this.field = new EmField('vis', this.f.length, '#b8ff3a'); },
   update() { const { t, T } = S, I = env(t, this.t0, this.t1, 2); if (I <= 0) return;
     this.f.forEach((f, k) => { const b = Math.max(0, Math.sin(T * f.r + f.p)) ** 8; this.field.set(k, f.b.clone().add(new V3(Math.sin(T * .5 * f.s + f.p) * .7, Math.sin(T * 1.1 * f.s) * .3, Math.cos(T * .4 * f.s + f.p) * .7)), .14, I * b * 1.6); }); },
