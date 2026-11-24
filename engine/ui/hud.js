@@ -95,7 +95,7 @@ export function createHud({ onFilter }) {
 const LEGEND = {
   radio: 'flux; the sky glows with galactic synchrotron · soft (100 m array) · speckle = coherent transmitters',
   micro: 'brightness temperature: cold sea and sky dark, warm land bright · blurred (1 m dish)',
-  ir: 'radiated temperature (8–14 µm): warmer is brighter · warm-blooded bodies glow',
+  ir: 'two channels, as a fused night-vision goggle · thermal 8–14 µm (red): radiated temperature, warmer is brighter, warm-blooded bodies glow · near-IR 0.7–1.4 µm (pale): reflected moonlight and skylight, leaves bright (red edge), IR illuminators and lamps, grainy in the dark',
   vis: 'luminance, natural colour (a little desaturated)',
   uv: 'UV-A radiance: skylight on bright ground, glowing haze at dusk',
   xray: 'photon counts (keV): the air absorbs them within metres',

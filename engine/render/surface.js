@@ -50,15 +50,30 @@
 //          A mirror image of a transmitter is a lobe of width s = 2·slope (≥ .03 rad) around the specular direction,
 //          flux-conserving: peak P·R·S·(.03 / s)² / (1 + L² / range²) over the reflected path L (the image cannot
 //          outshine the source; a curved panel shows a dim sheen, a mirror a point);
-//          the eye's diffraction blur (compose.js) widens it to the receptor's resolution. Near-IR (Sun / Moon /
-//          illuminators on foliage) is M11/T3: D.y holds the data. X-ray / gamma: no reflection (Compton albedo of
-//          the ground is ~1 %, below the scenes' gamma speckle).
+//          the eye's diffraction blur (compose.js) widens it to the receptor's resolution. X-ray / gamma: no
+//          reflection (Compton albedo of the ground is ~1 %, below the scenes' gamma speckle).
+//
+// NEAR-IR (M11/T3, spectral eye only: the night-vision channel of the IR band, engine/core/bands.js NIR). Nothing in
+// the scenes is hot enough to emit at 0.7–1.4 µm except flames and lamps (sources): the landscape is seen by the
+// light it reflects. Lambertian, L = nirAlb (D.y) × E, with
+//   E = E_sky·(1 + N.y)/2 + E_moon·max(N·M, 0) + Σ P_lamp·max(N·L, 0)/d²   (sky: the cos-weighted hemisphere; Moon: a
+//       directional source; near-IR lamps registered with addTx('nir', …))
+// in the units of the scene's own lights (the visible hemisphere and moon lights of engine/world/atmosphere.js, read
+// from ENV each frame), so surfaces and sources stay on the one intensity scale the eye assumes (bands.js LREF): the
+// near-IR sky is the visible sky light × its near-IR / visible ratio, the Moon the moon light × 1.4 (NIR_LIGHT). The
+// real illuminance (NIR_LIGHT: the twilight sky after Brown 1952, the night-sky floor of starlight + OH airglow, the
+// waxing Moon in linear light) is computed alongside: its ratio to the scene's (uNirPhot) is what the tube's photon
+// count and threshold use (compose.js), so the grain follows the real darkness. Moonlit grass (.45) and sand (.45)
+// glow, water (.02) and asphalt (.12) stay black — leaves are ~9× brighter than in the red (~.05: the red edge,
+// SPECTRUM.nirReflect). Not modelled: shadows (no shadow maps), the Moon's glint on water; lamps light the ground only
+// where a scenario registers them with addTx('nir', …) (as sources they show in the near-IR regardless).
 import * as THREE from 'three';
 import { V3, sm } from '../core/util.js';
 import { S } from '../core/state.js';
 import { COMMON } from './shaders.js';
 import { solid } from './instrument.js';
-import { GAL_C, GAL_N } from '../world/atmosphere.js';
+import { GAL_C, GAL_N, sunEl, moonDir, MOON_ILLUM, ENV } from '../world/atmosphere.js';
+import { NIR } from '../core/bands.js';
 
 export const OVERLAY = { value: .12 };
 const MAX_TX = 8, MAX_HIT = 12;
@@ -66,10 +81,46 @@ const vec4s = () => Array.from({ length: MAX_TX }, () => new THREE.Vector4());
 export const SURF_U = {
   uSOnR_: { value: 0 }, uSOnM_: { value: 0 }, uSOnI_: { value: 0 }, uSOnU_: { value: 0 }, uSOnG_: { value: 0 },
   uOverlay: OVERLAY, uRadioDiffuse: { value: 1 }, uSurfT: { value: 0 }, uUVsky: { value: 0 }, uSurfTime: S.TIME,
-  uTxR: { value: vec4s() }, uTxM: { value: vec4s() },
+  uTxR: { value: vec4s() }, uTxM: { value: vec4s() }, uTxN: { value: vec4s() },
   uHitM: { value: Array.from({ length: MAX_HIT }, () => new THREE.Vector4()) },
   uGalN: { value: GAL_N }, uGalC: { value: GAL_C },   // the radio sky's orientation, for its reflection (M11/T2)
+  uNirSky: { value: 0 }, uNirMoon: { value: new THREE.Vector4() },   // near-IR illumination (M11/T3, NIR_LIGHT)
+  uNirPhot: { value: 1 },   // real near-IR irradiance (NIR.lux0 units) per scene-light unit: the tube's photon count (compose.js)
 };
+
+// Near-IR illumination (M11/T3). The real illuminance in units of NIR.lux0 (the sunset field = 1): illuminances in lx,
+// then × a near-IR / visible ratio for each light (a night-vision photocathode counts 0.6–0.9 µm photons, not lux):
+//   twilight  horizontal illuminance vs solar elevation, log10 lx: +5° 3.6, 0° 2.6, −6° 0.53 (3.4 lx, end of civil
+//             twilight), −12° −2.1 (8e-3 lx, nautical), −18° −3.2 (6e-4 lx, astronomical: starlight + airglow)
+//             (Brown 1952, Natural Illumination Charts, US Navy BuShips 374-1; the same values in Bond & Henderson
+//             1963); near-IR/visible 1 (sunlight's own spectrum, the reference)
+//   night     the floor below −18°: the 6e-4 lx night sky × 5 in the near-IR — the OH Meinel airglow outshines the
+//             starlight at 0.7–0.9 µm several times (Vatsia 1972; SPECTRUM.ohAirglow); the ×5 is a STAND-IN in that range
+//   Moon      0.27 lx from a full Moon at the zenith (Allen's Astrophysical Quantities, 4th ed. 2000, §12) × the phase
+//             MOON_ILLUM (Krisciunas & Schaefer 1991, as atmosphere.js) × the extinction 10^(−0.4·k·X), k = 0.1 mag
+//             per airmass at ~0.85 µm (I band; site values 0.05–0.1) with the Kasten & Young 1989 airmass, × the last
+//             1.5° of setting; near-IR/visible 1.4 — lunar reflectance 0.17 at 900 nm vs 0.12 at 550 nm (ROLO:
+//             Kieffer & Stone 2005, AJ 129:2887; SPECTRUM.moonNIR)
+// What the surfaces get is the scene's own light in the near-IR: the hemisphere light × (real near-IR sky / real visible
+// sky: 1 in twilight, nightK under the airglow) and the moon light × moonK; uNirPhot = real / scene (horizontal).
+export const NIR_LIGHT = { tw: [[5, 3.6], [0, 2.6], [-6, .53], [-12, -2.1], [-18, -3.2]], nightK: 5, moonLx: .27, moonK: 1.4, extK: .1 };
+const D2R = Math.PI / 180;
+function nirLight() {
+  const el = sunEl(), tw = NIR_LIGHT.tw;
+  let lg = tw.at(-1)[1];
+  for (let i = 0; i < tw.length - 1; i++) if (el >= tw[i + 1][0]) { const [e0, l0] = tw[i], [e1, l1] = tw[i + 1]; lg = el >= e0 ? l0 : l1 + (l0 - l1) * (el - e1) / (e0 - e1); break; }
+  const visSky = Math.max(10 ** lg, 10 ** tw.at(-1)[1]), sky = Math.max(10 ** lg, 10 ** tw.at(-1)[1] * NIR_LIGHT.nightK);   // airglow floor below −18°
+  const m = moonDir(), mel = Math.asin(Math.min(1, m.y)) / D2R, h = Math.max(mel, 0);
+  const X = 1 / (Math.sin(h * D2R) + .50572 * (h + 6.07995) ** -1.6364);
+  const moon = NIR_LIGHT.moonLx * MOON_ILLUM * 10 ** (-.4 * NIR_LIGHT.extK * X) * NIR_LIGHT.moonK * sm(0, 1.5, mel);
+  // the scene's lights (atmosphere.js, updated just before this), as luminance
+  const lum = c => .2126 * c.r + .7152 * c.g + .0722 * c.b, hemi = ENV.hemi, ml = ENV.moonLight;
+  const sSky = hemi ? lum(hemi.color) * hemi.intensity * sky / visSky : sky / NIR.lux0;
+  const sMoon = ml ? lum(ml.color) * ml.intensity * NIR_LIGHT.moonK : moon / NIR.lux0;
+  SURF_U.uNirSky.value = sSky; SURF_U.uNirMoon.value.set(m.x, m.y, m.z, sMoon);
+  const up = Math.max(m.y, 0), real = (sky + moon * up) / NIR.lux0, scene = sSky + sMoon * up;
+  SURF_U.uNirPhot.value = scene > 1e-9 ? real / scene : 1;
+}
 
 // ---------------------------------------------------------------- presets (documented reference values)
 // Sources, one per column (short keys used in the row comments):
@@ -324,6 +375,14 @@ float microTx(vec3 W, vec3 N, vec3 V, float eMW, float h, float slope){
 }
 // the 8–14 µm sky temperature (°C) a surface reflects: the mirror direction for its glossy part, the cos-weighted
 // hemisphere (sky mean −28 °C, the ground below at the surface's own T) for the rest
+// near-IR radiance (the night-vision channel, M11/T3; header: NEAR-IR): nirAlb × (sky hemisphere + Moon)
+// plus near-IR lamps registered with addTx('nir', …): irradiance P at 1 m, 1/d² (d ≥ 1 m), Lambert
+uniform float uNirSky; uniform vec4 uNirMoon; uniform vec4 uTxN[${MAX_TX}];
+float surfNIR(vec3 W, vec3 N, float alb){
+  float E = uNirSky*(.5 + .5*N.y) + uNirMoon.w*max(dot(N, uNirMoon.xyz), 0.);
+  for(int i = 0; i < ${MAX_TX}; i++){ if(uTxN[i].w <= 0.) continue;
+    vec3 L = uTxN[i].xyz - W; float d2 = dot(L, L); E += uTxN[i].w*max(dot(N, L*inversesqrt(max(d2, 1e-6))), 0.)/max(d2, 1.); }
+  return alb*E; }
 float irReflT(vec3 N, vec3 V, float T, float gloss){
   vec3 Rf = reflect(V, N);
   return mix(mix(T, -28., .5 + .5*N.y), mix(T, skyIRC(Rf), upK(Rf)), gloss);
@@ -425,13 +484,17 @@ function patchVisible(mat, props, { extraDecl = '', visExtra = '', instrExtra = 
 // The spectral eye's hook (engine/render/compose.js): the surface's emission per band, the same terms as the
 // instrument view (surfBands + instrExtra, full detail) without its dark base and lines, one band at a time via
 // the eye masks, as luminance into the eye's band outputs: o1 = (IR, UV, gamma, coverage), o3 = (radio, micro,
-// X-ray, coverage). The ground is dark in X-rays and opaque in every band (coverage 1).
+// X-ray, coverage). The ground is dark in X-rays and opaque in every band (coverage 1). EYE_NIR / eyeNIR(): the
+// near-IR (night-vision) radiance, a separate channel of the IR band (M11/T3).
 export const eyeBandsGLSL = (instrExtra = '') => `
 #ifdef SURF_ATTR
 vec3 eyeTrans(){ return vSurfC.yzw; }
+float eyeNIR(){ return uSOnI_*surfNIR(vSurfW, normalize(vSurfN), vSurfD.y); }
 #else
 vec3 eyeTrans(){ return uSurfC.yzw; }
+float eyeNIR(){ return uSOnI_*surfNIR(vSurfW, normalize(vSurfN), uSurfD.y); }
 #endif
+#define EYE_NIR
 vec3 eyeSurfC(){ vec3 N = normalize(vSurfN), W = vSurfW; float dist = length(W - cameraPosition), line = 0.;
   vec3 c = surfBands(W, N, 0.); ${instrExtra}
   return c; }
@@ -471,7 +534,10 @@ export function spectralGroup(group, props, opts = {}) {
 export const surfaceUniforms = props => ({ ...SURF_U, uSurfA: { value: toVec4(props.A) }, uSurfB: { value: toVec4(props.B) }, uSurfC: { value: toVec4(props.C) }, uSurfD: { value: toVec4(surfD(props)) } });
 
 // ---------------------------------------------------------------- transmitters
-const TX = { radio: [], micro: [] };
+// near-IR lamps (M11/T3): fn() -> { p, power } with power = the lamp's near-IR irradiance at 1 m in the scene's light
+// units (as the hemisphere / moon lights, NIR_LIGHT), e.g. a high-pressure sodium street lamp (819 nm doublet + near-IR continuum) or an 850 / 940 nm
+// camera illuminator; the MAX_TX brightest as seen from the camera (power / (1 + d²/(20 m)²)) light the surfaces
+const TX = { radio: [], micro: [], nir: [] };
 // fn() -> { p: Vector3, power } or null; strongest MAX_TX per band are uploaded each frame
 export const addTx = (band, fn) => TX[band].push(fn);
 // ray hits (multipath): fn() -> [{ p: Vector3 on the surface, power }]; the strongest MAX_HIT flash each frame
@@ -484,6 +550,7 @@ export function updateSurfaces(uvSky) {
   u.uSOnR_.value = on.radio ? 1 : 0; u.uSOnM_.value = on.micro ? 1 : 0; u.uSOnI_.value = on.ir ? 1 : 0;
   u.uSOnU_.value = on.uv ? 1 : 0; u.uSOnG_.value = on.gamma ? 1 : 0;
   u.uSurfT.value = t; u.uUVsky.value = uvSky;
+  nirLight();
   let txPow = { radio: 0, micro: 0 };
   for (const band of ['radio', 'micro']) {
     const live = TX[band].map(f => f()).filter(x => x && x.power > .01).sort((a, b) => b.power - a.power).slice(0, MAX_TX);
@@ -491,6 +558,9 @@ export function updateSurfaces(uvSky) {
     arr.forEach((v, i) => { const x = live[i]; if (x) v.set(x.p.x, x.p.y, x.p.z, x.power); else v.set(0, 0, 0, 0); });
     txPow[band] = live.reduce((a, x) => a + x.power, 0);
   }
+  const cam = S.camera?.position, seen = x => x.power / (1 + (cam ? x.p.distanceToSquared(cam) : 0) / 400);
+  const nir = TX.nir.map(f => f()).filter(x => x && x.power > 0).sort((a, b) => seen(b) - seen(a)).slice(0, MAX_TX);
+  u.uTxN.value.forEach((v, i) => { const x = nir[i]; if (x) v.set(x.p.x, x.p.y, x.p.z, x.power); else v.set(0, 0, 0, 0); });
   const hits = HITS.micro.flatMap(f => f() || []).filter(x => x.power > .01).sort((a, b) => b.power - a.power).slice(0, MAX_HIT);
   u.uHitM.value.forEach((v, i) => { const x = hits[i]; if (x) v.set(x.p.x, x.p.y, x.p.z, x.power); else v.set(0, 0, 0, 0); });
   S.act.micro += hits.reduce((a, x) => a + x.power, 0) * .1;   // a few small spots: a small meter share

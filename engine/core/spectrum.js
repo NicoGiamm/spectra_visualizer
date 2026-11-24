@@ -220,6 +220,19 @@ export const SPECTRUM = {
   droneVideo:      { name: 'drone video downlink (5.8 GHz)', f: 5.8e9 },
   batteryWarm:     { name: 'warm traction battery / motors (~305 K)', lam: 9.5e-6 },
 
+  // ===== near-IR (M11/T3: the night-vision channel of the IR band, engine/render/surface.js surfNIR) =====
+  // leaves reflect ~0.45–0.5 at 0.8 µm against ~0.05 in the red — the red edge at ~0.7 µm (mesophyll scattering, no
+  // chlorophyll absorption beyond 0.7 µm: Jacquemoud & Baret 1990, Remote Sens. Environ. 34:75, PROSPECT; ASTER /
+  // ECOSTRESS library spectra); the illuminant is the Moon, the twilight sky and the airglow
+  nirReflect:      { name: 'near-IR moonlight / skylight reflected (leaves bright: the red edge)', lam: 800e-9 },
+  // moonlight is sunlight × the lunar reflectance, which rises from ~0.07 at 400 nm to ~0.17 at 900 nm (ROLO model:
+  // Kieffer & Stone 2005, Astron. J. 129:2887) — redder than sunlight, so the Moon is a strong near-IR illuminator
+  moonNIR:         { name: 'moonlight in the near-IR (lunar reflectance rising to the red)', lam: 850e-9 },
+  // OH Meinel bands: vibration–rotation airglow of OH at ~87 km, 0.6–2.5 µm (Meinel 1950, ApJ 111:555); in the
+  // 0.7–0.9 µm range of a GaAs photocathode it outshines starlight several times (Vatsia 1972, Atmospheric Optical
+  // Environment, US Army ECOM) — what lights a moonless night for night-vision goggles
+  ohAirglow:       { name: 'OH Meinel-band airglow (night-sky near-IR)', lam: 850e-9 },
+
 };
 
 const RANGES = [['radio', 1, Infinity], ['micro', 1e-3, 1], ['ir', 700e-9, 1e-3], ['vis', 380e-9, 700e-9],
