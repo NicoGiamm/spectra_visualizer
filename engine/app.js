@@ -72,6 +72,8 @@ function start(sc) {
 
   const hud = createHud({ onFilter: () => { atmo.setVis(S.on.vis); applyVisMode(S.on.vis); } });
 
+  // the scenario's starting view (optional, M12/T1: the aurora faces its arc in the north-west); URL parameters win
+  if (sc.view) { S.yaw = clamp(sc.view.yaw ?? S.yaw, -1.35, 1.35); S.pitch = clamp(sc.view.pitch ?? S.pitch, -.1, 1.5); }
   // URL parameters
   if (q.has('t')) S.t = clamp(+q.get('t'), 0, 60);
   if (q.has('yaw')) S.yaw = clamp(+q.get('yaw'), -1.35, 1.35);

@@ -87,6 +87,7 @@ export const SPECTRUM = {
   thermal290:      { name: 'thermal emission ~290 K (ground, water)', lam: 10e-6 },
   thermal310:      { name: 'thermal emission ~310 K (bodies)', lam: 9.3e-6 },
   thermal700:      { name: 'thermal emission ~700 K (exhaust, chimney)', lam: 4.1e-6 },
+  wetExhaust:      { name: 'wet diesel exhaust: gas and cooling water (~330 K)', lam: 8.8e-6 },   // raw-water-injected exhaust, ~330 K STAND-IN; Wien 2898 µm·K / 330 K
   flame:           { name: 'flame light (glowing soot)', lam: 600e-9 },
   thermal1200:     { name: 'thermal emission ~1200 K (flames, embers)', lam: 2.4e-6 },
   // --- artificial light ---
@@ -107,6 +108,7 @@ export const SPECTRUM = {
   wxRadar:         { name: 'airborne weather radar (X-band)', f: 9.3e9 },
   xbandRadar:      { name: 'ship X-band radar', f: 9.4e9 },
   kuDownlink:      { name: 'satellite Ku-band downlink', f: 12e9 },
+  iridium:         { name: 'Iridium satellite phone / data burst (L band, 1616–1626.5 MHz)', f: 1621e6 },   // ITU-R M.1184; FCC IB Docket 02-364; TDD 90 ms frames, 8.28 ms bursts
   lte:             { name: 'LTE/5G phone uplink', f: 1.8e9 },
   nr35:            { name: '5G NR 3.5 GHz', f: 3.5e9 },
   lte800:          { name: 'LTE 800 MHz', f: 800e6 },
@@ -133,7 +135,7 @@ export const SPECTRUM = {
   sparkGlow:       { name: 'incandescent sparks (~1000–1300 K)', lam: 650e-9 },
   plumeHeat:       { name: 'hot gas & soot above the fire, cooling as it rises', lam: 4.5e-6 },
   groundHeat:      { name: 'ground heated by the fire pit (~330 K)', lam: 8.8e-6 },
-  waterCold:       { name: 'stream water: cold sky reflected (IR) and low emissivity (microwave)', f: 37e9 },
+  waterCold:       { name: 'water surface: microwave emissivity and cold-sky reflection (IR)', f: 37e9 },
   headlamp:        { name: 'LED headlamp', lam: 550e-9 },
   cowBody:         { name: 'cow body heat (~312 K)', lam: 9.3e-6 },
   gpsL1:           { name: 'GPS L1 / Galileo E1 navigation signal', f: 1575.42e6 },
@@ -207,19 +209,140 @@ export const SPECTRUM = {
   steam:           { name: 'condensed vapour plume: water droplets (~300–320 K)', lam: 9.3e-6 },
   // the same droplets (µm–tens of µm, ≫ λ) scatter all visible wavelengths alike (Mie regime: Bohren & Huffman,
   // "Absorption and Scattering of Light by Small Particles", 1983): a pale white plume in the lamplight
-  dropletScatter:  { name: 'lamplight scattered by condensed-vapour droplets (white)', lam: 550e-9 },
+  dropletScatter:  { name: 'light scattered by condensed-vapour droplets (white)', lam: 550e-9 },
   // natural radioactivity of building stone (K-40 line; Tl-208 from the thorium chain; Bi-214 from the uranium/radon chain)
   k40Gamma:        { name: 'K-40 gamma line (1.46 MeV, granite & brick)', E: 1.461e6 },
   tl208Gamma:      { name: 'Tl-208 gamma line (2.61 MeV, thorium chain)', E: 2.614e6 },
   bi214Gamma:      { name: 'Bi-214 gamma line (609 keV, uranium/radon chain)', E: 609.3e3 },
   blacklight365:   { name: 'black-light / insect-trap tube (UVA 365 nm)', lam: 365e-9 },
   hg405:           { name: 'mercury violet line leaking from black-light tubes (404.7 nm)', lam: 404.7e-9 },
-  ledRed:          { name: 'red LED rear light', lam: 625e-9 },
+  ledRed:          { name: 'red LED (~625 nm)', lam: 625e-9 },
   heaterGlow:      { name: 'red-hot patio-heater mesh (~1100 K, visible tail)', lam: 680e-9 },
   droneLink:       { name: 'drone control link (2.4 GHz ISM)', f: 2.44e9 },
   droneVideo:      { name: 'drone video downlink (5.8 GHz)', f: 5.8e9 },
   batteryWarm:     { name: 'warm traction battery / motors (~305 K)', lam: 9.5e-6 },
+  // ===== volcano additions (M12/T3)
+  // basaltic lava erupts at 1100–1200 °C: Kīlauea 1140–1170 °C (Helz & Thornber 1987, Bull. Volcanol. 49, 651), Etna
+  // ~1080–1120 °C; at those temperatures Planck's law puts a visible red-orange tail on a ~2 µm Wien peak
+  lavaGlow:     { name: 'incandescent basaltic lava (1100–1200 °C), red-orange', lam: 650e-9 },
+  lavaThermal:  { name: 'thermal emission of molten lava (~1420 K, Wien peak ~2 µm)', lam: 2.04e-6 },
+  // a crust forms within seconds and thickens as √t while its surface temperature falls fast, then slowly (Hon et al. fit it linear in log t):
+  // below ~600 °C within minutes, a few hundred °C after hours (Hon et al. 1994, GSA Bull. 106, 351; Keszthelyi &
+  // Denlinger 1996, Bull. Volcanol. 58, 5); Wien peak at ~600 K = 4.8 µm
+  crustThermal: { name: 'cooling lava crust (~400–900 K)', lam: 4.8e-6 },
+  // in the microwave the Rayleigh–Jeans limit holds: brightness temperature = emissivity × T, so lava at ~1400 K with
+  // e ≈ 0.9 (STAND-IN, like rock [UMF: Ulaby, Moore & Fung]) is ~5× brighter than the ~260 K ground; 37 GHz stands in for the band
+  lavaMicrowave:{ name: 'thermal microwave emission of lava (Tb ≈ 1200 K)', f: 37e9 },
+  // SO₂ absorbs strongly at 300–320 nm: UV SO₂ cameras image plumes against scattered skylight at ~310 nm (Mori &
+  // Burton 2006, Geophys. Res. Lett. 33, L24804); needs daylight UV, so it fades out in twilight
+  so2UV:        { name: 'SO₂ absorption of scattered skylight UV (300–320 nm)', lam: 310e-9 },
+  // lightning-mapping arrays record volcanic lightning and continual near-vent discharges as VHF pulses in a TV
+  // channel at 60–66 MHz (Thomas et al. 2007, Science 315, 1097, Augustine; Behnke et al. 2013, JVGR 259, 214, Redoubt)
+  ventVHF:      { name: 'volcanic-lightning and vent-discharge VHF pulses (60–66 MHz)', f: 63e6 },
+  // radon progeny: Pb-214 351.93 keV (35.6 %) beside Bi-214 609.32 keV (45.5 %, the engine's bi214Gamma) (NNDC ENSDF)
+  pb214Gamma:   { name: 'Pb-214 gamma line (352 keV, radon chain)', E: 351.9e3 },
+  // 169.400–169.475 MHz: metering and telemetry band (CEPT ERC Rec. 70-03, Annex 2); remote monitoring stations send
+  // seismic, tilt and GNSS data in short bursts over VHF/UHF links
+  monTelemetry: { name: 'monitoring-station telemetry bursts (VHF 169.4 MHz)', f: 169.4e6 },
 
+  // ===== aurora additions (M12/T1)
+  // auroral kilometric radiation: electron-cyclotron maser emission at 50–500 kHz, peak ~250 kHz, from 1–3 Earth radii
+  // above the night-side auroral zone, strongest during substorms (Gurnett 1974, J. Geophys. Res. 79, 4227, "The Earth
+  // as a radio source: terrestrial kilometric radiation"); its frequency is below the F-region plasma frequency, so the
+  // ionosphere turns it back and it almost never reaches the ground — rare detections only in the dark Antarctic
+  // winter (LaBelle & Anderson 2011, Geophys. Res. Lett. 38, L04104)
+  akr:          { name: 'auroral kilometric radiation (cyclotron maser, ~250 kHz)', f: 250e3, ground: false },
+  // N₂ second positive system (C³Πu → B³Πg) 0–0 band at 337.1 nm (Lofthus & Krupenie 1977, J. Phys. Chem. Ref. Data
+  // 6, 113), a standard auroral near-UV emission seen from the ground above the ozone cut-off near 300 nm (Vallance
+  // Jones 1974, Aurora, Reidel, ch. 4)
+  n2SecondPosAur: { name: 'N₂ second positive band 337 nm in the aurora (near-UV)', lam: 337.1e-9 },
+  // snow reflects ~80–90 % of UV (UV-B 0.9+, Blumthaler & Ambach 1988, Photochem. Photobiol. 48, 85; WHO Global Solar
+  // UV Index 2002: fresh snow up to 0.8) — twilight skylight, then the aurora's near-UV
+  snowUV:       { name: 'UV reflected by snow (albedo ~0.85)', lam: 340e-9 },
+  // snow at ~263 K (−10 °C), emissivity 0.99 in 8–14 µm (Hori et al. 2006, Remote Sens. Environ. 100, 486); Wien peak 11.0 µm
+  snowThermal:  { name: 'thermal emission of snow (~263 K, ε ≈ 0.99)', lam: 11.0e-6 },
+  // new lake ice at ~271 K: ice conducts heat up from the 0 °C water about ten times better than snow insulates
+  // (k_ice ≈ 2.2 vs k_snow 0.1–0.3 W m⁻¹ K⁻¹, Sturm et al. 1997, J. Glaciol. 43, 26), so it reads warmer; Wien peak 10.7 µm
+  iceThermal:   { name: 'thermal emission of new lake ice (~271 K)', lam: 10.7e-6 },
+  // riometer (relative ionospheric opacity meter): a receiver of the cosmic radio noise, here at 38.2 MHz (the IRIS
+  // imaging riometer, Detrick & Rosenberg 1990, Radio Sci. 25, 325; method: Little & Leinbach 1959, Proc. IRE 47, 315);
+  // the energetic electrons of a substorm ionise the D region, which absorbs a few dB of it
+  cosmicNoise38: { name: 'cosmic radio noise at 38.2 MHz (riometer)', f: 38.2e6 },
+  // ===== storm additions (M12/T2)
+  // WSR-88D (NEXRAD) operates in 2700–3000 MHz, the meteorological-aids / radiolocation S-band (NOAA Radar Operations
+  // Center, WSR-88D system specification; ITU RR Art. 5); 10 cm wavelength, chosen because rain attenuates it little
+  nexrad:       { name: 'NEXRAD weather radar pulses (S-band 2.7–3.0 GHz) and their rain echoes', f: 2.8e9 },
+  // whistlers: lightning VLF energy ducted along geomagnetic field lines to the other hemisphere and back, dispersed
+  // into a falling tone of ~1–10 kHz lasting about a second (Storey 1953, Phil. Trans. R. Soc. A 246, 113;
+  // Helliwell 1965, "Whistlers and Related Ionospheric Phenomena")
+  whistler:     { name: 'whistlers (dispersed lightning VLF, falling ~10→1 kHz tone)', f: 5e3 },
+  // lightning leaders radiate impulsive VHF from every step; lightning mapping arrays locate them at 60–66 MHz
+  // (Rison et al. 1999, Geophys. Res. Lett. 26, 3573)
+  lightningVHF: { name: 'lightning leader VHF bursts (LMA band, 60–66 MHz)', f: 63e6 },
+  // liquid water emits strongly at 20–40 GHz: a ground radiometer's sky brightness temperature rises from ~20–30 K
+  // clear to ≳ 250 K under heavy rain (Westwater 1978, Radio Sci. 13, 677; Ulaby, Moore & Fung vol. I); 31.4 GHz is
+  // the standard liquid-water channel
+  rainMicro:    { name: 'rain and cloud water thermal emission (31.4 GHz, warm against the cold sky)', f: 31.4e9 },
+  // wet soil: the dielectric constant of water lowers the emissivity 0.92 → ~0.7 (Schmugge 1983, IEEE TGRS GE-21,
+  // 321); L-band 1.41 GHz is the soil-moisture channel (SMAP: Entekhabi et al. 2010, Proc. IEEE 98, 704)
+  wetSoilMW:    { name: 'wet soil: microwave emissivity drop (L-band 1.41 GHz)', f: 1.41e9 },
+  // rain-cooled ground under the outflow cold pool, 5–10 K below the air ahead of the storm (Engerer, Stensrud &
+  // Coniglio 2008, Mon. Wea. Rev. 136, 4839: MCS cold pools, θ deficit 5.4–11 K; −6 K here is a STAND-IN), seen in the 8–14 µm window
+  coldPool:     { name: 'rain-cooled ground and hail (cold pool, ~273 K hail to ~290 K ground)', lam: 10.5e-6 },
+  // ===== orbit additions (M12/T5)
+  // an upward-beamed TGF seen from orbit: the same ~10 MeV bremsstrahlung as `tgf`, but none of it heads down to the
+  // ground (Fishman et al. 1994, Science 264, 1313; Briggs et al. 2010, JGR 115, A07323)
+  tgfUp:           { name: 'terrestrial gamma-ray flash beamed up into space', E: 1e7, ground: false },
+  // the Sun's chromosphere / transition region in the He II 30.4 nm line, the brightest solar EUV line (SDO/AIA 304 Å channel:
+  // Lemen et al. 2012, Sol. Phys. 275, 17); absorbed in the thermosphere above ~100 km
+  solarEUV:     { name: 'solar EUV (He II 30.4 nm, chromosphere/transition region)', lam: 30.4e-9, ground: false },
+  // the 1–2 MK corona in soft X-rays around 1 keV (Yohkoh SXT: Tsuneta et al. 1991, Sol. Phys. 136, 37; GOES XRS
+  // 0.1–0.8 nm monitors the same emission); absorbed by the air column
+  solarXray:    { name: 'solar corona soft X-rays (~1 keV)', E: 1e3, ground: false },
+  // geocoronal Lyman-α: solar Lyman-α resonantly scattered by exospheric hydrogen over the whole sky (Meier 1991, Space
+  // Sci. Rev. 58, 1); in low orbit ~2 / 10 / 20 kR low (night side) / average / high (day side) (HST STIS Instrument
+  // Handbook, Table 6.5, geocoronal Lyman-α); absorbed by O₂ below ~100 km
+  geocoronaLyA: { name: 'geocoronal Lyman-α (exospheric hydrogen, 121.6 nm)', lam: 121.6e-9, ground: false },
+  // hot O/B stars dominate the far-UV sky (GALEX FUV 135–175 nm: Martin et al. 2005, ApJ 619, L1); absorbed by ozone/O₂
+  starUV:       { name: 'far-UV starlight of hot O/B stars (~150 nm)', lam: 150e-9, ground: false },
+  // Earth's gamma-ray albedo: cosmic rays showering in the upper atmosphere make the limb the brightest gamma-ray
+  // source in a low-orbit sky above 100 MeV (Fermi-LAT: Abdo et al. 2009, Phys. Rev. D 80, 122004); they come up from
+  // 20–50 km and never reach the ground
+  earthLimbGamma: { name: 'Earth-limb albedo gamma rays (cosmic-ray showers in the upper air, >100 MeV)', E: 1e8, ground: false },
+  // in the South Atlantic Anomaly trapped protons (10–100s of MeV) hit the spacecraft and induce prompt nuclear
+  // de-excitation gamma lines and activation, ~0.5–10 MeV (Dean, Lei & Knight 2003, Space Sci. Rev. 105, 285; the SAA:
+  // Heirtzler 2002, J. Atmos. Sol.-Terr. Phys. 64, 1701); the protons stop high above the ground
+  saaGamma:     { name: 'secondary gamma rays from trapped protons hitting the station (SAA)', E: 1e6, ground: false },
+  // astronauts' light flashes: energetic nuclei and, in the SAA, trapped protons (tens to hundreds of MeV, below the
+  // ~477 MeV Cherenkov threshold in the vitreous) excite the retina directly; only the fastest nuclei also make Cherenkov
+  // light in the vitreous (McNulty, Pease & Bond 1975, Science 189, 453). ALTEA on the ISS (Narici et al. 2004, Adv.
+  // Space Res. 33, 1352) and the Mir surveys (Avdeev et al. 2002, Acta Astronaut. 50, 511: ~0.15 per minute in the
+  // SAA); reported by most astronauts (Fuglesang et al. 2006, Aviat. Space Environ. Med. 77, 449). Perceived as light,
+  // but made inside the eye by particles the air stops: no ground observer sees it (lam: the visual band, nominal)
+  eyeFlash:     { name: 'light flashes in the eye (energetic nuclei and SAA protons: direct retinal excitation; Cherenkov light in the vitreous for the fastest)', lam: 450e-9, ground: false },
+  // sprites: red N₂ first-positive emission at 50–90 km above large positive cloud-to-ground strokes, ~10–100 ms
+  // (Sentman et al. 1995, Geophys. Res. Lett. 22, 1205; spectrum: Mende et al. 1995, GRL 22, 2633); seen from the
+  // ground and from the ISS (ASIM: Neubert et al. 2019, Space Sci. Rev. 215, 26)
+  sprite:       { name: 'sprite (red N₂ first-positive glow, 50–90 km)', lam: 680e-9 },
+  // elves: a ring of N₂ first-positive emission at ~90 km where the lightning's EM pulse heats the lower ionosphere,
+  // < 1 ms, expanding to 300+ km (Fukunishi et al. 1996, Geophys. Res. Lett. 23, 2157)
+  elve:         { name: 'elve (expanding red ring at ~90 km from the lightning EM pulse)', lam: 680e-9 },
+  // OH Meinel bands: vibrationally excited hydroxyl at ~87 km, the brightest airglow, mostly 1–2 µm (Meinel 1950,
+  // ApJ 111, 555; Rousselot et al. 2000, A&A 354, 1134: the near-IR night-sky lines seen from the ground)
+  ohMeinel:     { name: 'OH Meinel airglow (near-IR ~1.6 µm, ~87 km)', lam: 1.6e-6 },
+  // O I 135.6 nm nightglow: O⁺ radiative recombination in the F region, brightest in the equatorial arcs either side of
+  // the magnetic equator (ICON FUV: Mende et al. 2017, Space Sci. Rev. 212, 655); absorbed by O₂ below ~100 km
+  fuvNightglow: { name: 'O I 135.6 nm nightglow (F-region recombination, equatorial arcs)', lam: 135.6e-9, ground: false },
+  // cold cloud tops (~210–240 K) against the ~290 K surface in the 10.3 µm window channel of geostationary imagers
+  // (GOES-16 ABI band 13: Schmit et al. 2017, Bull. Am. Meteorol. Soc. 98, 681)
+  cloudTopIR:   { name: 'cold cloud tops (~220 K) in the 10–12 µm window', lam: 10.3e-6 },
+  // Earth seen in microwaves from orbit at 19.35 GHz (SSM/I: Hollinger, Peirce & Poe 1990, IEEE TGRS 28, 781): land
+  // Tb ≈ 260–280 K (emissivity ~.9), the ocean only ~130–180 K (emissivity ~.5, Ulaby, Moore & Fung vol. I)
+  earthMicrowave: { name: 'Earth in microwaves: warm land, radiometrically cold ocean (19.35 GHz)', f: 19.35e9 },
+  // Earth's radio glow seen from above at 100 MHz (Rayleigh–Jeans): land emissivity ~0.6–0.9 → Tb ≈ 170–260 K; sea water
+  // (σ ≈ 4 S/m, ε′ ≈ 80: Klein & Swift 1977, IEEE Trans. Antennas Propag. 25, 104) has e ≈ 0.1 → ~30 K of its own, but
+  // mirrors ~0.9 of the galactic synchrotron sky (600–9000 K at 100 MHz, the 'synchrotron' key)
+  earthRadio:   { name: 'Earth\'s radio glow at VHF: land ~170–260 K, sea ~30 K plus the mirrored radio sky', f: 100e6 },
 };
 
 const RANGES = [['radio', 1, Infinity], ['micro', 1e-3, 1], ['ir', 700e-9, 1e-3], ['vis', 380e-9, 700e-9],

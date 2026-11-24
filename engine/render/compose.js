@@ -31,6 +31,8 @@
 //     for X-ray / gamma, from the photon energy (XCOM_AIR): X-rays die within metres, terrestrial gamma within a few
 //     hundred metres. UV haze also glows: opaque fragments add the path radiance UV_PATH·uUVsky·(1 − e^(−α d)).
 //     Sky sources ('high' / 'space') are left to the detector (Orbit / Ground, TRANSMIT). Visible keeps the scene fog.
+//     A scenario without air (createAtmosphere opts.air = false, M12/T5: the orbit) sets eyeAtm = 0 like ?eatm=0: no
+//     extinction and no UV haze between emitter and eye; the detector switch keeps its meaning (TRANSMIT).
 //   * Matter. Radio, microwave and gamma sources hidden behind the frontmost opaque surface are drawn again in a
 //     second pass (layer 1, no depth test) scaled by that surface's transmission: radio through buildings and round
 //     hills, microwave through foliage, gamma through thin walls. One occluder only (the frontmost).
@@ -351,7 +353,8 @@ class EyePass extends Pass {
     Object.assign(this, { scene, camera, first: true, dbg: q.has('eyedbg'), dbgN: 0, ratio: q.has('eyeratio') ? 0 : -1, chains: {} });
     for (const [k, n] of [['ekey', 'key'], ['ep', 'p'], ['efloor', 'floorRel'], ['ebeta', 'beta']]) if (q.has(k)) EYE[n] = +q.get(k);
     // comparison switches: ?eatm=0 no air between emitter and eye, ?epen=0 no penetration pass
-    EYE_U.eyeAtm.value = q.get('eatm') === '0' ? 0 : 1; this.pen = q.get('epen') !== '0'; this.penOnly = q.get('epen') === 'only' || q.get('epen') === 'glass'; this.glass = q.get('epen') === 'glass';   // glass: test, every occluder T = 1   // only: just what crossed matter
+    // (a scenario without air — atmosphere.js opts.air false, the orbit — has no air between emitter and eye either)
+    EYE_U.eyeAtm.value = q.get('eatm') === '0' || ENV.air === false ? 0 : 1; this.pen = q.get('epen') !== '0'; this.penOnly = q.get('epen') === 'only' || q.get('epen') === 'glass'; this.glass = q.get('epen') === 'glass';   // glass: test, every occluder T = 1   // only: just what crossed matter
     this.mrt = new THREE.WebGLMultipleRenderTargets(1, 1, 6, { type: THREE.HalfFloatType });
     this.mrt.depthTexture = new THREE.DepthTexture(1, 1); this.mrt.depthTexture.type = THREE.UnsignedIntType;
     this.tz = new THREE.WebGLRenderTarget(1, 1, { ...rtOpts, type: THREE.FloatType });

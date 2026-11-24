@@ -233,4 +233,5 @@ shots/
 !.claude/lib/
 
 
-index.html
+# the landing page `spectra build` writes at the repo root (scenarios/<id>/index.html are source and are tracked)
+/index.html
