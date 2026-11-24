@@ -73,12 +73,15 @@ const tpt = (c, u, v, x, y) => onSky(c.clone().addScaledVector(u, x * DEG).addSc
 //     J. Astrophys. Astron. 40, 36); the pulsar PSR B0833−45 (l, b = 263.55°, −2.79°) sits ~0.6° off its centre;
 //   * the X-ray "shrapnel" A–F, ejecta fragments bow-shocked beyond the rim (Aschenbach et al. 1995): positions here
 //     schematic, at 1.05–1.3 shell radii as in the ROSAT map; clumpy soft X-ray patches inside the shell;
-//   * Vela X, the radio pulsar-wind nebula, ~2° × 3° beside the pulsar (Frail et al. 1997, ApJ 475, 224), and the X-ray
+//   * Vela X, the radio pulsar-wind nebula, ~2° × 3° mostly south of the pulsar (Frail et al. 1997, ApJ 475, 224, VLA 330 MHz; flat spectrum to 34.5 MHz:
+//     Dwarakanath 1991, JApA 12, 199), and the X-ray
 //     "cocoon" running ~45′ from the pulsar into it (Markwardt & Ögelman 1995, Nature 375, 40); the Chandra torus and
 //     jets are arcminutes across — part of the point here;
 //   * the optical filaments (Hα, [O III]) tracing the shell — far below the naked eye: a long-exposure camera's view;
-//     the pulsar's own optical pulses are mag 23.6 (Wallace et al. 1977, Nature 266, 692): drawn barely there.
+//     the pulsar's optical counterpart is V ≈ 23.6 (Lasker 1976; Nasuti et al. 1997, A&A 323, 839), its pulses detected
+//     at B ≈ 25.2 (Wallace et al. 1977, Nature 266, 692): drawn barely there.
 // The pulses are slowed (stylised): Vela's period is 89 ms, 11 pulses a second; drawn ~1.4 a second so they read.
+// Placed for display on the one stylised sky: Vela (Dec −45°) never rises at mid-northern latitudes.
 // The sky layout is fixed (built once in init, no R draws: the seeded stream is untouched).
 const VELA_R = 4, VELA_OFF = .6;                                  // shell radius (deg), pulsar offset from its centre (deg)
 const velaR = a => VELA_R * (1 + .045 * Math.sin(3 * a + 1.1) + .03 * Math.sin(5 * a + .4));   // a slightly irregular rim
@@ -171,7 +174,7 @@ export const starlink = o => event({ name: 'Starlink train', t0: 18, t1: 22.5, b
 // 5360); X-ray lobes on the same axis ~0.25–0.9° from the star (ROSAT / ASCA: Safi-Harb & Ögelman 1997, ApJ 483, 868);
 // faint Hα filaments near the ears (Zealey, Dopita & Malin 1980, MNRAS 192, 731).
 // The corkscrew is drawn with the Hjellming & Johnston kinematic model (ballistic ejecta along the precessing jet;
-// light-travel delays left out) but magnified ~600× so it reaches the ears, the scale at which the radio eye (~1° beam
+// light-travel delays left out) but magnified ~1500× (one real turn ≈ 1.3″ at 5.5 kpc, drawn 0.55°) so it reaches the ears, the scale at which the radio eye (~1° beam
 // at 150 MHz through its 100 m aperture) can show it at all, and with the precession compressed from 162 days to
 // MQ_PREC script-seconds: stylised and time-compressed. The star itself: the X-ray core flickers (thermal X-rays from
 // the hot base of the jets, Fe XXV / XXVI lines: Kotani et al. 1996, PASJ 48, 619); the A-type companion is a V ≈ 14 point.
@@ -188,7 +191,7 @@ export const microquasar = o => event({ name: 'Microquasar SS 433 & W50', t0: 30
     const [u, v] = this.uv, ca = Math.cos(MQ_PA), sa = Math.sin(MQ_PA);
     const P = (x, y) => tpt(this.d, u, v, x * ca - y * sa, x * sa + y * ca), A = (r, a) => P(r * Math.cos(a), r * Math.sin(a));   // x along the jet axis (east +), y across
     const p = onSky(this.d), fl = .45 + .55 * Math.abs(Math.sin(T * 13) * Math.sin(T * 7.1));
-    this.v.set(p, deg(.15), I * .5); this.x.set(p, deg(.6), I * .45 * fl); this.core.set(p, deg(.5), I * .4);
+    this.v.set(p, deg(.15), I * .05);   // V ≈ 14: below the naked eye, like the pulsar's counterpart this.x.set(p, deg(.6), I * .45 * fl); this.core.set(p, deg(.5), I * .4);
     this.fill.set(p, deg(3.5), I * .1);                                                                          // W50: the shell ~1° across …
     this.shell.set(Array.from({ length: 73 }, (_, i) => { const a = i / 72 * 6.283; return A(w50R(a), a); }), deg(.2), deg(.2), I * .6);   // … and its ears
     for (let s = 0; s < 2; s++) { const sg = s ? -1 : 1, pts = [];                                                // the kinematic corkscrew, far end first
@@ -196,7 +199,7 @@ export const microquasar = o => event({ name: 'Microquasar SS 433 & W50', t0: 30
         const nx = Math.cos(MQ_CONE) * Math.sin(MQ_INC) + Math.sin(MQ_CONE) * Math.cos(ps) * Math.cos(MQ_INC), ny = Math.sin(MQ_CONE) * Math.sin(ps);
         pts.push(P(sg * nx * age * MQ_TURN, sg * ny * age * MQ_TURN)); }
       this.jet[s].set(pts, deg(.1), deg(.1), I * .5, 1);                                                          // brightest at the core, fading outward
-      this.lobe[s].set(linePts(P(sg * .25, 0), P(sg * (s ? .72 : .88), sg * .03), 6), deg(.22), deg(.32), I * .1);   // X-ray lobes
+      this.lobe[s].set(linePts(P(sg * .25, 0), P(sg * (s ? .72 : 1.0), sg * .03), 6), deg(.22), deg(.32), I * .1);   // X-ray lobes
       const a0 = s ? Math.PI : 0;
       this.fil[s].set(Array.from({ length: 13 }, (_, i) => { const a = a0 + (i / 12 - .5) * .9; return A(w50R(a) * .96, a); }), deg(.08), deg(.08), I * .12); }   // Hα at the ears
   },

@@ -47,17 +47,18 @@ export const SPECTRUM = {
   // the beam is seen only as pulses when it sweeps across the Earth; Vela (PSR B0833−45, P = 89 ms) is among the
   // brightest pulsars at low radio frequencies
   pulsarRadio:     { name: 'pulsar radio pulses (the beam sweeping across us)', f: 150e6 },
-  // optical pulses at mag 23.6 (Wallace et al. 1977, Nature 266, 692)
+  // optical counterpart V ≈ 23.6 (Lasker 1976; Nasuti et al. 1997, A&A 323, 839), pulses at B ≈ 25.2 (Wallace et al. 1977, Nature 266, 692)
   pulsarOptical:   { name: 'pulsar optical pulses', lam: 500e-9 },
   // the pulsar and its arcminute X-ray wind nebula, torus and jets (Chandra: Helfand, Gotthelf & Halpern 2001, ApJ 556, 380)
   pulsarXray:      { name: 'pulsar & compact wind nebula X-rays', E: 1e3, ground: false },
   // the ~8° shell, broadband synchrotron mapped at 2.4 GHz (Duncan et al. 1996, MNRAS 280, 252); brighter still at low
-  // frequencies, sampled at 150 MHz like the other deep-sky radio keys
+  // frequencies (34.5 MHz: Dwarakanath 1991, JApA 12, 199), sampled at 150 MHz like the other deep-sky radio keys;
+  // Green's catalogue gives the radio remnant 255′ (G263.9−3.3), the 8° is the ROSAT X-ray shell
   snrShellRadio:   { name: 'supernova-remnant shell, radio synchrotron', f: 150e6 },
   // thermal soft X-rays of the shock-heated shell, kT ≈ 0.1–0.3 keV: the ROSAT all-sky survey, 0.1–2.4 keV (Aschenbach,
   // Egger & Trümper 1995, Nature 373, 587; Lu & Aschenbach 2000, A&A 362, 1083)
   snrShellXray:    { name: 'supernova-remnant shell, thermal soft X-rays', E: 3e2, ground: false },
-  // Vela X, the pulsar-wind nebula: ~2° × 3° of flat-spectrum synchrotron beside the pulsar (Frail et al. 1997, ApJ 475, 224)
+  // Vela X, the pulsar-wind nebula: ~2° × 3° of flat-spectrum synchrotron south of the pulsar (Frail et al. 1997, ApJ 475, 224; Dwarakanath 1991, JApA 12, 199)
   pwnRadio:        { name: 'pulsar-wind nebula radio synchrotron (Vela X)', f: 150e6 },
   // shock-excited filaments along the shell, Hα 656.3 nm (with [O III] 500.7 nm; line data NIST ASD)
   snrFilaments:    { name: 'remnant filaments: Hα 656.3 nm', lam: 656.3e-9 },
