@@ -7,6 +7,8 @@ import { S } from 'spectra/core/state.js';
 import { event } from 'spectra/core/events.js';
 import { Em, Rib, EmField, BEAM, toViewer } from 'spectra/render/sources.js';
 import { solid } from 'spectra/render/instrument.js';
+import { spectralParts } from 'spectra/render/surface.js';
+import { carGeo } from './street.js';
 import { burst, inWin } from './events.js';
 import { night } from 'spectra/world/atmosphere.js';
 import { SIGNS, CAMS, PLUMES, MANHOLES, PARK_Z, SIDEWALK_X } from './world.js';
@@ -104,11 +106,9 @@ export const radar = () => event({ name: 'Airport radar (S-band)', t0: 8, t1: 60
 
 export const police = () => event({ name: 'Police car: LEDs & TETRA', t0: 30, t1: 40, bands: ['vis', 'micro'], freq: ['ledBlue', 'tetra'], note: 'A cruiser runs down the avenue: the light bar flashes its left and right blue LED heads in turn (amber is only a rear traffic advisor on European cars), and its TETRA radio (the European emergency-services net, ~390 MHz = 77 cm, microwave in this band table) chirps in short bursts.',
   init() {
-    const g = new THREE.BoxGeometry(1.8, .8, 4.3); g.translate(0, .7, 0);
-    const g2 = new THREE.BoxGeometry(1.55, .55, 2.2); g2.translate(0, 1.32, -.25);
-    this.body = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: 0x101418, roughness: .5, metalness: .5 }));
-    this.body.add(new THREE.Mesh(g2, new THREE.MeshStandardMaterial({ color: 0x0c0e12, roughness: .6, metalness: .4 })));
-    solid(this.body); this.body.visible = false; S.scene.add(this.body);
+    // by parts (M11/T4, street.js carGeo): hot bonnet, tyres and tailpipe, cold glass cabin, cooling paint — one draw
+    this.body = spectralParts(new THREE.Mesh(carGeo(0x101418, true), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .45, metalness: .45 })), { weight: 0 });
+    this.body.visible = false; S.scene.add(this.body);
     this.b1 = new Em('vis', '#3060ff'); this.b2 = new Em('vis', '#3060ff'); this.r = new Em('micro');
   },
   update() { const { t, T } = S;

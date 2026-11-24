@@ -9,7 +9,7 @@ import { Em, Rib, EmField, BEAM } from 'spectra/render/sources.js';
 import { solid } from 'spectra/render/instrument.js';
 import { SUN_AZ, sunEl } from 'spectra/world/atmosphere.js';
 import { coastZ, heightAt, SEA, STAND, ENVSEA, COAST_STATION, CLIFF_ANT } from './world.js';
-import { spectralGroup, addTx } from 'spectra/render/surface.js';
+import { spectralGroup, spectralParts, partsGeometry, addTx } from 'spectra/render/surface.js';
 
 // The last sliver of Sun flashes green as it drops under a sharp sea horizon (sunEl crosses 0 at t≈7.3).
 export const greenFlash = () => event({ name: 'Green flash', t0: 6.4, t1: 8.6, bands: ['vis'], freq: ['greenFlash'], tags: ['rare'], note: 'Refraction splits the last sliver of the Sun over a clean sea horizon: a second of emerald.',
@@ -296,33 +296,61 @@ export const windFarm = () => event({ name: 'Offshore wind farm', t0: 0, t1: 60,
 // ping LTE and one streams music to a Bluetooth speaker (continuous 2.4 GHz traffic), screens lit now and then.
 const FIRE = (() => { const x = -14, z = -9; return new V3(x, heightAt(x, z), z); })();
 const PEOPLE = 5;
+// A person by parts, facing +z: clothes (coat, between skin and air), bare face, neck and hands (skin, ~33 °C), hair
+// (insulating, as fur). Standing, or sitting on the sand with the knees up and the arms round them.
+function personGeo(sit) {
+  const jacket = 0x3a2e2a, jeans = 0x1c2230, skin = 0x8a6a58, hair = 0x1a120c, P = [];
+  const L = (from, to, r0, r1, surf, col) => P.push({ from, to, r0, r1, surf, col });
+  const B = (s, at, surf, col) => P.push({ g: PSPH, s, at, surf, col });
+  const hip = sit ? .14 : .9, sh = sit ? .72 : 1.42, head = sit ? .92 : 1.62;
+  B([.17, (sh - hip) / 2 + .04, .12], [0, (sh + hip) / 2, 0], 'coat', jacket);                 // torso
+  L([0, sh, 0], [0, sh + .1, 0], .05, .05, 'skin', skin);                                        // neck
+  B([.095, .12, .105], [0, head, .01], 'skin', skin);                                            // face / head
+  B([.1, .08, .11], [0, head + .05, -.015], 'fur', hair);                                       // hair
+  for (const x of [-.1, .1]) {
+    if (sit) {
+      L([x, hip, 0], [x * 1.2, .42, .38], .075, .065, 'coat', jeans); L([x * 1.2, .42, .38], [x * 1.2, .05, .52], .06, .05, 'coat', jeans);   // thigh, shin
+      L([x * 2, sh - .04, 0], [x * 1.6, .45, .3], .05, .045, 'coat', jacket); B([.045, .045, .045], [x * 1.1, .44, .4], 'skin', skin);   // arm round the knees, hand
+    } else {
+      L([x, hip, 0], [x * 1.1, .47, .02], .08, .065, 'coat', jeans); L([x * 1.1, .47, .02], [x * 1.1, .06, 0], .06, .05, 'coat', jeans);   // thigh, shin
+      L([x * 2.2, sh - .04, 0], [x * 2.4, 1.05, .1], .05, .045, 'coat', jacket); L([x * 2.4, 1.05, .1], [x * 2.2, .86, .22], .045, .04, 'coat', jacket);   // arm, forearm
+      B([.045, .05, .045], [x * 2.1, .82, .26], 'skin', skin);                                    // hand
+    }
+    P.push({ g: new THREE.BoxGeometry(.1, .08, .25), at: [x * (sit ? 1.2 : 1.1), .04, sit ? .58 : .06], surf: 'coat', col: 0x141414 });   // shoe
+  }
+  return partsGeometry(P);
+}
+const PSPH = new THREE.SphereGeometry(1, 10, 7);
 export const bonfire = () => event({ name: 'Beach bonfire', t0: 28, t1: 60, bands: ['vis', 'ir', 'micro'], freq: ['flame', 'thermal1200', 'groundHeat', 'thermal310', 'lte', 'bluetoothA2DP', 'ledWhite'],
   note: 'Friends light a driftwood fire on the sand: flame light by eye, a blazing hot core in infrared and warm sand spreading around the pit. The people are warm silhouettes on a thermal camera; their phones ping the network and one plays music to a Bluetooth speaker.',
   init() {
     const parts = []; for (let k = 0; k < 6; k++) { const l = new THREE.CylinderGeometry(.08, .11, 1.3, 6); l.rotateX(Math.PI / 2 - .55); l.rotateY(k * 1.05); l.translate(FIRE.x, FIRE.y + .25, FIRE.z); parts.push(l); }
     this.wood = solid(new THREE.Mesh(mergeGeometries(parts.map(g => g.toNonIndexed())), new THREE.MeshStandardMaterial({ color: 0x1a120c, roughness: .95 })));
     S.scene.add(this.wood); this.wood.visible = false;   // the friends carry the driftwood in
-    const torso = new THREE.BoxGeometry(.42, .62, .26); torso.translate(0, 1.1, 0); const head = new THREE.SphereGeometry(.12, 8, 6); head.translate(0, 1.55, 0);
-    const legs = new THREE.BoxGeometry(.34, .8, .22); legs.translate(0, .4, 0);
-    const pm = new THREE.InstancedMesh(mergeGeometries([torso, head, legs].map(g => g.toNonIndexed())), new THREE.MeshStandardMaterial({ color: 0x0c0a09, roughness: .9 }), PEOPLE);
+    // the friends by parts (M11/T4, engine/render/surface.js partsGeometry): standing and sitting on the sand, facing
+    // the fire (+z), one instanced draw per pose
+    const mk = sit => new THREE.InstancedMesh(personGeo(sit), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .9 }), PEOPLE);
+    const pm = mk(false), ps = mk(true);
     this.pp = Array.from({ length: PEOPLE }, (_, k) => { const a = k * 1.256 + .4 + R() * .5, r = 1.9 + R() * .6, x = FIRE.x + Math.cos(a) * r, z = FIRE.z + Math.sin(a) * r, sit = k % 2 === 1;
       return { p: new V3(x, heightAt(x, z), z), a, sit, ph: R() * 6 }; });
-    const o = new THREE.Object3D(); this.pp.forEach((q, k) => { o.position.copy(q.p); if (q.sit) o.position.y -= .45; o.rotation.set(0, -q.a - Math.PI / 2, 0); o.scale.set(1, q.sit ? .72 : 1, 1); o.updateMatrix(); pm.setMatrixAt(k, o.matrix); });
-    this.pm = spectralGroup(pm, 'body', { weight: 0 }); S.scene.add(pm); pm.visible = false;   // warm surface (M10/T9); metered by the sources
+    const o = new THREE.Object3D(), none = new THREE.Matrix4().makeScale(0, 0, 0);
+    this.pp.forEach((q, k) => { o.position.copy(q.p); o.rotation.set(0, -q.a - Math.PI / 2, 0); o.updateMatrix(); (q.sit ? ps : pm).setMatrixAt(k, o.matrix); (q.sit ? pm : ps).setMatrixAt(k, none); });
+    for (const m of [pm, ps]) { m.frustumCulled = false; S.scene.add(spectralParts(m, { weight: 0 })); m.visible = false; }   // warm faces, cooler clothes (M11/T4); metered by the sources
+    this.pm = pm; this.ps = ps;
     this.light = new THREE.PointLight(0xff7a2a, 0, 45, 1.7); this.light.position.copy(FIRE).add(new V3(0, .9, 0)); S.scene.add(this.light);
     this.fl = [['#ff5a14', 1.6], ['#ff9a2a', 1.1], ['#ffe9a0', .6]].map(([c, s]) => ({ e: new Em('vis', c), s }));
     this.emb = new EmField('vis', 10, '#ffb050'); this.hot = new Em('ir');
     this.body = new EmField('ir', PEOPLE * 2, null, 1); this.scr = new EmField('vis', PEOPLE, '#cfe0ff'); this.ph = new EmField('micro', PEOPLE + 1);
   },
   update() { const { t, T } = S, I = env(t, 28, 60, 1.5), lit = sm(31, 33, t), f = .85 + .15 * Math.sin(T * 23) * Math.sin(T * 7.3);
-    this.pm.visible = this.wood.visible = I > 0; ENVSEA.fire.value.set(FIRE.x, FIRE.y, FIRE.z, sm(31, 44, t)); this.light.intensity = S.on.vis ? lit * 30 * f : 0; if (I <= 0) return;
+    this.pm.visible = this.ps.visible = this.wood.visible = I > 0; ENVSEA.fire.value.set(FIRE.x, FIRE.y, FIRE.z, sm(31, 44, t)); this.light.intensity = S.on.vis ? lit * 30 * f : 0; if (I <= 0) return;
     if (lit > 0) {
       this.fl.forEach((q, i) => q.e.set(FIRE.clone().add(new V3(Math.sin(T * 9 + i) * .05, .4 + i * .2, 0)), q.s * f, lit));
       for (let k = 0; k < 10; k++) { const a = (T * .6 + k / 10) % 1; this.emb.set(k, FIRE.clone().add(new V3(Math.sin(k * 3 + T) * .5 * a, .5 + a * 4, Math.cos(k * 2 + T) * .4 * a)), .06, lit * (1 - a) * .5); }
       this.hot.set(FIRE.clone().add(new V3(0, .6, 0)), 4, lit * f); S.act.ir += sm(31, 44, t) * .2; }   // + the warming sand (surface shader)
-    this.pp.forEach((q, k) => { const y = q.p.y - (q.sit ? .45 : 0), s = q.sit ? .72 : 1;
-      this.body.set(k * 2, new V3(q.p.x, y + 1.1 * s, q.p.z), .9 * s, I * .55); this.body.set(k * 2 + 1, new V3(q.p.x, y + 1.55 * s, q.p.z), .42, I * .6);
-      const hand = new V3(q.p.x - Math.cos(q.a) * .3, y + 1.15 * s, q.p.z - Math.sin(q.a) * .3);
+    this.pp.forEach((q, k) => { const y = q.p.y, tc = q.sit ? .5 : 1.12, hd = q.sit ? .92 : 1.6;   // torso and head heights of the pose
+      this.body.set(k * 2, new V3(q.p.x, y + tc, q.p.z), q.sit ? .7 : .9, I * .55); this.body.set(k * 2 + 1, new V3(q.p.x, y + hd, q.p.z), .42, I * .6);
+      const hand = new V3(q.p.x - Math.cos(q.a) * .3, y + (q.sit ? .45 : 1.0), q.p.z - Math.sin(q.a) * .3);
       if (Math.sin(T * .3 + q.ph) > .55) this.scr.set(k, hand, .3, I * .6);                              // someone checks their phone
       const lt = ((t + k * .7) % 3) / 3; if (lt < .08) this.ph.set(k, hand, .8, I * .6 * (1 - lt / .08)); });   // LTE ping
     const sp = this.pp[0].p, bt = (T * 3) % 1; this.ph.set(PEOPLE, new V3(sp.x + .4, sp.y + .2, sp.z), .5, I * (bt < .5 ? .3 : .15)); },   // A2DP stream: steady 2.4 GHz traffic

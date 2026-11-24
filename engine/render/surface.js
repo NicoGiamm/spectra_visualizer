@@ -74,6 +74,7 @@ import { COMMON } from './shaders.js';
 import { solid } from './instrument.js';
 import { GAL_C, GAL_N, sunEl, moonDir, MOON_ILLUM, ENV } from '../world/atmosphere.js';
 import { NIR } from '../core/bands.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 export const OVERLAY = { value: .12 };
 const MAX_TX = 8, MAX_HIT = 12;
@@ -177,7 +178,14 @@ function nirLight() {
 //   body (an animal or a person: ~30 cm of tissue ≈ water): radio .5 — STAND-IN (the body absorbs/scatters VHF but is
 //     smaller than its wavelength); microwave .01 — ~20 dB through a torso at 2.4 GHz (ITU-R P.2040 tissue ε″; body-loss
 //     measurements ~15–30 dB); gamma .2 — 30 cm of water at μ/ρ .058 cm²/g (1.46 MeV)
-const TRANS = { ground: [.05, 0, 0], canopy: [.9, .25, .95], facade: [.1, .002, 0], wood: [.95, .6, .88], body: [.5, .01, .2] };
+//   glass (a 4–6 mm pane): radio .95 — far thinner than 3 m; microwave .6 — ~2 dB through float glass at 2–5 GHz
+//     (ITU-R P.2040-3 Table 3 glass, ε' 6.3, σ ~.004·f^1.3); gamma .92 — 1.5 g/cm² at μ/ρ .052
+//   metal (a car or bus body: steel skins, engine, seats): radio 0, microwave 0 — a closed metal shell; the windows
+//     are their own parts; gamma .5 — STAND-IN (two 1 mm steel skins ≈ 1.6 g/cm² plus the contents)
+//   tyre (rubber with steel belts): radio .5, microwave .05 — STAND-IN (the steel belts shield, carbon black absorbs);
+//     gamma .7 — ~7 g/cm² of rubber at μ/ρ .052
+const TRANS = { ground: [.05, 0, 0], canopy: [.9, .25, .95], facade: [.1, .002, 0], wood: [.95, .6, .88], body: [.5, .01, .2],
+  glass: [.95, .6, .92], metal: [0, 0, .5], tyre: [.5, .05, .7] };
 // D for a surface without reflection data (a custom {A, B, C}): ordinary rough dry ground — STAND-IN
 export const DEF_D = [.02, .3, .04, .2];
 const P = (T0, Teq, tau, eIR, eMW, uvAlb, gamma, rRadio, gloss = 0, tr = TRANS.ground) => ({ A: [T0, Teq, tau ? 1 / tau : 0, eIR], B: [eMW, uvAlb, gamma, rRadio], C: [gloss, ...tr], D: DEF_D });
@@ -237,6 +245,47 @@ export const PRESET = {
   // skin emissivity ~0.5–0.7 at 10–40 GHz); uvAlb .05 — STAND-IN (skin / fur UV-A reflectance ~5–10 %); gamma .02 —
   // body K-40 ~60 Bq/kg vs ~1200 Bq/kg in granite [UN]; rRadio .75 tissue (Gabriel 1996)
   body:      P(30, 30, 0, .98, .6, .05, .02, .75, 0, TRANS.body),
+  // ---- the parts of animals, people and vehicles (M11/T4): what a thermal camera resolves on a body. The objects are
+  // built with partsGeometry() below, each part with its own surface. T0 / Teq / tau follow the order of the physics
+  // (core 37–39 °C > bare skin > thinly haired limbs > clothing > fur > air) — the values are STAND-INS:
+  //   [McC] McCafferty 2007, Mammal Rev. 37:207 (infrared thermography of mammals): a well-insulated coat sits within a
+  //         few °C of the air; the eyes, nose, ears, lower legs and udder — sparse hair, rich blood flow — are the
+  //         "thermal windows" that read warm; hair / fur emissivity ~0.98
+  //   [Ham] Hammel 1955, Am. J. Physiol. 182:369 (thermal properties of fur): the insulation sits in the fur's depth,
+  //         so its outer surface follows the air, not the body
+  //   [Ste] Steketee 1973, Phys. Med. Biol. 18:686: human skin eIR 0.98, independent of pigmentation
+  //   [Ber] Berry et al. 2003, Can. J. Anim. Sci. 83:687: udder skin of dairy cows 33–36 °C by infrared thermography
+  //   [EN673] EN 673 / ISO 10292: uncoated soda-lime glass, corrected emissivity 0.837 (the 9–10 µm reststrahlen dip)
+  // Microwave / radio of the body parts: the tissue under fur or clothing (both transparent at mm–m wavelengths) —
+  // eMW .6 STAND-IN and rRadio .75 [Gabriel 1996] as `body`; gamma .02 body K-40 [UN].
+  // bare skin (faces, hands, a muzzle, the eyes, an udder, antler velvet): ~33 °C all night, tau 0 — face skin 32–35 °C
+  // indoors and out (STAND-IN), udder 33–36 °C [Ber]; eIR .98 [Ste]; uvAlb .05 — STAND-IN (as `body`)
+  skin:      P(33, 33, 0, .98, .6, .05, .02, .75, 0, TRANS.body),
+  // thinly haired limbs and ears (the thermal windows [McC]): between skin and fur — 28 °C STAND-IN on a summer night
+  // (in winter cold-adapted legs drop toward the air: counter-current exchange, not modelled); eIR .98 [McC]
+  limb:      P(28, 28, 0, .98, .6, .05, .02, .75, 0, TRANS.body),
+  // insulated fur / feathers / human hair: the outer surface follows the air plus a few °C [Ham, McC] — 24 → 14 °C over
+  // the night (STAND-IN; meadow air ~7–12 °C); eIR .98 [McC]; uvAlb .05 STAND-IN
+  fur:       P(24, 14, 25, .98, .6, .05, .02, .75, 0, TRANS.body),
+  // clothing over a body: its outer surface between skin (~33 °C) and the air (0.5–1 clo of insulation, ISO 9920) —
+  // 27 → 20 °C STAND-IN; eIR .9 — STAND-IN for textiles (cotton, wool, synthetics ~0.85–0.95); uvAlb .05 STAND-IN
+  coat:      P(27, 20, 30, .9, .6, .05, .02, .75, 0, TRANS.body),
+  // window glass: thin, radiates to the sky, cools fast — 22 → 9 °C STAND-IN; eIR .84 [EN673]; gloss 1: at grazing
+  // angles it mirrors the cold sky (the reflection model); eMW .8 (Kirchhoff from the P.2040 glass R ≈ .19 — a thin
+  // pane also transmits, C.z); uvAlb .04 (Fresnel, n 1.52); gamma .02 STAND-IN; rRadio .19 [P2040 glass]
+  glass:     P(22, 9, 12, .84, .8, .04, .02, .19, 1, TRANS.glass),
+  // a running tyre: rolling hysteresis keeps the tread at ~40–60 °C in normal driving — 45 °C STAND-IN, tau 0 (the
+  // vehicle never stops); eIR .94 — STAND-IN (carbon-black rubber, handbook values 0.86–0.95); eMW .9 STAND-IN (lossy
+  // rubber); uvAlb .03 STAND-IN (carbon black); gamma .02 STAND-IN; rRadio .3 — STAND-IN (rubber ε' ~3 → .07, the
+  // steel belts behind it raise it)
+  tyre:      P(45, 45, 0, .94, .9, .03, .02, .3, 0, TRANS.tyre),
+  // the panel over a running engine (bonnet, rear engine cover of a bus): 50–70 °C after a drive — 55 °C STAND-IN,
+  // tau 0; painted steel: eIR .9 (the paint layer is opaque at 8–14 µm, as the city's PAINT); eMW .05 — metal under
+  // the paint (Kirchhoff, e = 1 − R); uvAlb .05 STAND-IN; gamma .02 STAND-IN; rRadio 1 [P2040 metal]; gloss .4
+  engine:    P(55, 55, 0, .9, .05, .05, .02, 1, .4, TRANS.metal),
+  // a tailpipe / exhaust stack: oxidised steel at ~100–300 °C (STAND-IN 150), far above the thermal palette's top;
+  // eIR .8 — STAND-IN (oxidised steel, handbook values 0.7–0.85); eMW .05, rRadio 1 metal [P2040]
+  exhaust:   P(150, 150, 0, .8, .05, .03, .02, 1, .2, TRANS.metal),
 };
 // Reflection data per preset, D = [h (m), nirAlb, R0opt, slope (rad)] — sources and STAND-INs in the header above PRESET.
 const REFL = {
@@ -254,6 +303,14 @@ const REFL = {
   facade:   [.02, .35, .04, .1],     // reveals, sills
   wood:     [.003, .45, .04, .1],
   body:     [.01, .5, .03, .5],      // fur / clothing on a curved body
+  skin:     [.001, .5, .03, .3],     // skin nirAlb .5 [Anderson & Parrish]
+  limb:     [.003, .4, .03, .3],
+  fur:      [.01, .35, .03, .5],     // brown / grey coats: nirAlb STAND-IN (hair is brighter in the near-IR than in the red)
+  coat:     [.003, .45, .03, .4],    // dyed textiles .4–.6 near 0.8 µm: STAND-IN
+  glass:    [1e-5, .08, .04, .03],   // nirAlb: the Fresnel reflection plus a dark interior behind it — STAND-IN
+  tyre:     [.002, .05, .04, .2],    // carbon black absorbs the near-IR too
+  engine:   [.0002, .4, .05, .2],    // as car paint
+  exhaust:  [.001, .2, .04, .2],
 };
 for (const [k, d] of Object.entries(REFL)) PRESET[k].D = d;
 export const surfD = p => p.D ?? DEF_D;
@@ -263,6 +320,36 @@ export function mixSurf(parts) {   // [[preset, weight], ...] -> blended {A, B, 
   for (const k of 'ABCD') for (let i = 0; i < 4; i++) out[k][i] /= W || 1;
   return out;
 }
+// An object made of parts, each with its own surface (M11/T4: animals, people, vehicles): one merged geometry with a
+// vertex colour per part (for the visible material: vertexColors: true) and per-vertex aSurfA/B/C/D, drawn by
+// spectral(mesh, 'attr', { mean }) — spectralParts(mesh) — in one draw call, instanced or not. parts: [{ g, surf, col,
+// at, rot, s }] (g a geometry, surf a preset name or {A, B, C, D}, col a colour, at / rot (Euler XYZ) / s its
+// placement), or { from, to, r0, r1 = r0, n = 6, surf, col } for a limb: a tapered cylinder from point to point.
+const UP = new THREE.Vector3(0, 1, 0);
+export function partsGeometry(parts) {
+  const out = [], mean = [];
+  for (const q of parts) {
+    let g, M = new THREE.Matrix4();
+    if (q.from) {
+      const a = new THREE.Vector3(...q.from), b = new THREE.Vector3(...q.to), d = b.clone().sub(a), L = d.length();
+      g = new THREE.CylinderGeometry(q.r1 ?? q.r0, q.r0, L, q.n ?? 6);
+      M.compose(a.clone().addScaledVector(d, .5), new THREE.Quaternion().setFromUnitVectors(UP, d.normalize()), new THREE.Vector3(1, 1, 1));
+    } else {
+      g = q.g;
+      M.compose(new THREE.Vector3(...(q.at ?? [0, 0, 0])), new THREE.Quaternion().setFromEuler(new THREE.Euler(...(q.rot ?? [0, 0, 0]))), new THREE.Vector3(...(q.s ?? [1, 1, 1])));
+    }
+    g = (g.index ? g.toNonIndexed() : g.clone()).applyMatrix4(M);
+    for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal') g.deleteAttribute(k);
+    const p = typeof q.surf === 'string' ? PRESET[q.surf] : q.surf, n = g.attributes.position.count, c = new THREE.Color(q.col ?? 0x202020);
+    const fill = v => { const a = new Float32Array(n * v.length); for (let i = 0; i < a.length; i++) a[i] = v[i % v.length]; return new THREE.BufferAttribute(a, v.length); };
+    g.setAttribute('color', fill([c.r, c.g, c.b]));
+    g.setAttribute('aSurfA', fill(p.A)); g.setAttribute('aSurfB', fill(p.B)); g.setAttribute('aSurfC', fill(p.C)); g.setAttribute('aSurfD', fill(surfD(p)));
+    out.push(g); mean.push([p, n]);
+  }
+  const geo = mergeGeometries(out); geo.userData.mean = mixSurf(mean);
+  return geo;
+}
+export const spectralParts = (mesh, opts = {}) => spectral(mesh, 'attr', { mean: mesh.geometry.userData.mean, ...opts });
 // 'attr' surfaces (heightfields) need a per-vertex aSurfD next to aSurfA/B/C: wrap the heightfield's surfAt with
 // collectSurfD(surfAt) — heightfield() calls it once per vertex, in vertex order — then attach(geometry)
 export function collectSurfD(surfAt) {
