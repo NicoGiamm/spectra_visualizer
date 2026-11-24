@@ -60,9 +60,14 @@ export const EXTINCTION = { radio: 0, micro: 1.2e-5, ir: 2e-4, vis: 0, uv: 2.3e-
 export const XCOM_AIR = [[1, 3606], [2, 527.9], [3, 162.5], [5, 40.27], [10, 5.12], [20, .7779], [30, .3538], [50, .208],
   [100, .1541], [200, .1233], [500, .08712], [1000, .06358], [2000, .04447], [5000, .02751], [1e4, .02045], [1e5, .0173]];
 // UV path radiance: the haze between the eye and a surface glows with the UV skylight; its asymptote (an infinitely
-// long path) is taken as the radiance of a white Lambertian surface under the same sky (uniform-sky approximation,
-// in the surface terms' units: 1.3 × uUVsky, engine/render/surface.js).
-export const UV_PATH = 1.3;
+// long path) is taken as the radiance of a white Lambertian surface under the same sky (uniform-sky approximation).
+// Units (M11/T6): the surfaces' UV term is a COLOUR, UV_COL × albedo × UV_SURF_K × uUVsky (engine/render/surface.js,
+// the sea), which the eye reads as its luminance (compose.js eyeL); the path radiance is added straight to the eye's
+// UV LUMINANCE channel (compose.js eyeUVpath). So UV_PATH = UV_SURF_K × lum(UV_COL) — luminance units — and a white
+// horizontal surface and an infinitely long haze path read the same. (Before M11/T6 the colour-unit 1.3 was added as
+// a luminance: the haze was 1 / .42 = 2.4× too bright for its own definition.)
+export const UV_SURF_K = 1.3, UV_COL = [.62, .3, 1];
+export const UV_PATH = UV_SURF_K * (.2126 * UV_COL[0] + .7152 * UV_COL[1] + .0722 * UV_COL[2]);   // ≈ .544
 
 export const LREF = { radio: .37, micro: .37, ir: .37, vis: .37, uv: .37, xray: .37, gamma: .37 };
 

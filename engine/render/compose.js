@@ -31,7 +31,7 @@
 //   * Air. Every ground-origin fragment is attenuated by exp(−α d) over its own line-of-sight distance d (from its depth),
 //     α per band from EXTINCTION (bands.js: microwave gas ~0.05 dB/km, IR 8–14 µm window, UV Rayleigh + aerosol) and,
 //     for X-ray / gamma, from the photon energy (XCOM_AIR): X-rays die within metres, terrestrial gamma within a few
-//     hundred metres. UV haze also glows: opaque fragments add the path radiance UV_PATH·uUVsky·(1 − e^(−α d)).
+//     hundred metres. UV haze also glows: opaque fragments add the path radiance UV_PATH·uUVsky·(1 − e^(−α d)) (UV_PATH in luminance units, bands.js).
 //     Sky sources ('high' / 'space') are left to the detector (Orbit / Ground, TRANSMIT). Visible keeps the scene fog.
 //   * Matter. Radio, microwave and gamma sources hidden behind the frontmost opaque surface are drawn again in a
 //     second pass (layer 1, no depth test) scaled by that surface's transmission: radio through buildings and round

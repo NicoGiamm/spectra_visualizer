@@ -7,7 +7,8 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { V3, sm, R, noise2, hash2, PLAY } from 'spectra/core/util.js';
 import { S } from 'spectra/core/state.js';
 import { solid, visOnly } from 'spectra/render/instrument.js';
-import { spectral } from 'spectra/render/surface.js';
+import { spectral, spectralParts, surfD, PRESET } from 'spectra/render/surface.js';
+import { carGeo } from './street.js';
 import { dirAE } from 'spectra/core/geom.js';
 import { softTex } from 'spectra/render/textures.js';
 
@@ -398,10 +399,22 @@ function parkTrees() {
   S.scene.add(spectral(crowns, 'canopy', { weight: .3 }), spectral(trunks, 'wood', { weight: 0 }));
 }
 
-// parked cars along both kerbs of the canyon (one instanced draw, painted-metal surface)
+// parked cars along both kerbs of the canyon: street.js's car by parts (M11/T6) in one instanced draw. A parked car
+// has no running engine: the bonnet is plain cooling paint, the tyres and the tailpipe sit near the air's temperature
+// (STAND-IN, as street.js's cold bicycle tyres) — so the parts' surfaces are swapped per vertex and the meter mean redone
+const PARKED_SWAP = [[PRESET.engine, PAINT], [PRESET.tyre, { ...PRESET.tyre, A: [22, 14, 1 / 20, PRESET.tyre.A[3]] }],
+  [PRESET.exhaust, { ...PRESET.exhaust, A: [24, 12, 1 / 12, PRESET.exhaust.A[3]] }]];
+function parkedCarGeo() {
+  const g = carGeo(0xffffff), at = k => g.attributes['aSurf' + k], n = at('A').count, mean = { A: [0, 0, 0, 0], B: [0, 0, 0, 0], C: [0, 0, 0, 0], D: [0, 0, 0, 0] };
+  for (let i = 0; i < n; i++) {
+    const a = [0, 1, 2, 3].map(j => at('A').array[i * 4 + j]), sw = PARKED_SWAP.find(([p]) => p.A.every((v, j) => Math.abs(v - a[j]) < 1e-5));
+    if (sw) for (const k of 'ABCD') at(k).array.set(k === 'D' ? surfD(sw[1]) : sw[1][k], i * 4);
+    for (const k of 'ABCD') for (let j = 0; j < 4; j++) mean[k][j] += at(k).array[i * 4 + j] / n;
+  }
+  g.userData.mean = mean;
+  return g;
+}
 function parkedCars() {
-  const b = new THREE.BoxGeometry(1.75, .72, 4.3); b.translate(0, .6, 0);
-  const c = new THREE.BoxGeometry(1.55, .58, 2.2); c.translate(0, 1.25, -.2);
   const M = [], C = [], tmp = new THREE.Object3D();
   for (const side of [-1, 1]) for (let z = PARK_Z + 8; z < 210; z += 5.6 + R() * 3) {
     if (R() < .3 || (side < 0 && Math.abs(z - BUS.p.z) < 9)) continue;
@@ -410,9 +423,9 @@ function parkedCars() {
     C.push(new THREE.Color().setHSL(R(), .2 + R() * .3, .05 + R() * .14));
     PARKED.push({ p: new V3(side * PARK_X, 0, z), dir, k: R(), side });
   }
-  const mesh = new THREE.InstancedMesh(mergeGeometries([b, c]), new THREE.MeshStandardMaterial({ roughness: .35, metalness: .6 }), M.length);
+  const mesh = new THREE.InstancedMesh(parkedCarGeo(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .35, metalness: .6 }), M.length);
   M.forEach((m, i) => { mesh.setMatrixAt(i, m); mesh.setColorAt(i, C[i]); });
-  S.scene.add(spectral(mesh, PAINT, { weight: .05, ...LIT }));
+  S.scene.add(spectralParts(mesh, { weight: .05, ...LIT }));
 }
 
 export function build() {

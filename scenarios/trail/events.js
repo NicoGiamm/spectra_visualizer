@@ -126,7 +126,8 @@ export const deer = () => event({ name: 'Deer crossing', t0: 13, t1: 27, bands: 
       this.tmp.updateMatrix(); this.legs.setMatrixAt(i, this.tmp.matrix); });
     this.legs.instanceMatrix.needsUpdate = true;
     const I = env(t, 13, 27, 1), fw = new V3(dx, 0, dz).normalize();
-    this.p = new V3(x, y + 1.05, z); this.body.set([this.p.clone().addScaledVector(fw, -.72), this.p.clone().addScaledVector(fw, .55)], 1.5, 1.1, I * .55); this.headIR.set(this.p.clone().addScaledVector(fw, .9).add(new V3(0, .62, 0)), 1.1, I * .4);
+    this.p = new V3(x, y + 1.05, z); // body heat: metered, but in the eye the parts' own surfaces (fur, skin, limbs) are the emitter — see 0 (M11/T6)
+    this.body.set([this.p.clone().addScaledVector(fw, -.72), this.p.clone().addScaledVector(fw, .55)], 1.5, 1.1, I * .55, 0, 0); this.headIR.set(this.p.clone().addScaledVector(fw, .9).add(new V3(0, .62, 0)), 1.1, I * .4, 0);
   }, where() { return this.p; } });
 
 export const fireflies = () => event({ name: 'Fireflies', t0: 15, t1: 35, bands: ['vis'], freq: ['luciferin'], note: 'Bioluminescence is "cold light": visible flashes with almost no infrared.',
@@ -196,7 +197,8 @@ export const valleyFog = () => event({ name: 'Valley fog', t0: 30, t1: 60, bands
     banks.forEach((b, i) => { quad.forEach(([qx, qy]) => { pos.push(qx, qy, 0); aC.push(b.x, b.y, b.z); aS.push(b.w, b.hh, b.s, 0); }); const a = i * 4; idx.push(a, a + 1, a + 2, a, a + 2, a + 3); });
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('aC', new THREE.Float32BufferAttribute(aC, 3)); g.setAttribute('aS', new THREE.Float32BufferAttribute(aS, 4)); g.setIndex(idx);
-    this.u = { uAmt: { value: 0 }, uGrow: { value: .5 }, uCol: { value: new THREE.Color() }, uTime: S.TIME };
+    this.u = { uAmt: { value: 0 }, uGrow: { value: .5 }, uCol: { value: new THREE.Color() }, uTime: S.TIME,
+      uNirSky: SURF_U.uNirSky, uNirMoon: SURF_U.uNirMoon, uSOnI_: SURF_U.uSOnI_ };
     const common = { vertexShader: FOG_VS, transparent: true, depthWrite: false };
     const vis = new THREE.ShaderMaterial({ ...common, uniforms: this.u, fragmentShader: COMMON + `uniform float uAmt, uTime; uniform vec3 uCol; varying vec2 vQ; varying float vSeed; ${FOG_SHAPE}
       void main(){ float a = fogA(); gl_FragColor = vec4(uCol*(.8 + .35*(vQ.y*.5 + .5)), a*.8); }` });
@@ -205,7 +207,14 @@ export const valleyFog = () => event({ name: 'Valley fog', t0: 30, t1: 60, bands
       void main(){ if(uSOnI < .5) discard; float a = fogA(); gl_FragColor = vec4(thermal(.06 + .05*(vQ.y*.5 + .5))*.22, a*.92); }` });
     // spectral eye (engine/render/compose.js): the same cold fog top in the IR channel, with its own coverage, so it
     // hides the warm ground in IR only (radio, microwave and gamma pass through fog)
-    vis.userData.eyeBands = `void eyeBands(out vec4 o1, out vec4 o3){ float a = fogA(); o1 = vec4(eyeL(thermal(.06 + .05*(vQ.y*.5 + .5))*.22), 0., 0., a*.92); o3 = vec4(0.); }`;
+    // Near-IR (night vision, M11/T6): fog droplets (~10 µm) scatter 0.8 µm as they scatter light (Mie, size ≫ λ, no
+    // absorption: King et al. 1992, IEEE TGRS 30:2, the 0.86 µm cloud channel), so a fog bank glows under the Moon
+    // and sky as in visible light and hides the ground behind it — albedo .6 STAND-IN for a bank of optical depth ~10,
+    // in the surfaces' units (engine/render/surface.js surfNIR: white Lambertian = the irradiance on a level top)
+    vis.userData.eyeBands = `uniform float uNirSky, uSOnI_; uniform vec4 uNirMoon;
+#define EYE_NIR
+float eyeNIR(){ return uSOnI_*.6*(uNirSky + uNirMoon.w*max(uNirMoon.y, 0.)); }   // coverage: o1.a, as the thermal layer
+void eyeBands(out vec4 o1, out vec4 o3){ float a = fogA(); o1 = vec4(eyeL(thermal(.06 + .05*(vQ.y*.5 + .5))*.22), 0., 0., a*.92); o3 = vec4(0.); }`;
     this.mesh = new THREE.Mesh(g, vis); this.mesh.frustumCulled = false; this.mesh.renderOrder = 4; S.scene.add(solid(this.mesh, ir));
     const near = banks.reduce((a, b) => (Math.hypot(b.x - c0.x, b.z - c0.z) < Math.hypot(a.x - c0.x, a.z - c0.z) ? b : a), banks[0]);
     this.p = near ? new V3(near.x, near.y + 4, near.z) : null;
@@ -315,8 +324,9 @@ export const cows = () => event({ name: 'Cows on the alp', t0: 3, t1: 42, bands:
       const x = c.x + Math.sin(T * .03 + c.ph) * 1.5, z = c.z + Math.cos(T * .025 + c.ph) * 1.5, y = heightAt(x, z);
       this.tmp.position.set(x, y, z); this.tmp.rotation.set(0, a, 0); this.tmp.scale.setScalar(c.s); this.tmp.updateMatrix(); this.mesh.setMatrixAt(i, this.tmp.matrix);
       const b = new V3(x, y + 1.05 * c.s, z);
-      this.ir.set(i * 3, b.clone().addScaledVector(fw, -.42 * c.s), 1.35 * c.s, I * .5); this.ir.set(i * 3 + 1, b.clone().addScaledVector(fw, .38 * c.s), 1.25 * c.s, I * .5);
-      this.ir.set(i * 3 + 2, b.clone().addScaledVector(fw, 1.12 * c.s).add(new V3(0, .08, 0)), .6 * c.s, I * .42);
+      // body heat: metered; the eye sees the parts' surfaces instead (see 0, M11/T6) — only the breath plume is extra
+      this.ir.set(i * 3, b.clone().addScaledVector(fw, -.42 * c.s), 1.35 * c.s, I * .5, 0); this.ir.set(i * 3 + 1, b.clone().addScaledVector(fw, .38 * c.s), 1.25 * c.s, I * .5, 0);
+      this.ir.set(i * 3 + 2, b.clone().addScaledVector(fw, 1.12 * c.s).add(new V3(0, .08, 0)), .6 * c.s, I * .42, 0);
       const ph = ((T + c.ph) / 2.5) % 1, puff = ph < .4 ? Math.sin(ph / .4 * Math.PI) : 0;   // one exhalation per 2.5 s
       if (cold * puff > .02) this.br.set(i, new V3(x, y + .7 * c.s, z).addScaledVector(fw, (1.45 + .35 * ph) * c.s).add(new V3(0, .15 * ph, 0)), (.25 + .5 * ph) * c.s, I * cold * puff * .14);
       const d = b.distanceTo(cam); if (z < cam.z - 6 && d < best) { best = d; this.p = b.clone().add(new V3(0, 1, 0)); } });

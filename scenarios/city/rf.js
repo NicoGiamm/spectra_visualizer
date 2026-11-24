@@ -39,7 +39,7 @@ export const crowd = () => event({ name: 'Pedestrians & phones', t0: 4, t1: 60, 
       if (Math.hypot(q.x - cam.x, z - cam.z) > 4) {   // nobody walks through the viewer: a walker within 4 m is not drawn
         this.O.position.set(q.x, .03, z); this.O.rotation.set(0, q.dir > 0 ? 0 : Math.PI, 0); this.O.scale.setScalar(.92 + .16 * hash2(k, 5)); this.O.updateMatrix(); this.m.setMatrixAt(k, this.O.matrix); }
       const pos = new V3(q.x, 1.05, z);
-      this.b.set(k, pos, 1.3, .4 * edge);
+      this.b.set(k, pos, 1.3, .4 * edge, 0);   // body heat: metered; the eye sees the walker's parts (see 0, M11/T6)
       const ping = burst(t, q.per, q.ph, .2) + .4 * burst(t, q.bper, q.bph, .12);
       if (ping > .02) this.d.set(k, pos.clone().setY(1.35), .8, ping * .75 * edge);
     }); },
@@ -62,7 +62,7 @@ export const scooters = () => event({ name: 'E-scooters', t0: 6, t1: 56, bands: 
       if (Math.abs(z - cam.z) > 160) return;
       if (Math.hypot(q.x - cam.x, z - cam.z) > 4) { this.O.position.set(q.x, .03, z); this.O.rotation.set(0, q.dir > 0 ? 0 : Math.PI, 0); this.O.updateMatrix(); this.g.setMatrixAt(k, this.O.matrix); }
       const pos = new V3(q.x, .8, z);
-      this.b.set(k, pos, 1.5, .5);
+      this.b.set(k, pos, 1.5, .5, 0);   // rider + hub motor: metered; the eye sees the parts (see 0, M11/T6)
       const b = burst(t, q.per, q.ph, .22);
       if (b > .02) this.m.set(k, pos.clone().setY(1.15), .9, b * .7);
     }); },

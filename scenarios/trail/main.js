@@ -15,7 +15,7 @@ run({
     sky.sunset(), local.alpenglow(), local.radioTower(), local.warmRocks(),
     observer({ name: 'Hiker (you)', note: 'Headlamp after dark; your phone pings the network (microwave) every few seconds and sends short Bluetooth bursts (2.4 GHz, also microwave).', lamp: true }),
     sky.airliner(), sky.venus(), local.hut(), local.deer(), local.fireflies(), sky.cmb(), sky.milkyWay(), sky.meteorShower(),
-    sky.pulsar(), local.bats(), sky.comet(), sky.satellitePass(), sky.starlink(), sky.blackHoleBinary(), sky.aurora(), sky.moonrise(),
+    sky.pulsar(), local.bats(), sky.comet(), sky.satellitePass(), sky.starlink(), sky.microquasar(), sky.aurora(), sky.moonrise(),
     sky.airShowers(), sky.thunderstorm({ note: 'Over the southern peaks: lightning, radio "sferics" and terrestrial gamma-ray flashes.' }),
     sky.fastRadioBurst(), sky.supernova(), sky.gammaRayBurst(), local.campfire(), sky.sunDogs(), sky.crepuscularRays(),
     sky.noctilucentClouds(), sky.moonHalo(),

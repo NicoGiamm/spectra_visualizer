@@ -108,7 +108,7 @@ export const buses = () => event({ name: 'Buses: diesel & electric', t0: 0, t1: 
       if (b.diesel) {
         const st = back.clone().addScaledVector(fw, .6).setY(3.3);
         this.ex[i].set([st, st.clone().add(new V3(0, .7, 0)), st.clone().addScaledVector(fw, -1.6).setY(4.6)], .35, 1.1, .55 * fade, 1);
-        this.hot.set(i, back.clone().addScaledVector(fw, 1.5).setY(1), 2.2, .45 * fade);
+        this.hot.set(i, back.clone().addScaledVector(fw, 1.5).setY(1), 2.2, .45 * fade, 0);   // the parts engine cover is the emitter in the eye (render rule 3)
       } else this.hot.set(i, this.G.position.clone().setY(3.35), 3, .16 * fade);   // roof battery pack, barely warm
       this.rt.set(i, this.G.position.clone().setY(2.9), 1.2, (.25 + .6 * burst(t, 1.7 + i * .4, i * 3.1, .3)) * fade);
     });
@@ -132,7 +132,7 @@ export const cyclists = () => event({ name: 'Cyclists', t0: 0, t1: 60, bands: ['
       if (Math.abs(z - cam.z) > 150) return;
       this.O.position.set(c.x, 0, z); this.O.rotation.set(0, c.dir > 0 ? 0 : Math.PI, 0); this.O.updateMatrix(); this.m.setMatrixAt(k, this.O.matrix);
       const p = new V3(c.x, 1.1, z), fw = new V3(0, 0, c.dir), face = fw.dot(cam.clone().sub(p).normalize());
-      this.b.set(k, p, 1.2, .38);
+      this.b.set(k, p, 1.2, .38, 0);   // parts rider: metered, not seen in the eye (render rule 3)
       const fl = c.flash ? (Math.sin(T * 12 + c.ph) > 0 ? 1 : .1) : 1;
       this.f.set(k, p.clone().addScaledVector(fw, .9).setY(.95), .5, lights * fl * Math.max(0, face) ** .5);
       this.r.set(k, p.clone().addScaledVector(fw, -.8).setY(.8), .35, lights * Math.max(0, -face) ** .5 * .9);

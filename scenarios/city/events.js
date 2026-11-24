@@ -6,9 +6,10 @@ import { S } from 'spectra/core/state.js';
 import { event } from 'spectra/core/events.js';
 import { Em, Rib, EmField, BEAM, toViewer } from 'spectra/render/sources.js';
 import { solid } from 'spectra/render/instrument.js';
-import { addTx, spectral } from 'spectra/render/surface.js';
+import { addTx, spectralParts } from 'spectra/render/surface.js';
 import { night, moonlit } from 'spectra/world/atmosphere.js';
-import { BUILD, LAMPS, FLATS, PARK_Z, MAST, PAINT, LIGHT, POOL_FADE } from './world.js';
+import { BUILD, LAMPS, FLATS, PARK_Z, MAST, LIGHT, POOL_FADE } from './world.js';
+import { carGeo } from './street.js';
 
 // Microwave fields are drawn in one fixed orange crackle; multiply it by the per-instance colour so channels can
 // be told apart (white = unchanged). Patched locally so the engine shader stays untouched.
@@ -21,6 +22,7 @@ export const pulse = (x, w) => Math.max(0, 1 - Math.abs(x) / w);   // triangular
 // deterministic burst schedule: 1 while t is within `len` after a tick of period `per` (phase ph)
 export const burst = (t, per, ph, len) => { const u = ((t + ph) % per + per) % per; return u < len ? 1 - u / len : 0; };
 export const inWin = e => S.t >= e.t0 && S.t <= e.t1;   // for update()s that have no envelope of their own
+const HPS_NIR = .5;   // near-IR / visible of a high-pressure sodium lamp relative to sunlight's — STAND-IN (streetLights)
 const LAMP_LUX = 260;   // lamp intensity scale of the streetLight() term (tuned by eye: asphalt under a lamp mid-dark, no bloom)
 export const litNow = t => .06 + .5 * sm(6, 24, t);      // fraction of lit windows (shared with the window shader)
 
@@ -33,7 +35,15 @@ export const windows = () => event({ name: 'Lit windows & heat island', t0: 0, t
 // Half of the avenue has been re-lamped with white LEDs (no infrared); the rest are old high-pressure sodium lamps
 // that strike a dim bluish-white, warm up to orange over several minutes and radiate strongly at 819 nm.
 export const streetLights = () => event({ name: 'Street lights', t0: 8, t1: 60, bands: ['vis', 'ir'], freq: ['na589', 'na819', 'ledWhite'], tags: ['time-compressed'], note: 'A mix of new white LED lamps (they switch on instantly, no infrared) and old high-pressure sodium lamps: they strike with a dim bluish-white glow and warm up to orange (minutes in reality, compressed here), with a strong near-infrared line at 819 nm.',
-  init() { this.v = new EmField('vis', LAMPS.length); this.i = new EmField('ir', LAMPS.length); this.c = new THREE.Color(); this.lc = LAMPS.map(() => new THREE.Color()); },
+  init() { this.v = new EmField('vis', LAMPS.length); this.i = new EmField('ir', LAMPS.length); this.c = new THREE.Color(); this.lc = LAMPS.map(() => new THREE.Color());
+    // near-IR (M11/T6): the sodium lamps light the street for night vision too (surface.js addTx('nir'); the eye's
+    // near-IR channel). High-pressure sodium radiates the Na 818.3 / 819.5 nm doublet and a near-IR continuum next to
+    // its visible lines (Elvidge et al. 2010, Sensors 10:3961, Fig. 4; de Groot & van Vliet 1986, The High-Pressure
+    // Sodium Lamp) — near-IR / visible .5 of sunlight's (STAND-IN within those spectra); white LEDs emit nothing past
+    // ~750 nm (Elvidge 2010), so they are not registered. Power = the lamp's visible street-light term at 1 m
+    // (LAMP_LUX × its luminance, world.js streetLight) × that ratio; no cutoff optics in surfNIR (STAND-IN).
+    this.nir = LAMPS.map(() => 0);
+    LAMPS.forEach((l, k) => { if (!l.led) addTx('nir', () => (this.nir[k] > 0 ? { p: l.p, power: this.nir[k] } : null)); }); },
   update() { const { t, T } = S, cam = S.camera.position; let sum = 0;
     LAMPS.forEach((l, k) => {
       const t0 = 9 + l.k * 4;
@@ -43,6 +53,7 @@ export const streetLights = () => event({ name: 'Street lights', t0: 8, t1: 60, 
       this.v.color(k, this.c.setRGB(.7 + .3 * warm, .75 - .03 * warm, 1 - .65 * warm));    // HPS: dim bluish-white strike -> orange (pink-red is LPS)
       this.v.set(k, l.p, 2.4, I); this.i.set(k, l.p, 3.2, strike * warm * .3);
       this.lc[k].copy(this.c).multiplyScalar(I / 1.1);
+      this.nir[k] = LAMP_LUX * HPS_NIR * (.2126 * this.lc[k].r + .7152 * this.lc[k].g + .0722 * this.lc[k].b) * warm;   // the 819 nm doublet needs the hot arc
     });
     const n = sum / Math.max(1, LAMPS.length); LAMPS.poolMat.color.setScalar(.8 * n);
     // the nearest lamps light the street surfaces per pixel (world.js streetLight); they hand over to the pool mesh
@@ -97,20 +108,21 @@ export const wifi = () => event({ name: 'Wi-Fi routers', t0: 0, t1: 60, bands: [
 export const traffic = () => event({ name: 'Traffic', t0: 0, t1: 60, bands: ['vis', 'ir', 'micro'], freq: ['ledWhite', 'navRed', 'thermal700', 'carRadar', 'tpms'], note: 'Headlights and tail lights, hot engines and exhausts, 77 GHz collision radar in every new car, and the tyre-pressure sensors in each wheel chirping at 433 MHz.',
   init() {
     const lanes = [[2.2, -1], [5.3, -1], [-2.2, 1], [-5.3, 1]];   // [x, direction along z]: westbound on the north (+x) side
-    const geoB = new THREE.BoxGeometry(1.8, .75, 4.4), geoC = new THREE.BoxGeometry(1.6, .6, 2.3); geoB.translate(0, .62, 0); geoC.translate(0, 1.3, -.2);
     this.cars = [];
     for (const [x, dir] of lanes) for (let k = 0; k < 7; k++) {
       const col = new THREE.Color().setHSL(R(), .3 + R() * .3, .06 + R() * .12);
       this.cars.push({ G: new THREE.Object3D(), col, x: x + (R() - .5) * .4, dir, z0: k / 7 + R() * .08, v: 9 + R() * 5, ex: new Rib('ir', null, 3, 1), tp: 5 + R() * 6, tph: R() * 10 });
     }
-    const n = this.cars.length, m = new THREE.MeshStandardMaterial({ roughness: .4, metalness: .5 });   // bodies and cabins: one instanced draw
-    const g = new THREE.InstancedMesh(mergeBoxes(geoB, geoC), m, n); g.instanceMatrix.setUsage(THREE.DynamicDrawUsage); g.frustumCulled = false;
-    this.cars.forEach((c, i) => g.setColorAt(i, c.col)); S.scene.add(spectral(g, PAINT, { weight: 0 })); this.body = g;
+    // bodies by parts (M11/T6, street.js carGeo: hot bonnet, running tyres, tailpipe, cold glass cabin, cooling paint),
+    // one instanced draw; the paint is white in the geometry so the instance colour gives each car its own
+    const n = this.cars.length, m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .4, metalness: .5 });
+    const g = new THREE.InstancedMesh(carGeo(0xffffff), m, n); g.instanceMatrix.setUsage(THREE.DynamicDrawUsage); g.frustumCulled = false;
+    this.cars.forEach((c, i) => g.setColorAt(i, c.col)); S.scene.add(spectralParts(g, { weight: 0 })); this.body = g;
     this.hidden = new THREE.Matrix4().makeScale(0, 0, 0);   // one instanced field per light type for all cars
     this.hl = new EmField('vis', n * 2, '#fff4dc'); this.tl = new EmField('vis', n * 2, '#ff2a1a'); this.hot = new EmField('ir', n, null, 1);
     this.rad = new EmField('micro', n); this.tpms = new EmField('micro', n);
   },
-  update() { const { t, T } = S, cam = S.camera.position, lights = sm(6, 12, t), Z0 = -900, L = 1600;
+  update() { const { t } = S, cam = S.camera.position, lights = sm(6, 12, t), Z0 = -900, L = 1600;
     for (const [ci, c] of this.cars.entries()) {
       const s = ((c.z0 * L + c.dir * c.v * t * 2) % L + L) % L, z = Z0 + s;           // position along the loop, script-time driven
       const fade = sm(Z0, Z0 + 150, z) * (1 - sm(Z0 + L - 150, Z0 + L, z));          // vanish only far away
@@ -123,22 +135,17 @@ export const traffic = () => event({ name: 'Traffic', t0: 0, t1: 60, bands: ['vi
       for (let k = 0; k < 2; k++) { const o = side.clone().multiplyScalar(k ? .65 : -.65);
         this.hl.set(ci * 2 + k, front.clone().add(o).setY(.7), .9, hI * 1.2); this.tl.set(ci * 2 + k, back.clone().add(o).setY(.8), .5, tI * .9); }
       c.ex.set([back.clone().setY(.35), back.clone().addScaledVector(fw, -1.6).setY(.6)], .5, .9, .4 * fade);
-      this.hot.set(ci, c.G.position.clone().addScaledVector(fw, 1.3).setY(.8), 1.8, .35 * fade);
-      this.rad.set(ci, front.clone().setY(.5), .8, (.25 + .3 * Math.max(0, Math.sin(T * 7 + c.z0 * 40))) * fade);
+      this.hot.set(ci, c.G.position.clone().addScaledVector(fw, 1.3).setY(.8), 1.8, .35 * fade, 0);   // engine heat: metered; the eye sees the hot bonnet part (see 0)
+      // 77 GHz radar (M11/T6 review): an FMCW chirp train (chirps of tens of µs, frames of ~50 ms) reads steady to any
+      // camera frame — the old slow pulse (.25 + .3·max(0, sin)) is replaced by its mean .35 — and it looks forward:
+      // a mid-range automotive radar panel, ~30° azimuth × ~10° elevation half-power beam (STAND-IN; ETSI EN 301 091 /
+      // typical 76–77 GHz front radars), the 3GPP panel form of sources.js BEAM.sector, no tilt
+      const rv = toViewer(front); this.rad.set(ci, front.clone().setY(.5), .8, .35 * fade, BEAM.sector(rv.az - Math.atan2(c.dir, 0), -rv.el, 0, 30 * Math.PI / 180, 10 * Math.PI / 180));
       const tp = burst(t, c.tp, c.tph, .35);                                        // TPMS: a short chirp from one wheel
       if (tp > 0) this.tpms.set(ci, c.G.position.clone().addScaledVector(fw, hash2(ci, Math.floor((t + c.tph) / c.tp)) < .5 ? 1.4 : -1.4).add(new V3(.9 * Math.sign(cam.x - c.x), .35, 0)), .9, tp * .7 * fade);
     }
     this.body.instanceMatrix.needsUpdate = true; },
   where: () => null });
-
-function mergeBoxes(a, b) {
-  const g = new THREE.BufferGeometry(), pa = a.toNonIndexed(), pb = b.toNonIndexed();
-  for (const k of ['position', 'normal']) {
-    const A = pa.attributes[k].array, B = pb.attributes[k].array, out = new Float32Array(A.length + B.length);
-    out.set(A); out.set(B, A.length); g.setAttribute(k, new THREE.BufferAttribute(out, 3));
-  }
-  return g;
-}
 
 // Fireworks over the park at the end of the walk.
 export const fireworks = () => event({ name: 'Fireworks', t0: 50, t1: 60, bands: ['vis', 'ir'], freq: ['strontium', 'thermal1200'], note: 'Metal salts burn in bright colours; the shells and burning stars are hot in infrared too.',

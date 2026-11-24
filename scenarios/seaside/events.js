@@ -118,7 +118,7 @@ export const ship = () => event({ name: 'Container ship', t0: 4, t1: 52, bands: 
     this.deck.forEach((e, k) => e.set(at(-60 + k * 45, 22), 14, nav * I * .5));
     const ra = T * XB_W, toC = Math.atan2(c.z - pos.z, c.x - pos.x), face = Math.max(0, Math.cos(ra - toC)) ** 16;   // old view: radar crackles brightest as its antenna sweeps past you
     // the eye: a steady-sized antenna whose real 1.1° beam flashes once per turn as it crosses you (−30 dB sidelobes between)
-    this.radar.set(at(-85, 34), S.eye ? 60 : 60 + 120 * face, I * (.2 + .9 * face), 1.1 * xband(ra - toC) / (.2 + .9 * face));    ENVSEA.radP.value.copy(at(-85, 34)); ENVSEA.radA.value = ra; ENVSEA.radI.value = I * 3;   // the same sweep echoes off the headlands and the sea (surface shaders read this)
+    this.radar.set(at(-85, 34), S.eye ? 60 : 60 + 120 * face, I * (.2 + .9 * face), 1.1 * xband(ra - toC) / (.2 + .9 * face));    ENVSEA.radP.value.copy(at(-85, 34)); ENVSEA.radA.value = ra; ENVSEA.radI.value = I * 3; ENVSEA.radB.value.set(XB_HPBW, XB_W / 60);   // the same sweep echoes off the headlands and the sea (surface shaders read this)
     const sa = T * SB_W + 1.7, sface = Math.max(0, Math.cos(sa - toC)) ** 8;   // S-band: wider beam, own rotation
     this.sband.set(at(-85, 29), S.eye ? 50 : 50 + 90 * sface, I * (.15 + .6 * sface), .75 * BEAM.sweep(sa - toC, SB_HPBW, SB_W) / (.15 + .6 * sface));
     this.sbandTx = { p: at(-85, 29), power: I * 25 * sface };
@@ -127,7 +127,8 @@ export const ship = () => event({ name: 'Container ship', t0: 4, t1: 52, bands: 
       const b = lt < .06 ? 1 - lt / .06 : bt < .04 ? .35 * (1 - bt / .04) : 0;
       if (b > 0) e.set(at(-70 + k * 55, 13), 16, I * .5 * b); });
     const ping = (t % 3) / 3; this.ais.set(at(-85, 44), 220, ping < .2 ? I * (1 - ping / .2) : 0);
-    this.radarTx = { p: at(-85, 34), power: I * 40 * face };   // the sweep reaches the beach (range scaled up: X-band is strong)
+    // the sweep reaches the beach (range scaled up: X-band is strong); the eye: the real beam's dwell share, as the drawn antenna
+    this.radarTx = { p: at(-85, 34), power: I * 40 * (S.eye ? xband(ra - toC) : face), meter: I * 40 * face };   // meters: unchanged
     this.aisTx = { p: at(-85, 44), power: ping < .2 ? I * 3 * (1 - ping / .2) : 0 };
     if (ping < .2) packet(this.pk, at(-85, 44), this.st, ping / .2, 260, 16, I * .9 * (1 - .5 * ping / .2));
     this.funnel.set([at(-95, 30), at(-100, 60), at(-108, 95)], 10, 26, I * .5); this.hot.set(at(-95, 31), 18, I * .45); },
@@ -349,7 +350,7 @@ export const bonfire = () => event({ name: 'Beach bonfire', t0: 28, t1: 60, band
       for (let k = 0; k < 10; k++) { const a = (T * .6 + k / 10) % 1; this.emb.set(k, FIRE.clone().add(new V3(Math.sin(k * 3 + T) * .5 * a, .5 + a * 4, Math.cos(k * 2 + T) * .4 * a)), .06, lit * (1 - a) * .5); }
       this.hot.set(FIRE.clone().add(new V3(0, .6, 0)), 4, lit * f); S.act.ir += sm(31, 44, t) * .2; }   // + the warming sand (surface shader)
     this.pp.forEach((q, k) => { const y = q.p.y, tc = q.sit ? .5 : 1.12, hd = q.sit ? .92 : 1.6;   // torso and head heights of the pose
-      this.body.set(k * 2, new V3(q.p.x, y + tc, q.p.z), q.sit ? .7 : .9, I * .55); this.body.set(k * 2 + 1, new V3(q.p.x, y + hd, q.p.z), .42, I * .6);
+      this.body.set(k * 2, new V3(q.p.x, y + tc, q.p.z), q.sit ? .7 : .9, I * .55, 0); this.body.set(k * 2 + 1, new V3(q.p.x, y + hd, q.p.z), .42, I * .6, 0);   // body heat: metered; the eye sees the people's parts (see 0, M11/T6)
       const hand = new V3(q.p.x - Math.cos(q.a) * .3, y + (q.sit ? .45 : 1.0), q.p.z - Math.sin(q.a) * .3);
       if (Math.sin(T * .3 + q.ph) > .55) this.scr.set(k, hand, .3, I * .6);                              // someone checks their phone
       const lt = ((t + k * .7) % 3) / 3; if (lt < .08) this.ph.set(k, hand, .8, I * .6 * (1 - lt / .08)); });   // LTE ping

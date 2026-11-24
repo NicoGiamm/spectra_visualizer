@@ -49,7 +49,10 @@ export const venus = o => event({ name: 'Evening star (Venus)', t0: 5, t1: 57, b
   update() { const { t } = S; this.p = skyP(287, 20 - t * .33); this.e.set(this.p, deg(.45), env(t, 5, 57, 4) * (.3 + .9 * sm(5, 15, t))); }, where() { return this.p; } }, o);
 
 export const cmb = o => event({ name: 'Cosmic microwave background', t0: 16, t1: 60, bands: ['micro'], freq: ['cmb'], tags: ['stylised'], note: 'Leftover glow from the Big Bang, mottled across the whole sky.',
-  update() { const I = sm(16, 26, S.t) * .9; ENV.nightMat.uniforms.uCMB.value = S.on.micro ? I : 0; S.act.micro += I * .6; }, where: () => null }, o);
+  // the mottled haze is the old view's symbol, painted into the night sky's visible colour; the spectral eye draws the real
+  // microwave sky instead (atmosphere.js BAND_SKY: 2.7 K behind the warm air — the CMB stays invisible next to the
+  // ~280 K ground, as it would to a microwave camera), so the eye does not paint it (M11/T6 review)
+  update() { const I = sm(16, 26, S.t) * .9; ENV.nightMat.uniforms.uCMB.value = S.on.micro && !S.eye ? I : 0; S.act.micro += I * .6; }, where: () => null }, o);
 
 export const milkyWay = o => event({ name: 'Milky Way', t0: 18, t1: 60, bands: ['vis', 'ir', 'radio'], freq: ['starlight', 'dustFIR', 'synchrotron'], tags: ['common'], note: 'Starlight with dark dust lanes; the dust glows in IR, Sgr A* (galactic centre, ahead-left) in radio.',
   init() { this.ir = new Em('ir'); this.ra = new Em('radio'); },
@@ -204,7 +207,6 @@ export const microquasar = o => event({ name: 'Microquasar SS 433 & W50', t0: 30
       this.fil[s].set(Array.from({ length: 13 }, (_, i) => { const a = a0 + (i / 12 - .5) * .9; return A(w50R(a) * .96, a); }), deg(.08), deg(.08), I * .12); }   // Hα at the ears
   },
   where() { return onSky(this.d); } }, o);
-export const blackHoleBinary = microquasar;   // the old name: the scenarios' event lists still call it
 
 // Aurora as a substorm on the script axis (defaults t0 26 → t1 50):
 //   growth   t0 … t0+7    a faint, homogeneous green arc low over the NW horizon fades in over ~6 s, almost no rays;

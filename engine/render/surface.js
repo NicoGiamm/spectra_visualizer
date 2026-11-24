@@ -72,8 +72,8 @@ import { V3, sm } from '../core/util.js';
 import { S } from '../core/state.js';
 import { COMMON } from './shaders.js';
 import { solid } from './instrument.js';
-import { GAL_C, GAL_N, sunEl, moonDir, MOON_ILLUM, ENV } from '../world/atmosphere.js';
-import { NIR } from '../core/bands.js';
+import { GAL_C, GAL_N, sunEl, moonDir, MOON_ILLUM, ENV, BAND_SKY_GLSL, NIR_SKY } from '../world/atmosphere.js';
+import { NIR, UV_COL, UV_SURF_K } from '../core/bands.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 export const OVERLAY = { value: .12 };
@@ -85,7 +85,7 @@ export const SURF_U = {
   uTxR: { value: vec4s() }, uTxM: { value: vec4s() }, uTxN: { value: vec4s() },
   uHitM: { value: Array.from({ length: MAX_HIT }, () => new THREE.Vector4()) },
   uGalN: { value: GAL_N }, uGalC: { value: GAL_C },   // the radio sky's orientation, for its reflection (M11/T2)
-  uNirSky: { value: 0 }, uNirMoon: { value: new THREE.Vector4() },   // near-IR illumination (M11/T3, NIR_LIGHT)
+  uNirSky: NIR_SKY.L, uNirGlow: NIR_SKY.glow, uNirMoon: { value: new THREE.Vector4() },   // near-IR illumination (M11/T3, NIR_LIGHT; shared with the sky, atmosphere.js)
   uNirPhot: { value: 1 },   // real near-IR irradiance (NIR.lux0 units) per scene-light unit: the tube's photon count (compose.js)
 };
 
@@ -119,6 +119,7 @@ function nirLight() {
   const sSky = hemi ? lum(hemi.color) * hemi.intensity * sky / visSky : sky / NIR.lux0;
   const sMoon = ml ? lum(ml.color) * ml.intensity * NIR_LIGHT.moonK : moon / NIR.lux0;
   SURF_U.uNirSky.value = sSky; SURF_U.uNirMoon.value.set(m.x, m.y, m.z, sMoon);
+  SURF_U.uNirGlow.value = 10 ** tw.at(-1)[1] * NIR_LIGHT.nightK / sky;   // the OH airglow's share of the near-IR sky (skyNIR's shape)
   const up = Math.max(m.y, 0), real = (sky + moon * up) / NIR.lux0, scene = sSky + sMoon * up;
   SURF_U.uNirPhot.value = scene > 1e-9 ? real / scene : 1;
 }
@@ -239,12 +240,6 @@ export const PRESET = {
   // μ ~380 [Oke] (below sand and soil, so it cools faster than both); eIR .9 (0.90–0.95) [EL]; eMW .9 [UMF]; uvAlb .05 — STAND-IN (dark organic surface, like soil [FG]);
   // gamma .1 (K-40 only) [UN]; rRadio .03 [P2040]
   wood:      P(22, 14, 12, .9, .9, .05, .1, .03, 0, TRANS.wood),
-  // warm-blooded body (M10/T9): the skin / fur surface stays ~30 °C all night (metabolism: no cooling, tau 0) —
-  // STAND-IN between bare skin (~33 °C) and fur / clothing (~20–30 °C on a cool night); eIR .98 — human skin 0.98
-  // (Steketee 1973, Phys. Med. Biol. 18:686), animal fur 0.95–0.99; eMW .6 — STAND-IN (wet tissue reflects microwaves,
-  // skin emissivity ~0.5–0.7 at 10–40 GHz); uvAlb .05 — STAND-IN (skin / fur UV-A reflectance ~5–10 %); gamma .02 —
-  // body K-40 ~60 Bq/kg vs ~1200 Bq/kg in granite [UN]; rRadio .75 tissue (Gabriel 1996)
-  body:      P(30, 30, 0, .98, .6, .05, .02, .75, 0, TRANS.body),
   // ---- the parts of animals, people and vehicles (M11/T4): what a thermal camera resolves on a body. The objects are
   // built with partsGeometry() below, each part with its own surface. T0 / Teq / tau follow the order of the physics
   // (core 37–39 °C > bare skin > thinly haired limbs > clothing > fur > air) — the values are STAND-INS:
@@ -257,9 +252,11 @@ export const PRESET = {
   //   [Ber] Berry et al. 2003, Can. J. Anim. Sci. 83:687: udder skin of dairy cows 33–36 °C by infrared thermography
   //   [EN673] EN 673 / ISO 10292: uncoated soda-lime glass, corrected emissivity 0.837 (the 9–10 µm reststrahlen dip)
   // Microwave / radio of the body parts: the tissue under fur or clothing (both transparent at mm–m wavelengths) —
-  // eMW .6 STAND-IN and rRadio .75 [Gabriel 1996] as `body`; gamma .02 body K-40 [UN].
+  // eMW .6 STAND-IN (wet tissue reflects microwaves, skin emissivity ~0.5–0.7 at 10–40 GHz) and rRadio .75 tissue
+  // [Gabriel 1996]; gamma .02 — body K-40 ~60 Bq/kg vs ~1200 Bq/kg in granite [UN]. (The single warm `body` preset of
+  // M10/T9 is gone — M11/T6: every animal, person and vehicle is built from these parts.)
   // bare skin (faces, hands, a muzzle, the eyes, an udder, antler velvet): ~33 °C all night, tau 0 — face skin 32–35 °C
-  // indoors and out (STAND-IN), udder 33–36 °C [Ber]; eIR .98 [Ste]; uvAlb .05 — STAND-IN (as `body`)
+  // indoors and out (STAND-IN), udder 33–36 °C [Ber]; eIR .98 [Ste]; uvAlb .05 — STAND-IN (skin / fur UV-A reflectance ~5–10 %)
   skin:      P(33, 33, 0, .98, .6, .05, .02, .75, 0, TRANS.body),
   // thinly haired limbs and ears (the thermal windows [McC]): between skin and fur — 28 °C STAND-IN on a summer night
   // (in winter cold-adapted legs drop toward the air: counter-current exchange, not modelled); eIR .98 [McC]
@@ -302,7 +299,6 @@ const REFL = {
   concrete: [.002, .35, .04, .05],
   facade:   [.02, .35, .04, .1],     // reveals, sills
   wood:     [.003, .45, .04, .1],
-  body:     [.01, .5, .03, .5],      // fur / clothing on a curved body
   skin:     [.001, .5, .03, .3],     // skin nirAlb .5 [Anderson & Parrish]
   limb:     [.003, .4, .03, .3],
   fur:      [.01, .35, .03, .5],     // brown / grey coats: nirAlb STAND-IN (hair is brighter in the near-IR than in the red)
@@ -423,11 +419,9 @@ const vec3 SURF_LUMW = vec3(.2126, .7152, .0722), SURF_RADC = vec3(1., .31, .85)
 float fresnelS(float R0, float c){ return R0 + (1. - R0)*pow(1. - clamp(c, 0., 1.), 5.); }          // Schlick
 float cohK(float h, float c, float lam){ float g = 12.566*h*c/lam; return exp(-g*g); }             // Beckmann: specular fraction
 float upK(vec3 d){ return smoothstep(-.02, .04, d.y); }                                             // mirror ray: sky above, ground below
-// band skies in direction d — the same formulas as the night sky's eye hook (engine/world/atmosphere.js)
-float skyRadioK(vec3 d){ float g = dot(d, uGalN), core = pow(max(dot(d, uGalC), 0.), 5.); return 36.*(17. + 230.*exp(-g*g/.06)*(1. + 2.5*core)); }
-float skyMicroK(vec3 d){ float t = .05/max(d.y, .02); return 2.725*exp(-t) + 270.*(1. - exp(-t)); }
-float skyIRC(vec3 d){ return mix(-60., 10., 1. - pow(.7, 1./max(d.y, .04))); }
-// mirror images of transmitters: a lobe of width s = 2·slope (≥ .03 rad, the narrowest image drawn) around the
+// band skies in direction d and their hemisphere means: the one table in engine/world/atmosphere.js (BAND_SKY),
+// shared with the night sky's eye hook
+${BAND_SKY_GLSL}// mirror images of transmitters: a lobe of width s = 2·slope (≥ .03 rad, the narrowest image drawn) around the
 // specular direction. Flux-conserving: the image of a source of power P seen over the whole reflected path
 // (tx → surface → eye, the same near-field falloff as txField) is spread over the lobe, so its peak falls as (.03/s)²
 // — a mirror shows a bright point, a curved panel a dim sheen
@@ -444,7 +438,7 @@ float txImage(vec4 tx[${MAX_TX}], vec3 W, vec3 N, vec3 Rf, float range, float sl
 vec3 radioRefl(vec3 W, vec3 N, vec3 V, float T, float R0, float h, float slope){
   float c = clamp(dot(-V, N), 0., 1.), S = cohK(h, c, 3.), R = mix(R0, fresnelS(R0, c), S), Tg = T + 273.;
   vec3 Rf = reflect(V, N);
-  float Tsp = mix(Tg, skyRadioK(Rf), upK(Rf)), Tdif = mix(Tg, 2600., .5 + .5*N.y);
+  float Tsp = mix(Tg, skyRadioK(Rf), upK(Rf)), Tdif = mix(Tg, SKY_RADIO_MEAN, .5 + .5*N.y);
   float Tb = (1. - R)*Tg + R*mix(Tdif, Tsp, S);
   float tx = R*S*txImage(uTxR, W, N, Rf, 700., slope) + R0*(1. - S)*txField(uTxR, W, N, 700., 0.);
   return SURF_RADC*(6e-6*Tb/dot(SURF_RADC, SURF_LUMW) + tx*1.1*surfSpk);   // only the coherent part speckles
@@ -453,7 +447,7 @@ vec3 radioRefl(vec3 W, vec3 N, vec3 V, float T, float R0, float h, float slope){
 float microTb(vec3 N, vec3 V, float T, float eMW, float h){
   float c = clamp(dot(-V, N), 0., 1.), S = cohK(h, c, .015), R0 = 1. - eMW, R = mix(R0, fresnelS(R0, c), S), Tg = T + 273.;
   vec3 Rf = reflect(V, N);
-  float Tsp = mix(Tg, skyMicroK(Rf), upK(Rf)), Tdif = mix(Tg, 27., .5 + .5*N.y);
+  float Tsp = mix(Tg, skyMicroK(Rf), upK(Rf)), Tdif = mix(Tg, SKY_MICRO_MEAN, .5 + .5*N.y);
   return (1. - R)*Tg + R*mix(Tdif, Tsp, S);
 }
 float microTx(vec3 W, vec3 N, vec3 V, float eMW, float h, float slope){
@@ -464,7 +458,7 @@ float microTx(vec3 W, vec3 N, vec3 V, float eMW, float h, float slope){
 // hemisphere (sky mean −28 °C, the ground below at the surface's own T) for the rest
 // near-IR radiance (the night-vision channel, M11/T3; header: NEAR-IR): nirAlb × (sky hemisphere + Moon)
 // plus near-IR lamps registered with addTx('nir', …): irradiance P at 1 m, 1/d² (d ≥ 1 m), Lambert
-uniform float uNirSky; uniform vec4 uNirMoon; uniform vec4 uTxN[${MAX_TX}];
+uniform float uNirSky, uNirGlow; uniform vec4 uNirMoon; uniform vec4 uTxN[${MAX_TX}];
 float surfNIR(vec3 W, vec3 N, float alb){
   float E = uNirSky*(.5 + .5*N.y) + uNirMoon.w*max(dot(N, uNirMoon.xyz), 0.);
   for(int i = 0; i < ${MAX_TX}; i++){ if(uTxN[i].w <= 0.) continue;
@@ -472,7 +466,7 @@ float surfNIR(vec3 W, vec3 N, float alb){
   return alb*E; }
 float irReflT(vec3 N, vec3 V, float T, float gloss){
   vec3 Rf = reflect(V, N);
-  return mix(mix(T, -28., .5 + .5*N.y), mix(T, skyIRC(Rf), upK(Rf)), gloss);
+  return mix(mix(T, SKY_IR_MEAN, .5 + .5*N.y), mix(T, skyIRC(Rf), upK(Rf)), gloss);
 }
 vec3 surfBands(vec3 W, vec3 N, float inVis){   // inVis = 1 for the faint overlay in visible light: smooth terms only
 #ifdef SURF_ATTR
@@ -512,7 +506,7 @@ vec3 surfBands(vec3 W, vec3 N, float inVis){   // inVis = 1 for the faint overla
     float u = B.y*(.35 + .65*max(N.y, 0.));
     // eye: the glossy part mirrors the skylight (Fresnel R0opt = D.z), the rest is the diffuse albedo
     if(reflOn){ float F = C.x*fresnelS(D.z, cosv); u = u*(1. - F) + F*upK(reflect(V, N)); }
-    col += uSOnU*vec3(.62,.3,1.)*u*uUVsky*1.3;
+    col += uSOnU*vec3(${UV_COL.map(x => x.toFixed(2)).join(', ')})*u*uUVsky*${UV_SURF_K.toFixed(2)};   // UV_COL, UV_SURF_K: engine/core/bands.js (UV_PATH)
   }
   if(uSOnG > 0.){                                                     // GAMMA
     vec3 gc = floor(W*2.2); float h = h21(gc.xz + gc.y*17.31 + floor(uSurfTime*16.)*3.17);
@@ -625,7 +619,8 @@ export const surfaceUniforms = props => ({ ...SURF_U, uSurfA: { value: toVec4(pr
 // units (as the hemisphere / moon lights, NIR_LIGHT), e.g. a high-pressure sodium street lamp (819 nm doublet + near-IR continuum) or an 850 / 940 nm
 // camera illuminator; the MAX_TX brightest as seen from the camera (power / (1 + d²/(20 m)²)) light the surfaces
 const TX = { radio: [], micro: [], nir: [] };
-// fn() -> { p: Vector3, power } or null; strongest MAX_TX per band are uploaded each frame
+// fn() -> { p: Vector3, power, meter? } or null; strongest MAX_TX per band are uploaded each frame (meter: the meters' power
+// when it differs from what the eye shades with; default power)
 export const addTx = (band, fn) => TX[band].push(fn);
 // ray hits (multipath): fn() -> [{ p: Vector3 on the surface, power }]; the strongest MAX_HIT flash each frame
 const HITS = { micro: [] };
@@ -635,15 +630,18 @@ const tempAt = (A, t) => A[1] + (A[0] - A[1]) * Math.exp(-t * A[2]);
 export function updateSurfaces(uvSky) {
   const u = SURF_U, on = S.on, t = S.t;
   u.uSOnR_.value = on.radio ? 1 : 0; u.uSOnM_.value = on.micro ? 1 : 0; u.uSOnI_.value = on.ir ? 1 : 0;
-  u.uSOnU_.value = on.uv ? 1 : 0; u.uSOnG_.value = on.gamma ? 1 : 0;
+  u.uSOnU_.value = on.uv ? 1 : 0; u.uSOnG_.value = on.gamma ? 1 : 0; NIR_SKY.on.value = on.ir ? 1 : 0;
   u.uSurfT.value = t; u.uUVsky.value = uvSky;
   nirLight();
   let txPow = { radio: 0, micro: 0 };
   for (const band of ['radio', 'micro']) {
-    const live = TX[band].map(f => f()).filter(x => x && x.power > .01).sort((a, b) => b.power - a.power).slice(0, MAX_TX);
+    // a transmitter may give its meter power separately (`meter`, M11/T6): the eye shades with its real beam toward the
+    // surfaces (`power`) while the meters keep their own measure — the meters are independent of the eye
+    const all = TX[band].map(f => f()).filter(Boolean), mp = x => x.meter ?? x.power;
+    const live = all.filter(x => x.power > .01).sort((a, b) => b.power - a.power).slice(0, MAX_TX);
     const arr = band === 'radio' ? u.uTxR.value : u.uTxM.value;
     arr.forEach((v, i) => { const x = live[i]; if (x) v.set(x.p.x, x.p.y, x.p.z, x.power); else v.set(0, 0, 0, 0); });
-    txPow[band] = live.reduce((a, x) => a + x.power, 0);
+    txPow[band] = all.filter(x => mp(x) > .01).sort((a, b) => mp(b) - mp(a)).slice(0, MAX_TX).reduce((a, x) => a + mp(x), 0);
   }
   const cam = S.camera?.position, seen = x => x.power / (1 + (cam ? x.p.distanceToSquared(cam) : 0) / 400);
   const nir = TX.nir.map(f => f()).filter(x => x && x.power > 0).sort((a, b) => seen(b) - seen(a)).slice(0, MAX_TX);
