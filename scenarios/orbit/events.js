@@ -18,14 +18,14 @@ export const dark = (t = S.t) => sm(T_SET - 1, T_SET + 1.5, t) * (1 - sm(T_RISE 
 
 // The Earth itself (world.js does the drawing: its surface hook and the edge-on air).
 export const earthBelow = () => event({ name: 'The Earth below', t0: 0, t1: 60, bands: ['vis', 'ir', 'micro', 'uv', 'radio'], freq: ['sunlight', 'solarUV', 'thermal290', 'cloudTopIR', 'earthMicrowave', 'earthRadio'], tags: ['common'],
-  note: `Seen from 400 km the Earth fills the lower half of the window and streams away toward the horizon at 7.7 km/s. By day: blue ocean, brown land, white cloud, the Sun's glint on the sea, and a thin blue film of air along the curved limb. In thermal infrared the clear ocean and land glow at 10–30 °C while the cloud tops, 10 km up at −45 °C, are the dark parts; at night the land cools. In microwaves it flips: the sea is a poor emitter (half as bright as land at the same temperature), so the continents glow and the oceans are dark. In radio the planet's own thermal glow (~150–290 K) is fainter than the galactic radio sky behind the limb. The sunlit side also glows in near-UV, sunlight scattered by the air. Time-compressed: the whole 93-minute orbit passes in the 2 minutes, 1.5 minutes per second of playback.`,
+  note: `Seen from 420 km the Earth fills the lower half of the window and the ground streams by toward the horizon at 7.2 km/s. By day: blue ocean, brown land, white cloud, the Sun's glint on the sea, and a thin blue film of air along the curved limb. In thermal infrared the clear ocean and land glow at 10–30 °C while the cloud tops, 10 km up at −45 °C, are the dark parts; at night the land cools. In microwaves it flips: the sea is a poor emitter (half as bright as land at the same temperature), so the continents glow and the oceans are dark. In radio (100 MHz) the land glows at ~170–260 K of its own; the sea emits little (~30 K) but is a mirror that reflects the galactic radio sky, brighter still where it shows the Milky Way. The sunlit side also glows in near-UV, sunlight scattered by the air. Time-compressed: the whole 93-minute orbit passes in the 2 minutes, 46 s of orbit per second of playback.`,
   update() { const day = sm(-.3, .4, sunDir().dot(N.clone().negate()));
     S.act.vis += 3 * day + .2; S.act.ir += 2.2; S.act.micro += 1.2; S.act.uv += 1.5 * day; S.act.radio += .1; },
   where: () => BELOW() });
 
 // The Sun, unfiltered: no air to redden, dim or absorb it until it touches the limb.
 export const sun = () => event({ name: 'The Sun without air', t0: 0, t1: 60, bands: ['vis', 'uv', 'xray', 'radio'], freq: ['sunlight', 'solarEUV', 'solarXray', 'solarRadio'], tags: ['common'],
-  note: 'A white disc on a black sky, far too bright to look at. With no air in the way the Sun shows in every band: its corona in extreme UV (He II, 30.4 nm) and soft X-rays (~1 keV), patchy and larger than the visible disc, and its radio glow. Only as it touches the limb does the air redden and flatten it, for a few seconds. In the 93-minute orbit it sets ahead of you at t ≈ 9 and rises behind you about 36 minutes later; it is in the window at the start and the end. The EUV and X-rays never reach the ground (Ground detector: hidden).',
+  note: 'A white disc on a black sky, far too bright to look at. With no air in the way the Sun shows in every band: its chromosphere in extreme UV (He II 30.4 nm), its corona in soft X-rays (~1 keV), patchy and larger than the visible disc, and its radio glow. Only as it touches the limb does the air redden and flatten it, for a few seconds. In the 93-minute orbit it sets ahead of you at t ≈ 9 and rises behind you about 36 minutes later; it is in the window at the start and the end. The EUV and X-rays never reach the ground (Ground detector: hidden).',
   init() { this.v = new Em('vis', '#ffffff', 0, 'space'); this.halo = new Em('vis', '#fff4e0', 0, 'space'); this.u = new Em('uv', null, 0, 'space');
     this.x = new Em('xray', null, 0, 'space'); this.r = new Em('radio', null, 0, 'space'); this.p = new V3(); },
   update() { const s = sunState(); if (s.vis <= .001) { this.vis = false; return; } this.vis = true;
@@ -42,13 +42,13 @@ function terminatorPoint() {
   return null;
 }
 export const terminator = o => event({ name: 'Terminator pass', t0: 2, t1: 11, bands: ['vis', 'ir'], freq: ['sunlight', 'solarNIR'], tags: ['common', 'time-compressed'],
-  note: 'The line between day and night crosses the ground under you and runs away toward the horizon: towns, clouds and sea go from sunlit to orange to dark in a few minutes — at 7.7 km/s you outrun the dusk about 18 times faster than it moves on the ground. When it reaches the limb the Sun sets: the thin layer of air along the horizon turns into bands of red, orange and blue (the troposphere red, the stratosphere blue above it), and fades within a minute or two.',
+  note: 'The line between day and night crosses the ground under you and runs away toward the horizon: towns, clouds and sea go from sunlit to orange to dark in a few minutes — the ground track runs at 7.2 km/s, ~15–18 times faster (depending on latitude) than the dusk moves on the ground. When it reaches the limb the Sun sets: the thin layer of air along the horizon turns into bands of red, orange and blue (the troposphere red, the stratosphere blue above it), and fades within a minute or two.',
   update() { this.p = terminatorPoint(); if (this.p) { S.act.vis += .4 * env(S.t, this.t0, this.t1, 1); S.act.ir += .2 * env(S.t, this.t0, this.t1, 1); } },
   where() { return this.p; } }, o);
 
 // Airglow: the night side's own light, seen edge-on as thin layers along the limb.
 export const airglow = () => event({ name: 'Airglow layers', t0: T_SET, t1: T_RISE + 7, bands: ['vis', 'ir', 'uv'], freq: ['o5577', 'o6300', 'ohMeinel', 'fuvNightglow'], tags: ['common'],
-  note: 'Above the night side the upper air glows by itself, from chemistry powered by the day\'s sunlight. Edge-on at the limb it becomes a thin band floating ~2° above the horizon: green oxygen at ~95 km, a faint red oxygen layer at ~250 km, and — brighter than both, in near-infrared — hydroxyl (OH) at ~87 km. Higher still, in the F region, recombining oxygen ions glow at 135.6 nm, far-UV, strongest in two arcs either side of the magnetic equator; that one is absorbed long before the ground. Astronauts photograph the green band on every night pass.',
+  note: 'Above the night side the upper air glows by itself, from chemistry powered by the day\'s sunlight. Edge-on at the limb it becomes a thin band floating ~2.5° above the horizon: green oxygen at ~95 km, a faint red oxygen layer at ~250 km, and — brighter than both, in near-infrared — hydroxyl (OH) at ~87 km. Higher still, in the F region, recombining oxygen ions glow at 135.6 nm, far-UV, strongest in two arcs either side of the magnetic equator; that one is absorbed long before the ground. Astronauts photograph the green band on every night pass.',
   init() { this.fuv = [0, 1, 2, 3].map(() => new Rib('uv', null, 20, 0, 'high')); },
   update() { const I = env(S.t, this.t0, this.t1, 2) * dark(); SHELL_U.uAirglow.value = I; this.p = null; if (I <= .01) return;
     S.act.vis += .5 * I; S.act.ir += .8 * I;
@@ -61,17 +61,17 @@ export { SHELL_U };
 
 // Night-side cities: the land's lights (drawn by the Earth's surface, uCity), sodium orange and LED white.
 export const cities = () => event({ name: 'Night-side cities', t0: T_SET - 2, t1: T_RISE + 7, bands: ['vis'], freq: ['na589', 'ledWhite'], tags: ['common'],
-  note: 'Once the ground under you is dark, the inhabited land lights up in strings and clusters: the orange of sodium street lamps, more and more the bluish white of LEDs. From 400 km a city is a few pixels-wide smudge; the brightest lights shine through thin cloud.',
+  note: 'Once the ground under you is dark, the inhabited land lights up in strings and clusters: the orange of sodium street lamps, more and more the bluish white of LEDs. The brightest lights shine through thin cloud.',
   update() { const I = env(S.t, this.t0, this.t1, 2); EARTH_U.uCity.value = S.on.vis ? I : 0; S.act.vis += I * dark() * .8; },
   where: () => onEarth(dirAE(262, -12)) });
 
 // Thunderstorms seen from above: cloud tops lit from inside. Each cell streams through the view with the ground
-// (drift, world.js: 6.6 units from behind you to the limb), then a new one comes up from behind at another latitude.
+// (drift, world.js: 6.8 units from behind you to the limb), then a new one comes up from behind at another latitude.
 const CELLS = 8, V = 1 / CROSS;
 export const storms = () => event({ name: 'Thunderstorms from above', t0: 0, t1: 60, bands: ['vis', 'radio'], freq: ['lightning', 'lightningVHF'], tags: ['common', 'time-compressed'],
-  note: 'Thunderstorm cells flicker under you like flashbulbs inside cotton wool: the lightning lights the cloud tops from within, best on the night side. About 45 flashes a second strike somewhere on Earth; a big storm flashes every few seconds. On this clock (46 s of orbit per second of playback) each cell flickers almost continuously, and each crosses the window in ~10 minutes (13 s of playback). The leaders\' VHF bursts pass straight up through the ionosphere — satellites map lightning by them (FORTE) — while the VLF sferics stay trapped below it.',
+  note: 'Thunderstorm cells flicker under you like flashbulbs inside cotton wool: the lightning lights the cloud tops from within, best on the night side. About 45 flashes a second (including in-cloud) light up somewhere on Earth; a big storm flashes every few seconds. On this clock (46 s of orbit per second of playback) each cell flickers almost continuously, and each crosses the window in ~10 minutes (14 s of playback). The leaders\' VHF bursts pass straight up through the ionosphere — the FORTE satellite recorded them — while the VLF sferics stay trapped below it.',
   init() { this.cells = Array.from({ length: CELLS }, () => ({ ph: R(), rate: 1.5 + 2 * R(), v: new Em('vis', '#cfdcff'), r: new Em('radio') }));
-    this.cells[0].ph = ((.8 - 21.7 * V) % 1 + 1) % 1;   // cell 0 is in the window ahead at t ≈ 21.7: the TGF's storm
+    this.cells[0].ph = ((.8 - 26.7 * V) % 1 + 1) % 1;   // cell 0 is in the window ahead at t ≈ 26.7: the TGF's storm
     this.p = new V3(); },
   // cell i at time t: its position (generation g gives a new latitude, from a hash so scrubbing repeats)
   pos(i, t = S.t) { const c = this.cells[i], x = t * V + c.ph, g = Math.floor(x); return drift(x - g, (hash2(g, i + 3) - .5) * (i ? .5 : .15), 1.2); },
@@ -87,8 +87,8 @@ export const storms = () => event({ name: 'Thunderstorms from above', t0: 0, t1:
   where() { return this.ok ? this.p : null; } });
 
 // A terrestrial gamma-ray flash from the storm cell under you, seen by the station's detectors.
-export const tgf = st => event({ name: 'Terrestrial gamma-ray flash', t0: 21, t1: 22.4, bands: ['gamma'], freq: ['tgf'], tags: ['rare', 'stylised'],
-  note: 'For a fraction of a millisecond, the strong field above a thunderstorm accelerates electrons to near light speed; their bremsstrahlung shoots gamma rays (up to tens of MeV) up into space. Discovered by a gamma-ray observatory looking for cosmic bursts; the ASIM instrument on the ISS records them from right here. A storm makes one only now and then — a flash within view during one pass is luck. Drawn ~1000× longer than it lasts (1.4 units = 2 min of orbit).',
+export const tgf = st => event({ name: 'Terrestrial gamma-ray flash', t0: 26, t1: 27.4, bands: ['gamma'], freq: ['tgf'], tags: ['rare', 'stylised'],
+  note: 'For a fraction of a millisecond, the strong field above a thunderstorm accelerates electrons to near light speed; their bremsstrahlung shoots gamma rays (up to tens of MeV) up into space. Discovered by a gamma-ray observatory looking for cosmic bursts; the ASIM instrument on the ISS records them from right here (outside the South Atlantic Anomaly, where its detector is switched off). A storm makes one only now and then — a flash within view during one pass is luck. Drawn for 2.8 s of playback (2 min of orbit); the real flash lasts ~0.1 ms.',
   init() { this.e = new Em('gamma'); },
   update() { const p = st.pos(0); this.p = null; if (facing(p) < .05) return;
     this.e.set(p, 12, env(S.t, this.t0, this.t1, .5) * 1.5); this.p = p; },
@@ -96,7 +96,7 @@ export const tgf = st => event({ name: 'Terrestrial gamma-ray flash', t0: 21, t1
 
 // Sprites and elves over storms at the limb: brief flashes high above the clouds, best seen edge-on from orbit.
 export const sprites = () => event({ name: 'Sprites and elves', t0: 12, t1: 31, bands: ['vis'], freq: ['sprite', 'elve'], tags: ['rare', 'stylised'],
-  note: 'Above big storms near the horizon: a red sprite — a jellyfish of red light 50–90 km up, with blue tendrils hanging toward the cloud — or an elve, a ring of red glow at 90 km racing outward to hundreds of kilometres in under a millisecond, from the lightning\'s electromagnetic pulse. Globally they happen every minute or so; catching one by eye from the ISS is rare. Real sprites last 10–100 ms and elves < 1 ms; here each is held for ~0.3 s.',
+  note: 'Above big storms near the horizon: a red sprite — a jellyfish of red light 50–90 km up, with blue tendrils hanging toward the cloud — or an elve, a ring of red glow at 90 km racing outward to hundreds of kilometres in under a millisecond, from the lightning\'s electromagnetic pulse. Worldwide there are sprites about once a minute and elves dozens a minute (too brief and faint for the eye); catching one by eye from the ISS is rare. Real sprites last 10–100 ms and elves < 1 ms; here each is held for ~0.3 s.',
   init() { this.ev = Array.from({ length: 7 }, (_, k) => ({ t: 13 + k * 2.5 + R() * 1.6, psi: (R() - .5) * 1.6, elve: R() < .4, w: 1 + R() }));
     this.rs = Array.from({ length: 4 }, () => new Rib('vis', '#ff3a3a', 10)); this.ring = new Rib('vis', '#ff4a30', 24); this.p = null; },
   update() { const { t } = S; this.p = null; if (dark() < .3) return;
@@ -113,7 +113,7 @@ export const sprites = () => event({ name: 'Sprites and elves', t0: 12, t1: 31, 
 
 // The South Atlantic Anomaly: the inner radiation belt dips lowest here, and the station flies through it.
 export const saa = () => event({ name: 'South Atlantic Anomaly', t0: 17, t1: 24, bands: ['gamma', 'vis'], freq: ['saaGamma', 'eyeFlash'], tags: ['common', 'stylised'],
-  note: 'Over the South Atlantic the Earth\'s magnetic field is weakest and the inner radiation belt reaches down to the station\'s height. For ~10 minutes trapped protons rain through the hull: the gamma rays they knock out of the aluminium light up the detectors aboard, and in the dark astronauts see brief flashes, streaks and spots with their eyes closed — cosmic-ray nuclei crossing the eye, making Cherenkov light in the vitreous (or hitting the retina directly). Most astronauts report them, every few minutes, more often here. Neither reaches the ground: the air stops the particles. Drawn at a few flashes a minute, as on the real clock, so they come every ~2 s of playback.',
+  note: 'Over the South Atlantic the Earth\'s magnetic field is weakest and the inner radiation belt reaches down to the station\'s height. For ~10 minutes trapped protons rain through the hull: the gamma rays they knock out of the aluminium light up the detectors aboard, and in the dark astronauts see brief flashes, streaks and spots with their eyes closed — energetic nuclei and here the trapped protons themselves exciting the retina directly (only the fastest nuclei also make Cherenkov light in the eyeball). Most astronauts report them: about one every 5–10 min in the SAA, fewer outside. Neither reaches the ground: the air stops the particles. Drawn at the real rate on this clock: one every ~5 s of playback.',
   init() { this.g = Array.from({ length: 6 }, () => new Em('gamma', null, 0, 'space')); this.f = new Rib('vis', '#e8f0ff', 3, 0, 'space'); this.fe = new Em('vis', '#e8f0ff', 0, 'space'); this.p = null; },
   update() { const { t, T } = S, I = env(t, this.t0, this.t1, 1.5); this.p = null; if (I <= .01) return;
     const k = Math.floor(T * 3);
@@ -121,8 +121,9 @@ export const saa = () => event({ name: 'South Atlantic Anomaly', t0: 17, t1: 24,
       const d = dirAE(225 + 90 * hash2(k, i + 9), -25 + 55 * hash2(k, i + 17)).multiplyScalar(.6 + .8 * hash2(k, i + 23));
       e.set(d, .12, I * Math.exp(-age * 5) * 1.2); });
     this.p = dirAE(270, 5).multiplyScalar(D * .1);
-    // light flashes: about one every 2 s of playback (≈ 1.5 min of orbit), noticed only when dark-adapted
-    const kf = Math.floor(T / 2), age = T / 2 - kf, fl = hash2(kf, 77) < .75 ? Math.exp(-age * 30) : 0;
+    // light flashes: ~0.15 per minute in the SAA (Mir): a slot every 4 units (6 min, T / 8), 3 in 4 filled — one every
+    // ~8 min of orbit, ~5 s of playback; each shown for ~0.1 s; noticed only when dark-adapted
+    const kf = Math.floor(T / 8), age = T / 8 - kf, fl = hash2(kf, 77) < .75 ? Math.exp(-age * 120) : 0;
     if (!orbitOnly() || fl < .02) return;
     const o = dirAE(240 + 60 * hash2(kf, 5), -10 + 30 * hash2(kf, 6)), s = dirAE(240 + 60 * hash2(kf, 5) + 4 * (hash2(kf, 8) - .5), -10 + 30 * hash2(kf, 6) + 4 * (hash2(kf, 9) - .5));
     const J = fl * I * dark();
@@ -138,8 +139,8 @@ export const limbGamma = () => event({ name: 'Gamma-ray limb', t0: 0, t1: 60, ba
 
 // Radio leaking up from the ground: broadcast transmitters over the inhabited land (the Earth's surface, uRadio)
 // and the sweeping beams of S-band radars (airports on land, ships at sea).
-export const radioLeak = () => event({ name: 'Radio from the ground', t0: 0, t1: 60, bands: ['radio', 'micro'], freq: ['fm', 'tvUHF', 'airportASR', 'sbandRadar'], tags: ['common'],
-  note: 'Above about 10 MHz radio passes through the ionosphere, so every FM and TV transmitter below shines up into space too: the inhabited land glows in radio, day and night, with the speckle of coherent transmitters. AM and shortwave below the ionosphere\'s cut-off are reflected back down and stay hidden. Here and there an S-band radar sweeps its beam round — an airport\'s surveillance radar, a ship\'s navigation radar at sea — a microwave flash every turn (~4–5 s real, so many per second of playback).',
+export const radioLeak = () => event({ name: 'Radio from the ground', t0: 0, t1: 60, bands: ['radio', 'micro'], freq: ['fm', 'tvUHF', 'airportASR', 'sbandRadar'], tags: ['common', 'stylised'],
+  note: 'Above about 10 MHz radio passes through the ionosphere, so every FM and TV transmitter below shines up into space too: the inhabited land glows in radio, day and night, with the speckle of coherent transmitters. AM and shortwave below the ionosphere\'s cut-off are reflected back down and stay hidden. Here and there an S-band radar sweeps its beam round — an airport\'s surveillance radar, a ship\'s navigation radar at sea — a microwave flash every turn, every ~2–5 s real (drawn slowed, under two a second of playback: real turns would strobe ~10–20 a second on this clock).',
   init() { this.rad = Array.from({ length: 7 }, () => ({ ph: R(), sw: R(), e: new Em('micro') })); this.p = null; },
   update() { EARTH_U.uRadio.value = S.on.radio ? 1 : 0; S.act.radio += 1.2; const { T } = S; this.p = null;
     this.rad.forEach((r, i) => { const x = S.t / CROSS + r.ph, g = Math.floor(x), p = drift(x - g, (hash2(g, i + 40) - .5) * .6, .5); if (facing(p) < .05) return;
@@ -149,12 +150,14 @@ export const radioLeak = () => event({ name: 'Radio from the ground', t0: 0, t1:
 // The stars with no air: they don't twinkle and the sky is black right down to the limb; the UV sky opens up.
 export const starfield = () => event({ name: 'Stars without air', t0: 0, t1: 60, bands: ['vis', 'uv'], freq: ['starlight', 'starUV', 'geocoronaLyA'], tags: ['common'],
   note: 'No air, no twinkling: the stars are steady points on a sky that stays black right down to the Earth\'s limb, even by day — though the sunlit Earth and the Sun outshine them until your eyes adapt on the night side. In far-UV the sky changes completely: the hottest blue stars dominate, and the whole sky glows faintly in hydrogen Lyman-α, sunlight scattered by the Earth\'s outermost atmosphere, the geocorona, which wraps around the station. None of that far-UV reaches the ground. In microwaves the sky is the 2.7 K cosmic background alone, with no warm air in front of it.',
-  update() { if (ENV.nightMat) ENV.nightMat.uniforms.uMW.value = S.on.vis ? .7 + .3 * dark() : 0; S.act.vis += .3 * dark(); if (orbitOnly()) S.act.uv += .3; },
+  // geocorona: ~2 kR on the night side, ~10 kR by day (HST STIS IHB Table 6.5): × (1 + 4 (1 − dark))
+  update() { if (ENV.nightMat) ENV.nightMat.uniforms.uGeo.value = 1 + 4 * (1 - dark());
+    if (ENV.nightMat) ENV.nightMat.uniforms.uMW.value = S.on.vis ? .7 + .3 * dark() : 0; S.act.vis += .3 * dark(); if (orbitOnly()) S.act.uv += .3; },
   where: () => dirAE(285, 30).multiplyScalar(D) });
 
 // The cupola around you.
 export const cupola = () => event({ name: 'The cupola', t0: 0, t1: 60, bands: ['ir'], freq: ['thermal290'], tags: ['stylised'],
-  note: 'You float in the ISS cupola, its seven windows looking down at the Earth. The aluminium frame is at cabin temperature, ~22 °C, and glows in thermal infrared like everything indoors. Stylised: the real windows are four panes of fused silica and borosilicate glass with a polycarbonate scratch pane, which block thermal infrared and most UV, and the metal hull shields radio — the spectral eye looks as if the window were open.',
+  note: 'You float in the ISS cupola, its seven windows looking down at the Earth. The aluminium frame is at cabin temperature, ~22 °C, and glows in thermal infrared like everything indoors. Stylised: the real windows are four panes of fused silica and borosilicate glass with a polycarbonate scratch pane, which block thermal infrared, most UV and all EUV and X-rays, and the metal hull shields radio — the spectral eye looks as if the window were open.',
   update() { S.act.ir += .6; },
   where: () => new V3(0, 0, 0).add(dirAE(240, 28).multiplyScalar(.8)) });
 

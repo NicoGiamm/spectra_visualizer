@@ -1,4 +1,4 @@
-// Above the atmosphere: the ISS cupola, ~400 km up, over one whole orbit — day, orbital sunset ahead, 36 minutes of
+// Above the atmosphere: the ISS cupola, ~420 km up, over one whole orbit — day, orbital sunset ahead, 36 minutes of
 // night, sunrise behind you, day again. Time-compressed: the 2-minute script is one 92.9-minute orbit, 1 script unit =
 // 1.55 min (world.js MIN_PER_UNIT), 46 s of orbit per second of playback.
 //
@@ -12,14 +12,14 @@
 //
 // The Sun (atmosphere.js `site`, as functions of t: it circles the sky once per script, which no cubic follows): in
 // the orbit plane tipped 15° (beta angle), turning 6° per unit around the orbit normal; station sunset at t = 9 ahead
-// (az ≈ 285, ~5° up in the view), sunrise at t ≈ 32.2 behind; the shadow lasts 35.9 min (world.js). The Moon is new,
-// beside the Sun (elongation 0): it rises and sets with it, unlit, and plays no part. The site's twilight clock is
+// (az ≈ 285, ~5° up in the view), sunrise at t ≈ 32.1 behind; the shadow lasts 35.8 min (world.js). The Moon is new,
+// near the Sun (elongation ~5°, drawn on the Sun's track): it rises and sets with it, unlit, and plays no part. The site's twilight clock is
 // unused: with no air there is no twilight sky; the world lights itself (world.js update).
 import { run } from 'spectra/app.js';
 import { build, sunAz, sunEl } from './world.js';
 import * as local from './events.js';
 
-const SITE = { sunAz, sunEl, moonAz: sunAz, moonEl: sunEl, moonElong: 0 };
+const SITE = { sunAz, sunEl, moonAz: sunAz, moonEl: sunEl, moonElong: 5 };
 
 run({
   title: 'Above the atmosphere',
@@ -35,7 +35,7 @@ run({
     const st = local.storms();
     return [
       local.earthBelow(), local.sun(), local.terminator(),
-      local.terminator({ name: 'Dawn sweeps under you', t0: 32, t1: 40, note: 'The Sun has risen behind you. The day comes up from behind and races under you toward the horizon ahead: the ground straight down is sunlit within ~5 minutes, the limb ahead after ~10, its air flaring orange and blue as the terminator reaches it. At 7.7 km/s the station runs into the morning about 18 times faster than it moves across the ground.' }),
+      local.terminator({ name: 'Dawn sweeps under you', t0: 32, t1: 40, note: 'The Sun has risen behind you. The day comes up from behind and races under you toward the horizon ahead: the ground straight down is sunlit within ~5 minutes, the limb ahead after ~10, its air flaring orange and blue as the terminator reaches it. Its ground track runs at 7.2 km/s, ~15–18 times faster (depending on latitude) than the morning moves across the ground.' }),
       local.airglow(), local.cities(), st, local.tgf(st), local.sprites(), local.saa(), local.limbGamma(), local.radioLeak(),
       local.starfield(), local.cupola(),
     ];

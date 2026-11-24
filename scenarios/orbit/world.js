@@ -1,10 +1,10 @@
-// Above the atmosphere: the view from the ISS cupola, ~400 km up, over one orbit. The geometry is real, the scale is
-// not: the Earth is drawn at 1 world unit = 10 km (radius 637.1, the station 40 units up) so that it fits inside the
+// Above the atmosphere: the view from the ISS cupola, ~420 km up, over one orbit. The geometry is real, the scale is
+// not: the Earth is drawn at 1 world unit = 10 km (radius 637.1, the station 42 units up) so that it fits inside the
 // camera's far plane with usable depth precision, while the cupola frame around the eye is in metres. Only angles
-// matter to the eye, and the angles are those of a 400 km orbit:
-//   limb dip below the local horizontal  acos(6371 / 6771) = 19.8°   (the horizon is 70.2° from nadir)
-//   distance to the limb                 √(6771² − 6371²) ≈ 2290 km
-//   airglow (95 km) above the limb       ≈ 2.4°
+// matter to the eye, and the angles are those of a 420 km orbit:
+//   limb dip below the local horizontal  acos(6371 / 6791) = 20.3°   (the horizon is 69.7° from nadir)
+//   distance to the limb                 √(6791² − 6371²) ≈ 2350 km
+//   airglow (95 km) above the limb       ≈ 2.5°
 // Frame: the viewer floats in the nadir-facing cupola and looks out of its aft side window at the limb, head tipped
 // so that "down" (nadir) is 25° ahead of straight down (TAU): the limb ahead sits ~5° above the view's horizontal, the
 // Earth fills the lower half of the frame, space the upper half. Front is still azimuth 270 (the engine's convention);
@@ -16,24 +16,24 @@ import { V3, DEG, sm, clamp } from 'spectra/core/util.js';
 import { S } from 'spectra/core/state.js';
 import { solid } from 'spectra/render/instrument.js';
 import { COMMON } from 'spectra/render/shaders.js';
-import { ENV } from 'spectra/world/atmosphere.js';
+import { ENV, GAL_N, GAL_C } from 'spectra/world/atmosphere.js';
 
-export const RE = 637.1, H = 40;                        // Earth radius, orbit altitude (world units of 10 km)
+export const RE = 637.1, H = 42;                        // Earth radius, orbit altitude (world units of 10 km)
 export const TAU = 25 * DEG;                            // nadir tipped 25° toward the front (view convenience, see above)
 export const N = new V3(0, -Math.cos(TAU), -Math.sin(TAU));   // nadir
 const F = new V3(0, Math.sin(TAU), -Math.cos(TAU));     // forward along the limb plane (⊥ N)
 const E1 = new V3(1, 0, 0);                             // right (north): the orbit normal
 export const C = N.clone().multiplyScalar(RE + H);      // the Earth's centre (the camera sits at the origin)
-export const LIMB_A = Math.asin(RE / (RE + H));         // 70.2°: nadir angle of the horizon
+export const LIMB_A = Math.asin(RE / (RE + H));         // 69.7°: nadir angle of the horizon
 
 // The clock: one script = one orbit. The ISS circles the Earth in ~92.9 min, so 1 script unit = 1.55 min and the
 // Sun (and the ground) turn 6° per unit around the orbit normal. The Sun lies BETA = 15° out of the orbit plane.
-// Station sunset at T_SET = 9 (ahead, az ≈ 285, ~5° up in the view); the Earth's shadow lasts 23.2 units = 35.9 min
-// (the Sun is hidden while its nadir angle is < 70.2°), so sunrise comes at t ≈ 32.2, behind you, and at t = 60 the
+// Station sunset at T_SET = 9 (ahead, az ≈ 285, ~5° up in the view); the Earth's shadow lasts 23.1 units = 35.8 min
+// (the Sun is hidden while its nadir angle is < 69.7°), so sunrise comes at t ≈ 32.1, behind you, and at t = 60 the
 // Sun is back where it started: the loop is seamless. The Earth's own rotation (0.25°/min, ~23° per orbit) is left out.
 export const MIN_PER_UNIT = 92.9 / 60, OMEGA = 6 * DEG, BETA = 15 * DEG, T_SET = 9;
 const TH_SET = TAU - Math.asin(Math.cos(LIMB_A) / Math.cos(BETA));        // in-plane Sun angle at sunset (≈ 4.5°)
-export const T_RISE = T_SET + (Math.PI - 2 * Math.asin(Math.cos(LIMB_A) / Math.cos(BETA))) / OMEGA;   // ≈ 32.2
+export const T_RISE = T_SET + (Math.PI - 2 * Math.asin(Math.cos(LIMB_A) / Math.cos(BETA))) / OMEGA;   // ≈ 32.1
 const theta = t => TH_SET + OMEGA * (T_SET - t);
 export const sunDir = (t = S.t, v = new V3()) => { const th = theta(t);
   return v.set(Math.sin(BETA), Math.cos(BETA) * Math.sin(th), -Math.cos(BETA) * Math.cos(th)); };
@@ -60,7 +60,7 @@ export function limbP(psi, h = 0, out = new V3()) {
 export const facing = p => { const n = p.clone().sub(C).normalize(); return -n.dot(p) / p.length(); };
 export const sunlit = (p, t = S.t) => p.clone().sub(C).normalize().dot(sunDir(t));
 // A ground feature streaming through the view: s = 0 at the edge of the visible ground behind you, 1 at the limb
-// ahead; lat (rad, Earth-centric) to the side. The ground covers that ~40° of arc (2 × 19.8°) in 6.6 units (10 min).
+// ahead; lat (rad, Earth-centric) to the side. The ground covers that ~41° of arc (2 × 20.3°) in 6.8 units (10.5 min).
 const CAP = Math.PI / 2 - LIMB_A;
 export const CROSS = 2 * CAP / OMEGA;                                  // units to cross the visible ground
 export function drift(s, lat, h = 0, out = new V3()) {
@@ -80,15 +80,17 @@ export function onEarth(dir, h = 0) {
 //   micro  19 GHz Tb: land ~270 K, ocean ~150 K (emissivity ~.5), cloud liquid water adds ~40 K over the sea
 //          ('earthMicrowave'): continents glow, oceans are dark
 //   uv     the sunlit side scatters near-UV sunlight (Rayleigh, and clouds); amplitude STAND-IN
-//   radio  the planet's own thermal glow at VHF, Rayleigh–Jeans Tb ≈ 290 K land / ~150 K sea (emissivity ~.5),
-//          on the sky's synchrotron scale (.006 per 1000 K, atmosphere.js): darker than the radio sky ('earthRadio');
+//   radio  100 MHz, on the sky's synchrotron scale (.006 per 1000 K, atmosphere.js; 'earthRadio'): land e ≈ .8 →
+//          ~230 K of its own plus .2 of the radio sky it reflects; sea e ≈ .1 (Klein & Swift 1977) → ~30 K plus .9 of
+//          the mirrored galactic synchrotron sky (its smooth part, without the sky's fbm mottling): the sea is a radio
+//          mirror, bright where it reflects the Milky Way;
 //          plus what leaks up from transmitters over the inhabited land (uRadio, the radio-leak event; amplitude
 //          STAND-IN, chosen to stand well above the thermal glow, as man-made noise does at VHF)
 //   X-ray, gamma: none from the surface here (the limb gamma is an event)
 // Night-side city lights are part of the surface (uCity, set by the cities event), on the same land mask.
 // Opaque in every band (eyeTrans 0): nothing crosses the planet.
-export const EARTH_U = { uSun: { value: new V3() }, uRot: { value: 0 }, uC: { value: C }, uCity: { value: 0 }, uRadio: { value: 0 } };
-const EARTH_GLSL = COMMON + `uniform vec3 uSun, uC; uniform float uRot, uCity, uRadio; varying vec3 vW;
+export const EARTH_U = { uSun: { value: new V3() }, uRot: { value: 0 }, uC: { value: C }, uCity: { value: 0 }, uRadio: { value: 0 }, uGalN: { value: GAL_N }, uGalC: { value: GAL_C } };
+const EARTH_GLSL = COMMON + `uniform vec3 uSun, uC, uGalN, uGalC; uniform float uRot, uCity, uRadio; varying vec3 vW;
 float eh3(vec3 p){ p = fract(p*.3183099 + .1); p *= 17.; return fract(p.x*p.y*p.z*(p.x + p.y + p.z)); }
 float en3(vec3 x){ vec3 i = floor(x), f = fract(x); f = f*f*(3. - 2.*f);
   return mix(mix(mix(eh3(i), eh3(i + vec3(1,0,0)), f.x), mix(eh3(i + vec3(0,1,0)), eh3(i + vec3(1,1,0)), f.x), f.y),
@@ -125,7 +127,9 @@ void eyeBands(out vec4 o1, out vec4 o3){ vec3 n, q; float land, cloud, mu; earth
   float Tb = mix(150. + 40.*cloud, 270., land), xm = clamp((Tb - 120.)/180., 0., 1.);
   float m = eyeL(vec3(1., .6, .1))*xm*xm*.12;
   float u = max(mu, 0.)*(.04 + .2*cloud);
-  float r = .006*mix(150., 290., land)/1000. + uRadio*.25*smoothstep(.0, .5, towns(q, land));
+  vec3 Rf = reflect(normalize(vW - cameraPosition), n); float g = dot(Rf, uGalN), core = pow(max(dot(Rf, uGalC), 0.), 5.);
+  float Tsky = 36.*(17. + 230.*exp(-g*g/.06)*(1. + 2.5*core));                           // atmosphere.js's radio sky, smooth part
+  float r = .006*mix(29. + .9*Tsky, 232. + .2*Tsky, land)/1000. + uRadio*.25*smoothstep(.0, .5, towns(q, land));
   o1 = vec4(i, u, 0., 1.); o3 = vec4(r, m, 0., 1.); }`;
 function earth() {
   const m = new THREE.ShaderMaterial({ uniforms: EARTH_U, fragmentShader: EARTH_GLSL + EARTH_FS,

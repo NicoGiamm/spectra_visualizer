@@ -290,14 +290,15 @@ export const SPECTRUM = {
   // Coniglio 2008, Mon. Wea. Rev. 136, 4839: MCS cold pools, θ deficit 5.4–11 K; −6 K here is a STAND-IN), seen in the 8–14 µm window
   coldPool:     { name: 'rain-cooled ground and hail (cold pool, ~273 K hail to ~290 K ground)', lam: 10.5e-6 },
   // ===== orbit additions (M12/T5)
-  // the Sun's transition region / corona in the He II 30.4 nm line, the brightest solar EUV line (SDO/AIA 304 Å channel:
+  // the Sun's chromosphere / transition region in the He II 30.4 nm line, the brightest solar EUV line (SDO/AIA 304 Å channel:
   // Lemen et al. 2012, Sol. Phys. 275, 17); absorbed in the thermosphere above ~100 km
-  solarEUV:     { name: 'solar EUV (He II 30.4 nm, chromosphere/corona)', lam: 30.4e-9, ground: false },
+  solarEUV:     { name: 'solar EUV (He II 30.4 nm, chromosphere/transition region)', lam: 30.4e-9, ground: false },
   // the 1–2 MK corona in soft X-rays around 1 keV (Yohkoh SXT: Tsuneta et al. 1991, Sol. Phys. 136, 37; GOES XRS
   // 0.1–0.8 nm monitors the same emission); absorbed by the air column
   solarXray:    { name: 'solar corona soft X-rays (~1 keV)', E: 1e3, ground: false },
-  // geocoronal Lyman-α: solar Lyman-α resonantly scattered by exospheric hydrogen, a few kilorayleigh over the whole
-  // sky at low-orbit altitudes (Meier 1991, Space Sci. Rev. 58, 1); absorbed by O₂ below ~100 km
+  // geocoronal Lyman-α: solar Lyman-α resonantly scattered by exospheric hydrogen over the whole sky (Meier 1991, Space
+  // Sci. Rev. 58, 1); in low orbit ~2 / 10 / 20 kR low (night side) / average / high (day side) (HST STIS Instrument
+  // Handbook, Table 6.5, geocoronal Lyman-α); absorbed by O₂ below ~100 km
   geocoronaLyA: { name: 'geocoronal Lyman-α (exospheric hydrogen, 121.6 nm)', lam: 121.6e-9, ground: false },
   // hot O/B stars dominate the far-UV sky (GALEX FUV 135–175 nm: Martin et al. 2005, ApJ 619, L1); absorbed by ozone/O₂
   starUV:       { name: 'far-UV starlight of hot O/B stars (~150 nm)', lam: 150e-9, ground: false },
@@ -309,11 +310,13 @@ export const SPECTRUM = {
   // de-excitation gamma lines and activation, ~0.5–10 MeV (Dean, Lei & Knight 2003, Space Sci. Rev. 105, 285; the SAA:
   // Heirtzler 2002, J. Atmos. Sol.-Terr. Phys. 64, 1701); the protons stop high above the ground
   saaGamma:     { name: 'secondary gamma rays from trapped protons hitting the station (SAA)', E: 1e6, ground: false },
-  // astronauts' light flashes: relativistic cosmic-ray nuclei crossing the eye make Cherenkov light in the vitreous
-  // (McNulty, Pease & Bond 1975, Science 189, 453 — the other mechanism is direct excitation of the retina); reported by
-  // most astronauts, more often in the SAA (Fuglesang et al. 2006, Aviat. Space Environ. Med. 77, 449). Visible light,
-  // but made inside the eye by particles the air stops: no ground observer sees it
-  eyeFlash:     { name: 'light flashes in the eye (Cherenkov light of cosmic-ray nuclei in the vitreous)', lam: 450e-9, ground: false },
+  // astronauts' light flashes: energetic nuclei and, in the SAA, trapped protons (tens to hundreds of MeV, below the
+  // ~477 MeV Cherenkov threshold in the vitreous) excite the retina directly; only the fastest nuclei also make Cherenkov
+  // light in the vitreous (McNulty, Pease & Bond 1975, Science 189, 453). ALTEA on the ISS (Narici et al. 2004, Adv.
+  // Space Res. 33, 1352) and the Mir surveys (Avdeev et al. 2002, Acta Astronaut. 50, 511: ~0.15 per minute in the
+  // SAA); reported by most astronauts (Fuglesang et al. 2006, Aviat. Space Environ. Med. 77, 449). Perceived as light,
+  // but made inside the eye by particles the air stops: no ground observer sees it (lam: the visual band, nominal)
+  eyeFlash:     { name: 'light flashes in the eye (energetic nuclei and SAA protons: direct retinal excitation; Cherenkov light in the vitreous for the fastest)', lam: 450e-9, ground: false },
   // sprites: red N₂ first-positive emission at 50–90 km above large positive cloud-to-ground strokes, ~10–100 ms
   // (Sentman et al. 1995, Geophys. Res. Lett. 22, 1205; spectrum: Mende et al. 1995, GRL 22, 2633); seen from the
   // ground and from the ISS (ASIM: Neubert et al. 2019, Space Sci. Rev. 215, 26)
@@ -333,10 +336,10 @@ export const SPECTRUM = {
   // Earth seen in microwaves from orbit at 19.35 GHz (SSM/I: Hollinger, Peirce & Poe 1990, IEEE TGRS 28, 781): land
   // Tb ≈ 260–280 K (emissivity ~.9), the ocean only ~130–180 K (emissivity ~.5, Ulaby, Moore & Fung vol. I)
   earthMicrowave: { name: 'Earth in microwaves: warm land, radiometrically cold ocean (19.35 GHz)', f: 19.35e9 },
-  // Earth's own thermal radio glow seen from above: Rayleigh–Jeans, Tb = emissivity × T ≈ 290 K over land, ~150 K over
-  // the sea (Fresnel reflectivity of sea water ~.5 at VHF: Ulaby, Moore & Fung vol. I); fainter than the galactic
-  // synchrotron sky at 100 MHz (600–9000 K, the 'synchrotron' key)
-  earthRadio:   { name: 'Earth\'s thermal radio glow (Tb ≈ 150–290 K at VHF)', f: 100e6 },
+  // Earth's radio glow seen from above at 100 MHz (Rayleigh–Jeans): land emissivity ~0.6–0.9 → Tb ≈ 170–260 K; sea water
+  // (σ ≈ 4 S/m, ε′ ≈ 80: Klein & Swift 1977, IEEE Trans. Antennas Propag. 25, 104) has e ≈ 0.1 → ~30 K of its own, but
+  // mirrors ~0.9 of the galactic synchrotron sky (600–9000 K at 100 MHz, the 'synchrotron' key)
+  earthRadio:   { name: 'Earth\'s radio glow at VHF: land ~170–260 K, sea ~30 K plus the mirrored radio sky', f: 100e6 },
 };
 
 const RANGES = [['radio', 1, Infinity], ['micro', 1e-3, 1], ['ir', 700e-9, 1e-3], ['vis', 380e-9, 700e-9],

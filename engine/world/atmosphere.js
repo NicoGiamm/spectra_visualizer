@@ -90,10 +90,10 @@ export function createAtmosphere(opts = {}) {
   sky.material.fragmentShader = 'uniform float uFade;\n' + sky.material.fragmentShader.replace('gl_FragColor = vec4( retColor, 1.0 );', 'gl_FragColor = vec4( retColor * uFade, 1.0 );');
 
   const nightMat = new THREE.ShaderMaterial({
-    uniforms: { uTime: TIME, uStars: { value: 0 }, uMW: { value: 0 }, uCMB: { value: 0 }, uAir: { value: 0 }, uNoAir: { value: AIR ? 0 : 1 }, uGlow: { value: new THREE.Color(0, 0, 0) }, uGalN: { value: GAL_N }, uGalC: { value: GAL_C } },
+    uniforms: { uTime: TIME, uStars: { value: 0 }, uMW: { value: 0 }, uCMB: { value: 0 }, uAir: { value: 0 }, uNoAir: { value: AIR ? 0 : 1 }, uGeo: { value: 1 }, uGlow: { value: new THREE.Color(0, 0, 0) }, uGalN: { value: GAL_N }, uGalC: { value: GAL_C } },
     vertexShader: `varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
     fragmentShader: COMMON + `
-    varying vec3 vDir; uniform float uTime, uStars, uMW, uCMB, uAir, uNoAir; uniform vec3 uGalN, uGalC, uGlow;
+    varying vec3 vDir; uniform float uTime, uStars, uMW, uCMB, uAir, uNoAir, uGeo; uniform vec3 uGalN, uGalC, uGlow;
     float h31(vec3 p){ p = fract(p*.3183099+.1); p *= 17.; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
     float n3(vec3 x){ vec3 i=floor(x), f=fract(x); f=f*f*(3.-2.*f);
       return mix(mix(mix(h31(i),h31(i+vec3(1,0,0)),f.x), mix(h31(i+vec3(0,1,0)),h31(i+vec3(1,1,0)),f.x),f.y),
@@ -158,9 +158,9 @@ export function createAtmosphere(opts = {}) {
   //          Both are honestly near-black: a human-sized eye almost never catches one.
   // X-ray / gamma come from space: absorbed in Ground mode. The UV airglow amplitude is a STAND-IN (faint).
   // No air (opts.air false, M12/T5): microwave = the CMB alone (2.725 K: black), IR = the ~3 K sky (black), and UV =
-  //          geocoronal Lyman-α, sunlight resonantly scattered by exospheric hydrogen: a few kR over the whole sky at
-  //          ISS altitude (Meier 1991, Space Sci. Rev. 58, 1), ~12× the 400 R airglow term above, amplitude STAND-IN on
-  //          that scale ('geocoronaLyA'), plus the far-UV of hot O/B stars, the bluest field stars here ('starUV').
+  //          geocoronal Lyman-α, sunlight resonantly scattered by exospheric hydrogen over the whole sky: ~2 kR on the
+  //          night side, up to 10–20 kR by day (HST STIS Instrument Handbook Table 6.5; Meier 1991), on the scale of the
+  //          400 R airglow term above (2 kR = 1e-3) × uGeo (1 at night, set by the scenario; 'geocoronaLyA'), plus the far-UV of hot O/B stars, the bluest field stars here ('starUV').
   //          Both far-UV: absorbed in Ground mode, like the X-ray and gamma backgrounds.
   const pos = (lam, E) => bandPos(E ? { E } : { lam });
   nightMat.userData.eyeBands = `
@@ -179,7 +179,7 @@ void eyeBands(out vec4 o1, out vec4 o3){
   float u = 2e-4*(1. + 3.*pow(1. - sel, 5.));
   float space = 1. - eyeGround, x = space*1.1e-9, gm = space*2.3e-9*(.1 + exp(-g*g/.008)*(1. + 3.*core)/4.);
   if(uNoAir > .5){ vec3 s = stars(d, 90., .25, 4.) + stars(d, 220., .3, 1.5);
-    m = 0.; i = 0.; u = space*(2.5e-3 + uStars*max(s.b - s.r, 0.)*.6); }
+    m = 0.; i = 0.; u = space*(1e-3*uGeo + uStars*max(s.b - s.r, 0.)*.6); }
   o1 = vec4(i, u, gm, 1.)*above; o1.a = 1.;
   o3 = vec4(r, m, x, 1.)*above; o3.a = 1.; }`;
   const nightSky = new THREE.Mesh(new THREE.SphereGeometry(15000, 64, 32), nightMat); nightSky.renderOrder = -9; scene.add(nightSky);
