@@ -5,7 +5,7 @@ import { V3, DEG, lerp, sm, env, R } from 'spectra/core/util.js';
 import { S } from 'spectra/core/state.js';
 import { event } from 'spectra/core/events.js';
 import { deg, dirAE, skyP, onSky } from 'spectra/core/geom.js';
-import { Em, Rib, EmField } from 'spectra/render/sources.js';
+import { Em, Rib, EmField, BEAM } from 'spectra/render/sources.js';
 import { solid } from 'spectra/render/instrument.js';
 import { SUN_AZ, sunEl } from 'spectra/world/atmosphere.js';
 import { coastZ, heightAt, SEA, STAND, ENVSEA, COAST_STATION, CLIFF_ANT } from './world.js';
@@ -44,13 +44,19 @@ export const gulls = () => event({ name: 'Gulls heading home', t0: 0, t1: 20, ba
 // lens panels 72° apart turning once per 10 s, so each panel's beam passes you 2 s after the other, then 8 s dark.
 // The old 285–325 kHz marine radiobeacons are mostly retired; lights now announce themselves as AIS aids to
 // navigation (message 21 on VHF AIS 1/2, ITU-R M.1371-5; nominal reporting interval 3 min, IMO MSC.1/Circ.1473; IALA G1062).
-// An AIS packet (26.7 ms, ITU-R M.1371-5) drawn as a short run of radio dashes travelling from the sender to the coast
-// station's AIS base-station mast: a constant-width point-to-point link, so the dashes keep their aspect (uLen).
+// An AIS packet (26.7 ms, ITU-R M.1371-5) drawn as a short pulse travelling from the sender to the coast station's AIS
+// base-station mast (the eye: a smooth luminous segment; the old view: a run of radio dashes at a constant width, so
+// they keep their aspect, uLen).
 // The travel is slowed down for the eye (radio crosses the bay in ~10 µs): the events carry 'time-compressed'.
 const packet = (rib, a, b, f, len, w, I) => {
   const L = a.distanceTo(b), u1 = Math.min(1, f * (1 + len / L)), u0 = Math.max(0, u1 - len / L);
   if (u1 > u0) rib.set([a.clone().lerp(b, u0), a.clone().lerp(b, u1)], w, w, I);
 };
+// Ship radar beams in azimuth (the eye, sources.js BEAM.sweep): θ3dB ≈ 70 λ/D — X-band 9.4 GHz from a ~2 m (6.5 ft)
+// slotted array ≈ 1.1°, S-band 3.05 GHz from a ~3.7 m (12 ft) array ≈ 1.9° (typical SOLAS array lengths, STAND-IN);
+// rotation rates are the event's own (2.4 and 2.1 rad/s). The old view keeps its widened cos^16 / cos^8 look.
+const XB_HPBW = 1.1 * DEG, XB_W = 2.4, SB_HPBW = 1.9 * DEG, SB_W = 2.1;
+const xband = off => BEAM.sweep(off, XB_HPBW, XB_W);
 const FL_PERIOD = 10, FL_GAP = 2, FL_HALF = .15;   // s, s, rad (half-width of a beam: ~0.5 s flash)
 const ATON_EVERY = 6;                            // s between drawn AIS bursts (real: ~180 s, time-compressed)
 export const lighthouse = () => event({ name: 'Lighthouse', t0: 9, t1: 60, bands: ['vis', 'radio'], freq: ['incandescent', 'aisAtoN'], tags: ['time-compressed'],
@@ -110,11 +116,11 @@ export const ship = () => event({ name: 'Container ship', t0: 4, t1: 52, bands: 
     const nav = sm(9, 14, t), I = env(t, this.t0, this.t1, 1.5);
     this.p = at(-85, 40); this.mast.set(at(-85, 44), 26, nav * I); this.side.set(at(-80, 24), 18, nav * I * .8); this.stern.set(at(-108, 14), 14, nav * I * .6);
     this.deck.forEach((e, k) => e.set(at(-60 + k * 45, 22), 14, nav * I * .5));
-    const ra = T * 2.4, face = Math.max(0, Math.cos(ra - Math.atan2(c.z - pos.z, c.x - pos.x))) ** 16;   // radar crackles brightest as its antenna sweeps past you
-    this.radar.set(at(-85, 34), 60 + 120 * face, I * (.2 + .9 * face));
-    ENVSEA.radP.value.copy(at(-85, 34)); ENVSEA.radA.value = ra; ENVSEA.radI.value = I * 3;   // the same sweep echoes off the headlands and the sea (surface shaders read this)
-    const sa = T * 2.1 + 1.7, sface = Math.max(0, Math.cos(sa - Math.atan2(c.z - pos.z, c.x - pos.x))) ** 8;   // S-band: wider beam, own rotation
-    this.sband.set(at(-85, 29), 50 + 90 * sface, I * (.15 + .6 * sface));
+    const ra = T * XB_W, toC = Math.atan2(c.z - pos.z, c.x - pos.x), face = Math.max(0, Math.cos(ra - toC)) ** 16;   // old view: radar crackles brightest as its antenna sweeps past you
+    // the eye: a steady-sized antenna whose real 1.1° beam flashes once per turn as it crosses you (−30 dB sidelobes between)
+    this.radar.set(at(-85, 34), S.eye ? 60 : 60 + 120 * face, I * (.2 + .9 * face), 1.1 * xband(ra - toC) / (.2 + .9 * face));    ENVSEA.radP.value.copy(at(-85, 34)); ENVSEA.radA.value = ra; ENVSEA.radI.value = I * 3;   // the same sweep echoes off the headlands and the sea (surface shaders read this)
+    const sa = T * SB_W + 1.7, sface = Math.max(0, Math.cos(sa - toC)) ** 8;   // S-band: wider beam, own rotation
+    this.sband.set(at(-85, 29), S.eye ? 50 : 50 + 90 * sface, I * (.15 + .6 * sface), .75 * BEAM.sweep(sa - toC, SB_HPBW, SB_W) / (.15 + .6 * sface));
     this.sbandTx = { p: at(-85, 29), power: I * 25 * sface };
     this.phones.forEach((e, k) => {                                              // crew on deck: LTE ping every ~3 s, Bluetooth blips between
       const lt = ((T + k * 1.1) % 3) / 3, bt = ((T * 1.3 + k * .7) % 1.5) / 1.5;
@@ -240,8 +246,9 @@ export const buoys = () => event({ name: 'Channel buoys (IALA A)', t0: 9, t1: 60
       else { this.tmp.position.set(b.p.x, y, b.p.z); this.tmp.rotation.set(...tilt); this.tmp.updateMatrix(); this.mesh.setMatrixAt(i, this.tmp.matrix); }
       const s = b.p.distanceTo(STAND) / 1000; if (I > 0) this.L.set(i, new V3(b.p.x, y + 5.2, b.p.z), 22 * s, I * lit(T, b.ch, b.ph) * 1.2);
       if (b.racon && ENVSEA.radI.value > 0) {   // the ship's sweep reaches it: reply (same widened beam as the drawn radar)
-        const rp = ENVSEA.radP.value, face = Math.max(0, Math.cos(ENVSEA.radA.value - Math.atan2(b.p.z - rp.z, b.p.x - rp.x))) ** 16;
-        this.rc.set(new V3(b.p.x, y + 5, b.p.z), 30 + 60 * face, ENVSEA.radI.value / 3 * face * .9); } });
+        const rp = ENVSEA.radP.value, off = ENVSEA.radA.value - Math.atan2(b.p.z - rp.z, b.p.x - rp.x), face = Math.max(0, Math.cos(off)) ** 16;
+        // the eye: it answers while the real 1.1° beam is on it (its own antenna is omnidirectional in azimuth)
+        this.rc.set(new V3(b.p.x, y + 5, b.p.z), S.eye ? 30 : 30 + 60 * face, ENVSEA.radI.value / 3 * face * .9, xband(off) / face); } });
     this.mesh.instanceMatrix.needsUpdate = true; },
   where() { return this.bu[0].p.clone().add(new V3(0, 6, 0)); } });
 
@@ -278,8 +285,9 @@ export const windFarm = () => event({ name: 'Offshore wind farm', t0: 0, t1: 60,
       if (u.edge && night > 0) this.red.set(k, u.p.clone().add(new V3(0, HUB + 4.5, 0)), 34, night * red * .7)
         .set(this.tu.length + k, u.p.clone().add(new V3(0, (HUB + 3.5) / 2, 0)), 16, night * red * .22);   // 32 cd vs 2000 cd: far dimmer, same flash
       if (u.corner && night > 0) this.yel.set(k, u.p.clone().add(new V3(0, 18, 0)), 24, night * yel * .6);
-      if (rI > 0) { const face = Math.max(0, Math.cos(ENVSEA.radA.value - Math.atan2(u.p.z - rp.z, u.p.x - rp.x))) ** 8, dop = .6 + .4 * Math.abs(Math.sin(spin * 3));
-        this.clu.set(k, hub, 90 + 120 * face, rI * (.06 + .6 * face) * dop); } });
+      if (rI > 0) { const off = ENVSEA.radA.value - Math.atan2(u.p.z - rp.z, u.p.x - rp.x), face = Math.max(0, Math.cos(off)) ** 8, dop = .6 + .4 * Math.abs(Math.sin(spin * 3));
+        // the eye: lit by the real 1.1° beam as it passes (scattered in all directions, so toward you too)
+        this.clu.set(k, hub, S.eye ? 90 : 90 + 120 * face, rI * (.06 + .6 * face) * dop, .66 * xband(off) / (.06 + .6 * face)); } });
     this.bl.instanceMatrix.needsUpdate = true; },
   where() { return WF_C.clone().add(new V3(0, HUB, 0)); } });
 

@@ -4,7 +4,7 @@ import { V3, DEG, lerp, sm, env, R, fbm2 } from 'spectra/core/util.js';
 import { S } from 'spectra/core/state.js';
 import { event } from 'spectra/core/events.js';
 import { deg, skyP, dirAE, FOV_SKY } from 'spectra/core/geom.js';
-import { Em, Rib, EmField } from 'spectra/render/sources.js';
+import { Em, Rib, EmField, BEAM, toViewer } from 'spectra/render/sources.js';
 import { solid, visOnly } from 'spectra/render/instrument.js';
 import { spectralGroup, addTx, SURF_U } from 'spectra/render/surface.js';
 import { COMMON } from 'spectra/render/shaders.js';
@@ -29,7 +29,10 @@ export const radioTower = () => event({ name: 'Radio / TV tower', t0: 0, t1: 60,
     this.top = new V3(x, y + H, z); this.uhf = new V3(x, y + H * .82, z); this.light = new Em('vis', '#ff2020'); this.rad = new Em('radio'); this.mw = new Em('micro');
     addTx('radio', () => ({ p: this.top, power: 1.4 }));   // FM paints the valley slopes
   },
-  update() { this.light.set(this.top, 5, S.T % 1.5 < .5 ? 1.3 : .05); this.rad.set(this.top, 170, .8); this.mw.set(this.uhf, 60, .55);
+  // beams toward the eye (sources.js BEAM.array): FM from a 4-bay stack about one wavelength apart, UHF TV from an
+  // 8-tier panel array (typical broadcast antennas, STAND-IN), both omnidirectional in azimuth, tilted ~0.75° down —
+  // from below the ridge you sit under the main beam, so UHF (the narrower stack) looks dimmer than FM
+  update() { this.light.set(this.top, 5, S.T % 1.5 < .5 ? 1.3 : .05); this.rad.set(this.top, 170, .8, BEAM.array(toViewer(this.top).el, 4)); this.mw.set(this.uhf, 60, .55, BEAM.array(toViewer(this.uhf).el, 8));
     TRAIL_U.uMTx.value[1].set(this.uhf.x, this.uhf.y, this.uhf.z, S.on.micro ? .5 : 0); S.act.micro += .15; },   // TV UHF coverage on the terrain
   where() { return this.top; } });
 
@@ -272,8 +275,11 @@ export const cellMast = () => event({ name: 'Cell mast on the ridge', t0: 0, t1:
     S.scene.add(solid(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0x0b0b10 }))));
     this.top = top.clone().add(new V3(0, -2.2, 0)); this.e = new Em('micro');
   },
-  update() { const { T } = S, f = .75 + .25 * Math.sin(T * 3.1) * Math.sin(T * 1.3);
-    this.e.set(this.top, 28, .55 * f); TRAIL_U.uMTx.value[0].set(this.top.x, this.top.y, this.top.z, .9); S.act.micro += .2; },
+  // the eye sees the three sector panels' beams (sources.js BEAM.sectors: 3GPP panel pattern, 65° wide, 4° downtilt,
+  // boresights along the drawn panels at k·120°): bright where you stand in a sector's main lobe, ~10 dB down between
+  // two sectors. The load flicker f is the old view's; the eye shows the steady pilot/reference-signal power.
+  update() { const { T } = S, f = .75 + .25 * Math.sin(T * 3.1) * Math.sin(T * 1.3), v = toViewer(this.top);
+    this.e.set(this.top, 28, .55 * f, BEAM.sectors(v.az, -v.el, [0, 2.094, -2.094]) / f); TRAIL_U.uMTx.value[0].set(this.top.x, this.top.y, this.top.z, .9); S.act.micro += .2; },
   where() { return this.top; } });
 
 export const weatherStation = () => event({ name: 'Weather-station radio link', t0: 0, t1: 60, bands: ['radio'], freq: ['wxTelemetry'], note: 'An automatic weather station on the knoll ahead sends its readings in short VHF bursts to the transmitter mast on the ridge.',

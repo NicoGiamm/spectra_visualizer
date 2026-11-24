@@ -12,7 +12,7 @@ import { V3, DEG, clamp, lerp, sm, env, kf, R } from '../core/util.js';
 import { S } from '../core/state.js';
 import { event } from '../core/events.js';
 import { D, deg, dirAE, skyP, onSky, basis, ringPts, linePts, FOV_SKY, fovAz } from '../core/geom.js';
-import { Em, Rib, EmField } from '../render/sources.js';
+import { Em, Rib, EmField, BEAM, toViewer } from '../render/sources.js';
 import { visOnly } from '../render/instrument.js';
 import { canvasTex, cloudTex, moonTex, softTex } from '../render/textures.js';
 import { ENV, SUN_AZ, sunEl, moonDir, night, moonlit, moonFlux, MOON_ELONG, MOON_K, GAL_C, CONTRAIL } from '../world/atmosphere.js';
@@ -35,8 +35,13 @@ export const airliner = o => event({ name: 'Airliner', t0: 3, t1: 27, bands: ['v
     this.s.set(pos, deg(.7), T % 1 < .06 ? 1.6 : 0); this.b.set(pos, deg(.5), T % 1.3 < .15 ? 1.3 : 0); this.g.set(pos, deg(.25), .6);
     this.ir.set(pos, deg(.35), I * .55); if (pts.length > 3) this.ex.set([pts[pts.length - 4], pos], deg(.14), deg(.1), I * .45, 1);
     const cyc = (t - t0) % 3.4, talk = cyc < 1.4 ? sm(0, .1, cyc) * (1 - sm(1.2, 1.4, cyc)) * (.75 + .25 * Math.sin(T * 37)) : 0;   // pilot/ATC voice transmissions (118–137 MHz)
-    this.ra.set(pos, deg(1.7), I * talk * .9);
-    this.mi.set(pos, deg(.5), T % .45 < .05 ? I * .9 : 0); this.wx.set(pos, deg(.8), I * .3);       // Mode S replies (1090 MHz) + nose weather radar
+    // the eye: what each antenna sends down to you. VHF com and the Mode S transponder use belly blade monopoles (a
+    // dipole's doughnut by image theory, axis pointing down: a null straight below, full toward the horizon); the nose
+    // weather radar is a ~76 cm flat plate at 9.3 GHz (θ3dB ≈ 70 λ/D ≈ 3°) scanning ahead at ~2° down, so from the
+    // ground you only catch its sidelobes (−25 dB) — BEAM in sources.js
+    const v = toViewer(pos), belly = BEAM.dipole(Math.sin(-v.el)), wx = BEAM.dish(-v.el - 2 * DEG, 3 * DEG, 10 ** -2.5);
+    this.ra.set(pos, deg(1.7), I * talk * .9, belly);
+    this.mi.set(pos, deg(.5), T % .45 < .05 ? I * .9 : 0, belly); this.wx.set(pos, deg(.8), I * .3, wx);       // Mode S replies (1090 MHz) + nose weather radar
   }, where() { return this.p; } }, o);
 
 export const venus = o => event({ name: 'Evening star (Venus)', t0: 5, t1: 57, bands: ['vis'], freq: ['sunlight'], tags: ['common'], note: 'Reflected sunlight; the first "star" to appear after sunset.',
@@ -305,11 +310,12 @@ export const thunderstorm = o => event({ name: 'Distant thunderstorm', t0: 30, t
     this.clouds.forEach(c => { c.visible = on.vis && vis > 0; const b = .02 + flash * .7; c.material.color.setRGB(b, b, b * 1.15); c.material.opacity = vis * .75; });
   }, where() { return new V3(this.x, this.cy, this.z); } }, o);
 
-export const fastRadioBurst = o => event({ name: 'Fast radio burst', t0: 38, t1: 45, bands: ['radio'], freq: ['frb'], tags: ['rare'], note: 'A millisecond radio flash from a galaxy billions of light-years away. Plasma along the way disperses it: lower frequencies arrive later, a sweep drawn here as the widening rings.',
+export const fastRadioBurst = o => event({ name: 'Fast radio burst', t0: 38, t1: 45, bands: ['radio'], freq: ['frb'], tags: ['rare'], note: 'A millisecond radio flash from a galaxy billions of light-years away. Plasma along the way disperses it: lower frequencies arrive later, so the point lingers as the burst sweeps down the band (the old view draws the sweep as widening rings).',
   init() { this.d = dirAE(290, 34); this.e = new Em('radio'); this.r1 = new Rib('radio', null, 49); this.r2 = new Rib('radio', null, 49); },
   update() { const { t } = S; if (t < this.t0 || t > this.t0 + 6.2) return; const age = t - this.t0, I = 1 - age / 6.2;
     this.e.set(onSky(this.d), deg(3.2), I * 1.2); const sw = 1 - Math.exp(-age * .9);   // the dispersion sweep, eased so the rings stay inside the FOV cone (≤ ~25°)
-    this.r1.set(ringPts(this.d, 2.5 + 22.5 * sw), deg(.5), deg(.5), I); this.r2.set(ringPts(this.d, 1.2 + 15 * sw), deg(.35), deg(.35), I * .7); },
+    // the rings are the old view's symbol for the dispersion sweep; a dispersed burst is still one point (see = 0: the eye skips them)
+    this.r1.set(ringPts(this.d, 2.5 + 22.5 * sw), deg(.5), deg(.5), I, 0, 0); this.r2.set(ringPts(this.d, 1.2 + 15 * sw), deg(.35), deg(.35), I * .7, 0, 0); },
   where() { return onSky(this.d); } }, o);
 
 export const supernova = o => event({ name: 'Supernova', t0: 43, t1: 60, bands: ['uv', 'vis', 'xray', 'gamma', 'ir', 'radio'], freq: ['snUV', 'snOptical', 'snXray', 'snGamma', 'snDust', 'snRadio'], tags: ['rare'], note: 'Shock-breakout UV flash, gamma decay lines and an expanding X-ray shell (all seen only from orbit), then the visible peak, new dust (IR) and radio last.',
@@ -322,7 +328,8 @@ export const supernova = o => event({ name: 'Supernova', t0: 43, t1: 60, bands: 
 
 export const gammaRayBurst = o => event({ name: 'Gamma-ray burst', t0: 48, t1: 60, bands: ['gamma', 'xray', 'vis', 'radio'], freq: ['grbGamma', 'afterglowXray', 'afterglowOptical', 'afterglowRadio'], tags: ['rare'], note: 'A brief gamma flash (only satellites see it), followed by an afterglow at longer wavelengths; rarely the optical afterglow is bright enough for the naked eye.',
   init() { this.d = dirAE(322, 30); this.g = new Em('gamma', null, 0, 'space'); this.x = new Em('xray', null, 0, 'space'); this.v = new Em('vis', '#cfe0ff'); this.r = new Em('radio'); this.flash = document.getElementById('flash'); },
-  update() { const { t, T, on } = S, fl = on.gamma && S.detector === 'orbit' && t > 48 && t < 48.6 ? .45 * (1 - (t - 48) / .6) : 0;
+  // the full-screen hue-cycling flash is the old view's; the eye shows the burst as the point source it is
+  update() { const { t, T, on } = S, fl = !S.eye && on.gamma && S.detector === 'orbit' && t > 48 && t < 48.6 ? .45 * (1 - (t - 48) / .6) : 0;
     this.flash.style.opacity = fl; if (fl) this.flash.style.background = `hsl(${(T * 400) % 360},100%,55%)`;
     if (t < 48) return; const p = onSky(this.d);
     this.g.set(p, deg(4.5), env(t, 48, 50.5, .3)); this.x.set(p, deg(1.4), sm(48.5, 49.5, t) * (1 - sm(50, 58.5, t)));

@@ -7,7 +7,7 @@ import { V3, sm, R, hash2 } from 'spectra/core/util.js';
 import { dirAE } from 'spectra/core/geom.js';
 import { S } from 'spectra/core/state.js';
 import { event } from 'spectra/core/events.js';
-import { Em, Rib, EmField } from 'spectra/render/sources.js';
+import { Em, Rib, EmField, BEAM, toViewer } from 'spectra/render/sources.js';
 import { solid } from 'spectra/render/instrument.js';
 import { bounce, along } from 'spectra/world/bounce.js';
 import { addTx, addHits } from 'spectra/render/surface.js';
@@ -144,7 +144,7 @@ function onCanyon(cam, p) {
 
 export const haze = () => event({ name: 'Street-canyon RF haze', t0: 0, t1: 60, bands: ['micro'], freq: ['wifi24', 'wifi5', 'lte'], tags: ['stylised'], note: 'The canyon itself is a cloud of microwave: a fine crackle fills the street between the facades below the roofs, denser where more access points are live nearby. Walk into the park and it thins out — you feel yourself leaving the RF zone. Stylised: it maps the field density of the routers around you; the field itself is not a visible thing.',
   init() {
-    // fixed patches in the canyon volume (hash-placed, no R): small (the micro shader draws 26 cells across a quad,
+    // fixed patches in the canyon volume (hash-placed, no R): small (the old view's micro shader draws 26 cells across a quad,
     // so a 1–2 m patch gives 4–8 cm cells, not the 10–21 cm blocks of the old 2.5–5.5 m ones), and below 9 m so the
     // top stays under the lowest street-front roof (12 m, world.js buildings()); onCanyon() hides what the eye would
     // see against the sky or the park.
@@ -226,6 +226,8 @@ export const fmMast = () => event({ name: 'FM & DAB on the hill', t0: 0, t1: 60,
     const live = .55 + .45 * sm(0, 8, t);
     // FM and the DAB+ multiplex (continuous OFDM) both broadcast steadily from the same antennas: one steady glow
     // (a second always-on quad would cost a draw call over the M4 baseline)
-    this.tx.set(FM.top.clone().setY(FM.top.y - 28), 130, live * .65);
+    // the eye: the stacked FM/DAB bays' elevation beam toward you (sources.js BEAM.array, 4 bays ~1 λ apart, STAND-IN)
+    const ant = FM.top.clone().setY(FM.top.y - 28);
+    this.tx.set(ant, 130, live * .65, BEAM.array(toViewer(ant).el, 4));
     this.red.set(FM.top, 30, T % 2.2 < .6 ? 1.2 : .05); },
   where() { return FM.top; } });

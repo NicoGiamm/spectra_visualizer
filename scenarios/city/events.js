@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { V3, sm, R, hash2 } from 'spectra/core/util.js';
 import { S } from 'spectra/core/state.js';
 import { event } from 'spectra/core/events.js';
-import { Em, Rib, EmField } from 'spectra/render/sources.js';
+import { Em, Rib, EmField, BEAM, toViewer } from 'spectra/render/sources.js';
 import { solid } from 'spectra/render/instrument.js';
 import { addTx, spectral } from 'spectra/render/surface.js';
 import { night, moonlit } from 'spectra/world/atmosphere.js';
@@ -65,8 +65,12 @@ export const cellTower = () => event({ name: '5G mast', t0: 0, t1: 60, bands: ['
     addTx('micro', () => ({ p: MAST.panels[0], power: .6 }));      // paints the facades below in the microwave surface term
   },
   update() { const { T } = S;
-    this.big.set(MAST.top, Math.min(38, MAST.top.distanceTo(S.camera.position) * .1), .55);   // no metre-wide crackle cells up close
-    this.pe.forEach((e, k) => e.set(MAST.panels[k], 5, .5 + .5 * Math.max(0, Math.sin(T * 3 + k * 2.1))));
+    // spectral eye: each panel beams along its boresight (outward from the mast top) with the cited 3GPP sector
+    // pattern (sources.js BEAM.sector: 65° wide, 4° downtilt); the old view's stylised load pulsing becomes its mean
+    const azs = MAST.panels.map(q => Math.atan2(q.z - MAST.top.z, q.x - MAST.top.x)), vt = toViewer(MAST.top);
+    this.big.set(MAST.top, Math.min(38, MAST.top.distanceTo(S.camera.position) * .1), .55, BEAM.sectors(vt.az, -vt.el, azs));   // no metre-wide crackle cells up close
+    this.pe.forEach((e, k) => { const I = .5 + .5 * Math.max(0, Math.sin(T * 3 + k * 2.1)), v = toViewer(MAST.panels[k]);
+      e.set(MAST.panels[k], 5, I, BEAM.sector(v.az - azs[k], -v.el) * .66 / I); });
     this.red.set(MAST.top, 2.2, T % 1.6 < .5 ? 1.3 : .05); },
   where() { return MAST.top; } });
 

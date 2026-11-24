@@ -5,7 +5,7 @@ import { V3, sm, hash2 } from 'spectra/core/util.js';
 import { dirAE } from 'spectra/core/geom.js';
 import { S } from 'spectra/core/state.js';
 import { event } from 'spectra/core/events.js';
-import { Em, Rib, EmField } from 'spectra/render/sources.js';
+import { Em, Rib, EmField, BEAM, toViewer } from 'spectra/render/sources.js';
 import { solid } from 'spectra/render/instrument.js';
 import { burst, inWin } from './events.js';
 import { night } from 'spectra/world/atmosphere.js';
@@ -92,11 +92,14 @@ export const radar = () => event({ name: 'Airport radar (S-band)', t0: 8, t1: 60
   },
   update() { const { T, camera } = S; if (!inWin(this)) return;
     const near = 1 - sm(1200, 2200, this.c.distanceTo(camera.position));
-    this.mast.set(this.c, 26, .4 * near);
     const a = (T % 4) / 4 * Math.PI * 2, r = 120, pts = [];
-    for (let k = 0; k <= 7; k++) { const th = a - .5 + k / 7; pts.push(this.c.clone().add(new V3(Math.cos(th) * r, 0, Math.sin(th) * r))); }
+    // the eye: the antenna's real fan beam, 1.4° wide in azimuth (ASR-9 / ASR-11 class; ≈ 70 λ/D for a ~5 m reflector
+    // at 2.8 GHz), turning at 2π / 4 s: one short flash per turn as it sweeps across you (sources.js BEAM.sweep), dark
+    // in between (−30 dB sidelobes). The fan itself is the old view's: clear air does not scatter a 10 cm beam back to
+    // you (Rayleigh ∝ λ⁻⁴; only rain, insects and aircraft echo it), so the eye does not draw it.
+    this.mast.set(this.c, 26, .4 * near, BEAM.sweep(a - toViewer(this.c).az, 1.4 * Math.PI / 180, 2 * Math.PI / 4));    for (let k = 0; k <= 7; k++) { const th = a - .5 + k / 7; pts.push(this.c.clone().add(new V3(Math.cos(th) * r, 0, Math.sin(th) * r))); }
     pts.push(this.c.clone());
-    this.fan.set(pts, .7, 2.6, .5 * near); },
+    this.fan.set(pts, .7, 2.6, .5 * near, 0, 0); },
   where() { return this.c; } });
 
 export const police = () => event({ name: 'Police car: LEDs & TETRA', t0: 30, t1: 40, bands: ['vis', 'micro'], freq: ['ledBlue', 'tetra'], note: 'A cruiser runs down the avenue: the light bar flashes its left and right blue LED heads in turn (amber is only a rear traffic advisor on European cars), and its TETRA radio (the European emergency-services net, ~390 MHz = 77 cm, microwave in this band table) chirps in short bursts.',
