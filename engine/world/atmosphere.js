@@ -11,25 +11,42 @@ import { dirAE } from '../core/geom.js';
 import { COMMON } from '../render/shaders.js';
 
 // --- timeline -------------------------------------------------------------------------
-export const SUN_AZ = 295;
-export const sunEl = () => 4 - S.t * .55;                       // kept low and dim: sets at t≈7
-export const night = () => sm(8, 22, S.t);
+// A scenario may pass a `site` (createAtmosphere opts, M12/T1): its own latitude/date, with the Sun's and Moon's tracks
+// computed for it, given as cubic fits in script time t (coefficients t⁰…t³, degrees):
+//   { sunAz, sunEl, moonAz, moonEl: [c0, c1, c2, c3], moonElong: deg }
+// Without a site (trail, seaside, city) every value below is the original one, unchanged. With a site, SUN_AZ follows
+// the Sun along its track (re-evaluated at the start of each atmosphere update) and the twilight keyframes are read on
+// the twilight clock twi(): the script time at which the default track reaches the same solar depression, so the sky
+// colours follow the Sun's depression rather than the clock (a polar Sun sets slowly and slantwise).
+let SITE = null;
+const poly = (c, t) => c[0] + t * (c[1] + t * (c[2] + t * c[3]));
+export let SUN_AZ = 295;
+export const sunEl = () => SITE ? poly(SITE.sunEl, S.t) : 4 - S.t * .55;   // kept low and dim: sets at t≈7
+export const twi = () => SITE ? (4 - sunEl()) / .55 : S.t;      // twilight clock: the default track's time at this solar elevation
+export const night = () => sm(8, 22, twi());
 // The Moon (M9/T1): a waxing Moon 6.5 days old, elongation 79° east of the Sun along the ecliptic, already up in the
 // south-west at sunset and setting at the end. Track from a spherical-astronomy computation (lat 45° N, Sun at dec
 // +17.4° / ecliptic longitude 131° so it sets at SUN_AZ 295 at t ≈ 7.3, 1 script unit = 3.4 min, Moon on the ecliptic
 // moving 0.51°/h against the stars), fitted to 0.15°: az 211 → 219 → 227 → 234 → 240 → 246 → 252 and
 // el 28 → 25 → 21 → 16 → 11 → 6 → 0 at t = 0, 10 … 60. On a summer evening the ecliptic runs low through the south,
 // so an older Moon would start east of the 210° edge of FOV_SKY, a younger one lower and farther west.
-export const MOON_ELONG = 79;                                    // deg, Sun–Moon elongation (≈ 12.2°/day × 6.5 d)
-export const MOON_K = (1 - Math.cos(MOON_ELONG * DEG)) / 2;      // illuminated fraction ≈ 0.41
+export let MOON_ELONG = 79;                                      // deg, Sun–Moon elongation (≈ 12.2°/day × 6.5 d)
+export let MOON_K = (1 - Math.cos(MOON_ELONG * DEG)) / 2;        // illuminated fraction ≈ 0.41
 // Brightness vs phase angle α = 180° − elongation: m(α) = m_full + 0.026|α| + 4e-9 α⁴ (Krisciunas & Schaefer 1991,
 // PASP 103, 1033; cf. Allen's Astrophysical Quantities, lunar phase curve) → 0.061 of full-Moon illuminance here
 // (≈ 0.09 at quarter). Drawn as perceived brightness, Stevens' power law with exponent 1/3 (dark-adapted brightness,
 // Stevens 1957) — linear light would make a 6 % Moon vanish on screen; ratios below are perceived (cube-root) ratios, not linear ones
 // (a full Moon would read only ~2.6× brighter, not 16×) — order and timing stay physical.
-const PA = 180 - MOON_ELONG;
-export const MOON_ILLUM = 10 ** (-.4 * (.026 * PA + 4e-9 * PA ** 4));
-export const moonDir = () => { const t = S.t; return dirAE(211.1 + .824 * t - .00231 * t * t, 28.3 - .345 * t - .00207 * t * t); };
+const illum = PA => 10 ** (-.4 * (.026 * PA + 4e-9 * PA ** 4));
+export let MOON_ILLUM = illum(180 - MOON_ELONG);
+export const moonDir = () => { const t = S.t; if (SITE) return dirAE(poly(SITE.moonAz, t), poly(SITE.moonEl, t));
+  return dirAE(211.1 + .824 * t - .00231 * t * t, 28.3 - .345 * t - .00207 * t * t); };
+// called by createAtmosphere() before the world and the events are built (the Moon's phase texture reads MOON_ELONG)
+function setSite(site) {
+  if (!site) return;
+  SITE = site; SUN_AZ = poly(site.sunAz, S.t);
+  MOON_ELONG = site.moonElong; MOON_K = (1 - Math.cos(MOON_ELONG * DEG)) / 2; MOON_ILLUM = illum(180 - MOON_ELONG);
+}
 // the Moon's light reaching the scene, 0..~0.39: phase × atmospheric extinction (0.2 mag/airmass, Kasten & Young 1989
 // airmass) × the last 1.5° of setting, ramped in as the twilight sky darkens below it — moonlight outshines the
 // twilight once the Sun is ~8–13° down (t ≈ 22–31). The Moon is up all along; this is how much its light matters.
@@ -49,9 +66,10 @@ export const CONTRAIL = [[0, [1, .55, .55]], [12, [1, .38, .4]], [18, [.12, .1, 
 // Filled by createAtmosphere(); events read these at update time.
 export const ENV = {};
 
-// opts: { lightPollution: 0..1 (dims stars, adds an orange horizon glow), cloudCover: [start, end] }
+// opts: { lightPollution: 0..1 (dims stars, adds an orange horizon glow), cloudCover: [start, end], site (above) }
 export function createAtmosphere(opts = {}) {
   const { scene, camera, TIME } = S;
+  setSite(opts.site);
   const lp = opts.lightPollution || 0;
 
   const sky = new Sky(); sky.scale.setScalar(20000); sky.renderOrder = -10; scene.add(sky);
@@ -175,7 +193,8 @@ void eyeBands(out vec4 o1, out vec4 o3){
   const glow = new THREE.Color(1, .55, .25).multiplyScalar(.09 * lp);
 
   function update() {
-    const t = S.t, on = S.on, n = night(), ml = moonlit(), el = sunEl(), cam = camera.position;
+    if (SITE) SUN_AZ = poly(SITE.sunAz, S.t);
+    const t = twi(), on = S.on, n = night(), ml = moonlit(), el = sunEl(), cam = camera.position;
     sky.position.copy(cam); nightSky.position.copy(cam);
     clouds.position.set(cam.x, 2400, cam.z);
     SU.sunPosition.value.copy(dirAE(SUN_AZ, Math.max(el, -2.5)));

@@ -245,6 +245,28 @@ export const SPECTRUM = {
   // seismic, tilt and GNSS data in short bursts over VHF/UHF links
   monTelemetry: { name: 'monitoring-station telemetry bursts (VHF 169.4 MHz)', f: 169.4e6 },
 
+  // ===== aurora additions (M12/T1)
+  // auroral kilometric radiation: electron-cyclotron maser emission at 50–500 kHz, peak ~250 kHz, from 1–3 Earth radii
+  // above the night-side auroral zone, strongest during substorms; it cannot get down through the ionosphere (its
+  // frequency is below the plasma frequency of the F region), so it is only received in space (Gurnett 1974,
+  // J. Geophys. Res. 79, 4227, "The Earth as a radio source: terrestrial kilometric radiation")
+  akr:          { name: 'auroral kilometric radiation (cyclotron maser, ~250 kHz)', f: 250e3, ground: false },
+  // N₂ second positive system (C³Πu → B³Πg) 0–0 band at 337.1 nm (Lofthus & Krupenie 1977, J. Phys. Chem. Ref. Data
+  // 6, 113), a standard auroral near-UV emission seen from the ground above the ozone cut-off near 300 nm (Vallance
+  // Jones 1974, Aurora, Reidel, ch. 4)
+  n2SecondPosAur: { name: 'N₂ second positive band 337 nm in the aurora (near-UV)', lam: 337.1e-9 },
+  // snow reflects ~80–90 % of UV (UV-B 0.9+, Blumthaler & Ambach 1988, Photochem. Photobiol. 48, 85; WHO Global Solar
+  // UV Index 2002: fresh snow up to 0.8) — twilight skylight, then the aurora's near-UV
+  snowUV:       { name: 'UV reflected by snow (albedo ~0.85)', lam: 340e-9 },
+  // cold snow at ~255 K, emissivity 0.99 in 8–14 µm (Hori et al. 2006, Remote Sens. Environ. 100, 486); Wien peak 11.4 µm
+  snowThermal:  { name: 'thermal emission of cold snow (~255 K, ε ≈ 0.99)', lam: 11.4e-6 },
+  // bare lake ice at ~265 K: ice conducts heat up from the 0 °C water about ten times better than snow insulates
+  // (k_ice ≈ 2.2 vs k_snow 0.1–0.3 W m⁻¹ K⁻¹, Sturm et al. 1997, J. Glaciol. 43, 26), so it reads warmer; Wien peak 10.9 µm
+  iceThermal:   { name: 'thermal emission of bare lake ice (~265 K)', lam: 10.9e-6 },
+  // riometer (relative ionospheric opacity meter): a receiver of the cosmic radio noise, here at 38.2 MHz (the IRIS
+  // imaging riometer, Detrick & Rosenberg 1990, Radio Sci. 25, 325; method: Little & Leinbach 1959, Proc. IRE 47, 315);
+  // the energetic electrons of a substorm ionise the D region, which absorbs a few dB of it
+  cosmicNoise38: { name: 'cosmic radio noise at 38.2 MHz (riometer)', f: 38.2e6 },
 };
 
 const RANGES = [['radio', 1, Infinity], ['micro', 1e-3, 1], ['ir', 700e-9, 1e-3], ['vis', 380e-9, 700e-9],
