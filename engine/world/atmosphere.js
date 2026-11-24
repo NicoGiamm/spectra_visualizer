@@ -51,6 +51,9 @@ const illum = PA => 10 ** (-.4 * (.026 * PA + 4e-9 * PA ** 4));
 export let MOON_ILLUM = illum(180 - MOON_ELONG);
 export const moonDir = () => { const t = S.t; if (SITE) return dirAE(poly(SITE.moonAz, t), poly(SITE.moonEl, t));
   return dirAE(211.1 + .824 * t - .00231 * t * t, 28.3 - .345 * t - .00207 * t * t); };
+// The HUD clock (M12/T6): local hours at script time t. A site may carry `clock: { start, minPerUnit }` (local
+// hours at t = 0, minutes per script unit); without one, the shared evening runs 19:30 → 23:30 as before.
+export const clockHours = (t = S.t) => SITE?.clock ? SITE.clock.start + t * SITE.clock.minPerUnit / 60 : 19.5 + t / 60 * 4;
 // called by createAtmosphere() before the world and the events are built (the Moon's phase texture reads MOON_ELONG)
 function setSite(site) {
   if (!site) return;

@@ -21,6 +21,7 @@ import * as local from './events.js';
 // magnetic midnight, ~21–23 MLT; at Tromsø MLT ≈ UT + 2.5 h, so the breakup at t ≈ 40 (17:30 UT, ~20 MLT) is early.
 const SITE = {
   lat: 69.65, lon: 18.96, date: '2026-10-21T13:30Z', minPerUnit: 6,
+  clock: { start: 15.5, minPerUnit: 6 },   // HUD: local time, CEST (UTC+2 until 25 Oct 2026): 15:30 → 21:30
   sunAz: [224.379, 1.43851, -0.00231122, 3.74152e-05],
   sunEl: [3.66469, -0.362084, -0.00499631, 5.1766e-05],
   moonAz: [102.339, 1.32136, 0.0013568, -3.41519e-07],

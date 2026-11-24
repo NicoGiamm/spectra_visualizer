@@ -19,7 +19,8 @@ import { run } from 'spectra/app.js';
 import { build, sunAz, sunEl } from './world.js';
 import * as local from './events.js';
 
-const SITE = { sunAz, sunEl, moonAz: sunAz, moonEl: sunEl, moonElong: 5 };
+// HUD clock: station time is GMT on the ISS; the orbit starts at 20:00 GMT and lasts 92.9 min (1.55 min per unit)
+const SITE = { sunAz, sunEl, moonAz: sunAz, moonEl: sunEl, moonElong: 5, clock: { start: 20, minPerUnit: 92.9 / 60 } };
 
 run({
   title: 'Above the atmosphere',
