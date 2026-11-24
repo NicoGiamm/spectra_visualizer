@@ -221,6 +221,29 @@ export const SPECTRUM = {
   droneLink:       { name: 'drone control link (2.4 GHz ISM)', f: 2.44e9 },
   droneVideo:      { name: 'drone video downlink (5.8 GHz)', f: 5.8e9 },
   batteryWarm:     { name: 'warm traction battery / motors (~305 K)', lam: 9.5e-6 },
+  // ===== volcano additions (M12/T3)
+  // basaltic lava erupts at 1100–1200 °C: Kīlauea 1140–1170 °C (Helz & Thornber 1987, Bull. Volcanol. 49, 651), Etna
+  // ~1080–1120 °C; at those temperatures Planck's law puts a visible red-orange tail on a ~2 µm Wien peak
+  lavaGlow:     { name: 'incandescent basaltic lava (1100–1200 °C), red-orange', lam: 650e-9 },
+  lavaThermal:  { name: 'thermal emission of molten lava (~1420 K, Wien peak ~2 µm)', lam: 2.04e-6 },
+  // a crust forms within seconds and cools like a half-space losing heat by radiation, T falling roughly as t^-1/2:
+  // below ~600 °C within minutes, a few hundred °C after hours (Hon et al. 1994, GSA Bull. 106, 351; Keszthelyi &
+  // Denlinger 1996, Bull. Volcanol. 58, 5); Wien peak at ~600 K = 4.8 µm
+  crustThermal: { name: 'cooling lava crust (~400–900 K)', lam: 4.8e-6 },
+  // in the microwave the Rayleigh–Jeans limit holds: brightness temperature = emissivity × T, so lava at ~1400 K with
+  // e ≈ 0.9 (STAND-IN, like rock [UMF: Ulaby, Moore & Fung]) is ~5× brighter than the ~260 K ground; 37 GHz stands in for the band
+  lavaMicrowave:{ name: 'thermal microwave emission of lava (Tb ≈ 1200 K)', f: 37e9 },
+  // SO₂ absorbs strongly at 300–320 nm: UV SO₂ cameras image plumes against scattered skylight at ~310 nm (Mori &
+  // Burton 2006, Geophys. Res. Lett. 33, L24804); needs daylight UV, so it fades out in twilight
+  so2UV:        { name: 'SO₂ absorption of scattered skylight UV (300–320 nm)', lam: 310e-9 },
+  // lightning-mapping arrays record volcanic lightning and continual near-vent discharges as VHF pulses in a TV
+  // channel at 60–66 MHz (Thomas et al. 2007, Science 315, 1097, Augustine; Behnke et al. 2013, JVGR 259, 214, Redoubt)
+  ventVHF:      { name: 'volcanic-lightning and vent-discharge VHF pulses (60–66 MHz)', f: 63e6 },
+  // radon progeny: Pb-214 351.93 keV (35.6 %) beside Bi-214 609.32 keV (45.5 %, the engine's bi214Gamma) (NNDC ENSDF)
+  pb214Gamma:   { name: 'Pb-214 gamma line (352 keV, radon chain)', E: 351.9e3 },
+  // 169.400–169.475 MHz: metering and telemetry band (CEPT ERC Rec. 70-03, Annex 2); remote monitoring stations send
+  // seismic, tilt and GNSS data in short bursts over VHF/UHF links
+  monTelemetry: { name: 'monitoring-station telemetry bursts (VHF 169.4 MHz)', f: 169.4e6 },
 
 };
 
