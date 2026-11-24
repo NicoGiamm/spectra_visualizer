@@ -36,7 +36,7 @@ its terrain, props, camera walk and ground height.
 
 ## Non-derivable facts
 
-- Each surface cools toward its own night equilibrium `Teq`; there is no shared `Tair(t)` curve (only the seaside has
-  a local `airTemp`). Interior heat exists only for city buildings: an `aTcore` instance attribute (hash, not `R`)
+- Each surface cools toward its own night equilibrium `Teq`; there is no shared `Tair(t)` curve (only the seaside and
+  the ocean have a local `airTemp`). Interior heat exists only for city buildings: an `aTcore` instance attribute (hash, not `R`)
   read through `spectral()`'s `vertDecl`/`vertMain` hooks (519656e).
 - Things behind the viewer (east, e.g. alpenglow peaks) can't be seen: put a label on the visible side instead.

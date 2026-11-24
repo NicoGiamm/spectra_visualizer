@@ -87,9 +87,9 @@ export const storms = () => event({ name: 'Thunderstorms from above', t0: 0, t1:
   where() { return this.ok ? this.p : null; } });
 
 // A terrestrial gamma-ray flash from the storm cell under you, seen by the station's detectors.
-export const tgf = st => event({ name: 'Terrestrial gamma-ray flash', t0: 26, t1: 27.4, bands: ['gamma'], freq: ['tgf'], tags: ['rare', 'stylised'],
+export const tgf = st => event({ name: 'Terrestrial gamma-ray flash', t0: 26, t1: 27.4, bands: ['gamma'], freq: ['tgfUp'], tags: ['rare', 'stylised'],
   note: 'For a fraction of a millisecond, the strong field above a thunderstorm accelerates electrons to near light speed; their bremsstrahlung shoots gamma rays (up to tens of MeV) up into space. Discovered by a gamma-ray observatory looking for cosmic bursts; the ASIM instrument on the ISS records them from right here (outside the South Atlantic Anomaly, where its detector is switched off). A storm makes one only now and then — a flash within view during one pass is luck. Drawn for 2.8 s of playback (2 min of orbit); the real flash lasts ~0.1 ms.',
-  init() { this.e = new Em('gamma'); },
+  init() { this.e = new Em('gamma', null, 0, 'high'); },   // 'high': beamed up from ~15 km, so Ground mode hides it
   update() { const p = st.pos(0); this.p = null; if (facing(p) < .05) return;
     this.e.set(p, 12, env(S.t, this.t0, this.t1, .5) * 1.5); this.p = p; },
   where() { return this.p; } });

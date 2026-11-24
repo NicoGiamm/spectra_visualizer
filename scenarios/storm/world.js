@@ -87,13 +87,16 @@ function grass() {   // instanced tallgrass blades, bending in the gusts (strong
       #endif`);
   };
   const COUNT = 60000, mesh = new THREE.InstancedMesh(g, mat, COUNT), tmp = new THREE.Object3D(), c = new THREE.Color();
-  for (let i = 0; i < COUNT; i++) {
+  let n = 0;   // blades placed; skipped road blades must not stay as identity instances at the origin
+  for (let k = 0; k < COUNT; k++) {
     const z = -160 + R() * 190, x = (R() - .5) * 2 * (2 + 70 * R() ** 1.5);
     if (Math.abs(x - ROAD_X) < 3.2) continue;
+    const i = n++;
     tmp.position.set(x, heightAt(x, z) - .02, z); tmp.rotation.set((R() - .5) * .3, R() * 6.28, (R() - .5) * .3);
     tmp.scale.setScalar(.5 + R() * .9); tmp.updateMatrix(); mesh.setMatrixAt(i, tmp.matrix);
     const dry = R(); mesh.setColorAt(i, c.setRGB(lerp(.08, .3, dry), lerp(.13, .22, dry), lerp(.03, .08, dry)));
   }
+  mesh.count = n;
   S.scene.add(spectral(mesh, 'meadow', { weight: .4 }));
 }
 const GUST = { value: 0 };

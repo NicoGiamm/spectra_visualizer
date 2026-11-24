@@ -290,6 +290,9 @@ export const SPECTRUM = {
   // Coniglio 2008, Mon. Wea. Rev. 136, 4839: MCS cold pools, θ deficit 5.4–11 K; −6 K here is a STAND-IN), seen in the 8–14 µm window
   coldPool:     { name: 'rain-cooled ground and hail (cold pool, ~273 K hail to ~290 K ground)', lam: 10.5e-6 },
   // ===== orbit additions (M12/T5)
+  // an upward-beamed TGF seen from orbit: the same ~10 MeV bremsstrahlung as `tgf`, but none of it heads down to the
+  // ground (Fishman et al. 1994, Science 264, 1313; Briggs et al. 2010, JGR 115, A07323)
+  tgfUp:           { name: 'terrestrial gamma-ray flash beamed up into space', E: 1e7, ground: false },
   // the Sun's chromosphere / transition region in the He II 30.4 nm line, the brightest solar EUV line (SDO/AIA 304 Å channel:
   // Lemen et al. 2012, Sol. Phys. 275, 17); absorbed in the thermosphere above ~100 km
   solarEUV:     { name: 'solar EUV (He II 30.4 nm, chromosphere/transition region)', lam: 30.4e-9, ground: false },
