@@ -286,8 +286,8 @@ export const SPECTRUM = {
   // 321); L-band 1.41 GHz is the soil-moisture channel (SMAP: Entekhabi et al. 2010, Proc. IEEE 98, 704)
   wetSoilMW:    { name: 'wet soil: microwave emissivity drop (L-band 1.41 GHz)', f: 1.41e9 },
   // rain-cooled ground under the outflow cold pool, 5–10 K below the air ahead of the storm (Engerer, Stensrud &
-  // Coniglio 2008, Mon. Wea. Rev. 136, 4839), seen in the 8–14 µm window
-  coldPool:     { name: 'rain-cooled ground and hail (cold pool, ~275–285 K)', lam: 10.5e-6 },
+  // Coniglio 2008, Mon. Wea. Rev. 136, 4839: MCS cold pools, θ deficit 5.4–11 K; −6 K here is a STAND-IN), seen in the 8–14 µm window
+  coldPool:     { name: 'rain-cooled ground and hail (cold pool, ~273 K hail to ~290 K ground)', lam: 10.5e-6 },
 };
 
 const RANGES = [['radio', 1, Infinity], ['micro', 1e-3, 1], ['ir', 700e-9, 1e-3], ['vis', 380e-9, 700e-9],
