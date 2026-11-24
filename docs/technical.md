@@ -176,8 +176,8 @@ A scenario is one object:
 ```js
 run({
   title, loading, hint,                       // UI text
-  atmosphere: { lightPollution, cloudCover }, // optional
-  fog, meterNorm,                             // optional
+  atmosphere: { lightPollution, cloudCover, site, air }, // optional (site, air: see below)
+  fog, meterNorm, view,                       // optional; view = { yaw, pitch } starting look
   build()  { /* add meshes */ return { walk(t, camera), groundAt(x, z), update(t) }; },
   events() { return [sky.sunset(), local.lighthouse(), ...]; },
 });
@@ -197,6 +197,13 @@ Physical processes (`freq`) are keys of `engine/core/spectrum.js`, where each on
 wavelength and the band is derived from it. To add a scene, copy `scenarios/seaside/`, write its `world.js` and
 compose `events()` from the shared library plus your own; the landing page picks it up automatically.
 
-A few conventions keep the scenes consistent: the view always faces west (where the Sun sets), randomness is
+Most scenes share one sky: a mid-latitude summer sunset, about 3.4 minutes per script-second. A scene elsewhere
+passes `atmosphere.site` with its own Sun and Moon tracks, computed for its place and date and cited in its
+`main.js` (the aurora at 69.65° N; the orbit, whose Sun circles once per script); the twilight colours then follow
+the Sun's depression. `atmosphere.air: false` removes the air altogether (the orbit): no day sky, clouds or fog, a
+black cold sky, no extinction between emitter and eye. Sky events placed for mid-latitude (Milky Way, planets) are
+left out where the site makes them wrong.
+
+A few conventions keep the scenes consistent: the front is always west (a scene may start looking elsewhere with `view`), randomness is
 seeded so scrubbing replays identically, and glowing things always go through the `Em` / `Rib` / `EmField`
 emitters so band filtering and the meters work everywhere.
