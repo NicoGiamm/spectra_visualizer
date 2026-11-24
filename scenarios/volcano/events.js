@@ -17,7 +17,8 @@ const C2 = 1.4388e-2, T_LAVA = 1423;
 const planckRel = (lam, T) => (Math.exp(C2 / (lam * T_LAVA)) - 1) / (Math.exp(C2 / (lam * T)) - 1);
 const visRel = T => planckRel(650e-9, T), irRel = T => planckRel(10e-6, T);   // 10 µm: what a thermal camera sees
 // crust surface temperature (K) dt script units after it formed (1 unit ≈ 3.4 min): ~600 °C after a few minutes,
-// ~260 °C after half an hour, ~170 °C after two hours — the t^-1/2 shape of Hon et al. 1994 (fit, STAND-IN constants)
+// ~260 °C after half an hour, ~170 °C after two hours — a t^-1/2 STAND-IN curve; Hon et al. 1994 measured values of
+// this order (their own fit is linear in log t)
 const crustT = dt => 353 + (T_LAVA - 353) / Math.sqrt(1 + Math.max(0, dt) / .3);
 
 const ORANGE = '#ff6a1a';
@@ -35,7 +36,7 @@ float lakeHot(){ vec2 q = vW.xz - uC.xz; float r = length(q)/${CRATER.lake.toFix
   float over = uOver*smoothstep(.25, 0., abs(r - uOver*1.1))*(.6 + .4*n);   // an overturn: a hot front sweeping the lake
   return clamp((crack + rim)*uHot + over, 0., 1.); }`;
 export const lavaLake = () => event({ name: 'Lava lake', t0: 0, t1: 60, bands: ['vis', 'ir', 'micro'], freq: ['lavaGlow', 'lavaThermal', 'crustThermal', 'lavaMicrowave'], tags: ['rare'],
-  note: 'A pond of molten basalt at about 1150 °C in the crater ahead. Dark crust plates drift across it and split along glowing cracks; every so often the crust founders and the lake turns over in a sweep of fresh lava. In visible light only the cracks glow red-orange (Planck: a few hundred °C colder and the visible glow is thousands of times fainter), while in infrared even the crust is bright — tens of times the ground around it — and in microwaves, where brightness simply follows temperature, the lake is several times brighter than the ground. Only a handful of volcanoes hold a lasting lava lake (Erebus, Erta Ale, Nyiragongo, Kīlauea 2008–18).',
+  note: 'A pond of molten basalt at about 1150 °C in the crater ahead. Dark crust plates drift across it and split along glowing cracks; every so often the crust founders and the lake turns over in a sweep of fresh lava. In visible light only the cracks glow red-orange (Planck: a few hundred °C colder and the visible glow is tens to thousands of times fainter), while in infrared even the crust is bright — tens of times the ground around it — and in microwaves, where brightness simply follows temperature, the lake is several times brighter than the ground. Only a handful of volcanoes hold a lasting lava lake (Erebus, Erta Ale, Nyiragongo, Kīlauea 2008–18).',
   init() {
     this.u = { uTime: S.TIME, uOver: { value: 0 }, uHot: { value: 1 }, uC: { value: LAKE_C() } };
     const m = new THREE.ShaderMaterial({ uniforms: this.u, vertexShader: LAKE_VS, fragmentShader: LAKE_GLSL + `
@@ -102,7 +103,7 @@ export const coolingFlows = () => event({ name: 'Cooling flow lobes', t0: 0, t1:
   where() { const l = this.lobes.find(l => S.t > l.te) || this.lobes[0]; return l.pts[l.pts.length >> 1]; } });
 
 // ---------------------------------------------------------------- lava fountain paroxysm
-export const fountain = () => event({ name: 'Lava fountain paroxysm', t0: 18, t1: 42, bands: ['vis', 'ir'], freq: ['lavaGlow', 'lavaThermal'],
+export const fountain = () => event({ name: 'Lava fountain paroxysm', t0: 18, t1: 42, bands: ['vis', 'ir'], freq: ['lavaGlow', 'lavaThermal'], tags: ['rare', 'time-compressed'],
   note: 'Gas-rich magma rises faster and the spattering vent in the lake grows into a fountain hundreds of metres high, like Etna\'s paroxysms of 2021, each lasting an hour or two. Clots leave the vent at ~1150 °C, yellow-orange, and redden as they cool in flight; in infrared the whole jet is a blaze.',
   init() {
     this.vent = LAKE_C().add(P(-30, 0, -25));
@@ -116,7 +117,7 @@ export const fountain = () => event({ name: 'Lava fountain paroxysm', t0: 18, t1
       const u = (T * q.r * .25 + q.s) % 1, y = 4 * H * u * (1 - u), sp = H * q.sp * u;
       const p = this.vent.clone().add(P(Math.cos(q.a) * sp - u * H * .15, y, Math.sin(q.a) * sp));
       const Tc = T_LAVA - 250 * u;                             // clots cool in flight
-      this.vf.set(i, p, 4 + H * .025, 1.4 * visRel(Tc) ** .5);
+      this.vf.set(i, p, 4 + H * .025, 1.4 * visRel(Tc) ** .5);   // square root = display tone curve for the clots, not physics
       if (i < 24) this.irf.set(i, p, 8 + H * .05, 1.2 * irRel(Tc));
     });
     this.top = this.vent.clone().add(P(0, H, 0));
@@ -157,12 +158,12 @@ export const gasPlume = () => event({ name: 'SO₂ gas plume', t0: 0, t1: 60, ba
     this.u.uCol.value.setRGB(.05 + .4 * tw, .045 + .26 * tw, .05 + .3 * tw).multiplyScalar(.6 + .4 * tw);
     this.u.uGlow.value = .25 + .5 * n; this.u.uAsh.value = env(t, 22, 44, 4) * .85;
     const uvSky = sm(-6, 3, sunEl());   // the skylight UV the SO₂ can block (surface.js uvSkylight)
-    S.act.uv += .4 * Math.max(uvSky, .05); S.act.vis += .2; S.act.ir += .1;
+    S.act.uv += .4 * uvSky; S.act.vis += .2; S.act.ir += .1;
   },
   where() { return this.axis(.35); } });
 
 // ---------------------------------------------------------------- volcanic lightning
-export const volcanicLightning = () => event({ name: 'Volcanic lightning', t0: 26, t1: 42, bands: ['vis', 'radio'], freq: ['lightning', 'sferics', 'ventVHF'], tags: ['rare'],
+export const volcanicLightning = () => event({ name: 'Volcanic lightning', t0: 26, t1: 42, bands: ['vis', 'radio'], freq: ['lightning', 'sferics', 'ventVHF'], tags: ['rare', 'time-compressed'],
   note: 'Ash particles colliding in the turbulent column charge up like a thundercloud (a "dirty thunderstorm"): short sparks crackle right above the vent and longer bolts jump through the ash cloud. Each flash also sends out VLF radio sferics and a burst of VHF pulses that lightning-mapping arrays pick up — the near-vent sparks are almost continuous in radio. Seen during ash-rich eruptions (Etna, Eyjafjallajökull, Redoubt, Calbuco).',
   init() {
     this.base = LAKE_C().add(P(-30, 200, -25));
@@ -189,7 +190,7 @@ export const volcanicLightning = () => event({ name: 'Volcanic lightning', t0: 2
 
 // ---------------------------------------------------------------- radon gamma at a fumarole
 export const radonFumarole = () => event({ name: 'Fumarole radon (gamma)', t0: 0, t1: 60, bands: ['gamma', 'ir'], freq: ['bi214Gamma', 'pb214Gamma', 'steam'],
-  note: 'A steaming crack on the ridge flank to your left (look left). Volcanic gas carries radon from the magma and the rock; its short-lived daughters Pb-214 (352 keV) and Bi-214 (609 keV) give off gamma rays. It is faint and local: a scintillator held over the vent reads a little above background, and the air absorbs most of it within a hundred metres or two. Fresh basalt itself is poorer in uranium, thorium and potassium than granite. The vapour above the crack is warm in infrared.',
+  note: 'A steaming crack on the ridge flank to your left (look left). Volcanic gas and soil gas carry radon from the magma and the rock; its daughters Pb-214 (352 keV) and Bi-214 (609 keV), which grow in over tens of minutes and settle on the rock of the crack, give off gamma rays. It is faint and local: a scintillator held over the vent reads a little above background, and the air absorbs most of it within a hundred metres or two. Fresh basalt itself is poorer in uranium, thorium and potassium than granite. The vapour above the crack is warm in infrared.',
   init() {
     const c = SPOTS.fumarole; this.pts = Array.from({ length: 6 }, () => c.clone().add(P((R() - .5) * 8, .3, (R() - .5) * 8)));
     this.g = new EmField('gamma', this.pts.length); this.ir = new EmField('ir', this.pts.length);
@@ -205,7 +206,7 @@ export const radonFumarole = () => event({ name: 'Fumarole radon (gamma)', t0: 0
 
 // ---------------------------------------------------------------- monitoring station
 export const monitoringStation = () => event({ name: 'Volcano monitoring station', t0: 0, t1: 60, bands: ['radio', 'micro', 'vis'], freq: ['monTelemetry', 'wifi5', 'gpsL1', 'ledRed'],
-  note: 'A solar-powered station on the ridge beside you: a GNSS antenna tracks navigation satellites (L band, microwave) to measure the volcano swelling by millimetres, a seismometer and tiltmeter report in short VHF telemetry bursts (radio), and a thermal camera on a mast watches the crater, streaming its video over a 5 GHz point-to-point link (microwave). A red status LED blinks on the box.',
+  note: 'A solar-powered station on the ridge beside you: a GNSS antenna tracks navigation satellites (L band, microwave) to measure the volcano swelling by millimetres, the seismometer streams continuously and the tiltmeter and GNSS report in short VHF telemetry bursts (radio), and a thermal camera on a mast watches the crater, streaming its video over a 5 GHz point-to-point link (microwave). A red status LED blinks on the box.',
   init() {
     const b = SPOTS.station, mast = b.clone().add(P(0, 6, 0)), cam = b.clone().add(P(-1.5, 4, 0)), G = new THREE.Group();
     const dark = new THREE.MeshStandardMaterial({ color: 0x2a2c30, roughness: .7 });
