@@ -289,6 +289,54 @@ export const SPECTRUM = {
   // rain-cooled ground under the outflow cold pool, 5–10 K below the air ahead of the storm (Engerer, Stensrud &
   // Coniglio 2008, Mon. Wea. Rev. 136, 4839: MCS cold pools, θ deficit 5.4–11 K; −6 K here is a STAND-IN), seen in the 8–14 µm window
   coldPool:     { name: 'rain-cooled ground and hail (cold pool, ~273 K hail to ~290 K ground)', lam: 10.5e-6 },
+  // ===== orbit additions (M12/T5)
+  // the Sun's transition region / corona in the He II 30.4 nm line, the brightest solar EUV line (SDO/AIA 304 Å channel:
+  // Lemen et al. 2012, Sol. Phys. 275, 17); absorbed in the thermosphere above ~100 km
+  solarEUV:     { name: 'solar EUV (He II 30.4 nm, chromosphere/corona)', lam: 30.4e-9, ground: false },
+  // the 1–2 MK corona in soft X-rays around 1 keV (Yohkoh SXT: Tsuneta et al. 1991, Sol. Phys. 136, 37; GOES XRS
+  // 0.1–0.8 nm monitors the same emission); absorbed by the air column
+  solarXray:    { name: 'solar corona soft X-rays (~1 keV)', E: 1e3, ground: false },
+  // geocoronal Lyman-α: solar Lyman-α resonantly scattered by exospheric hydrogen, a few kilorayleigh over the whole
+  // sky at low-orbit altitudes (Meier 1991, Space Sci. Rev. 58, 1); absorbed by O₂ below ~100 km
+  geocoronaLyA: { name: 'geocoronal Lyman-α (exospheric hydrogen, 121.6 nm)', lam: 121.6e-9, ground: false },
+  // hot O/B stars dominate the far-UV sky (GALEX FUV 135–175 nm: Martin et al. 2005, ApJ 619, L1); absorbed by ozone/O₂
+  starUV:       { name: 'far-UV starlight of hot O/B stars (~150 nm)', lam: 150e-9, ground: false },
+  // Earth's gamma-ray albedo: cosmic rays showering in the upper atmosphere make the limb the brightest gamma-ray
+  // source in a low-orbit sky above 100 MeV (Fermi-LAT: Abdo et al. 2009, Phys. Rev. D 80, 122004); they come up from
+  // 20–50 km and never reach the ground
+  earthLimbGamma: { name: 'Earth-limb albedo gamma rays (cosmic-ray showers in the upper air, >100 MeV)', E: 1e8, ground: false },
+  // in the South Atlantic Anomaly trapped protons (10–100s of MeV) hit the spacecraft and induce prompt nuclear
+  // de-excitation gamma lines and activation, ~0.5–10 MeV (Dean, Lei & Knight 2003, Space Sci. Rev. 105, 285; the SAA:
+  // Heirtzler 2002, J. Atmos. Sol.-Terr. Phys. 64, 1701); the protons stop high above the ground
+  saaGamma:     { name: 'secondary gamma rays from trapped protons hitting the station (SAA)', E: 1e6, ground: false },
+  // astronauts' light flashes: relativistic cosmic-ray nuclei crossing the eye make Cherenkov light in the vitreous
+  // (McNulty, Pease & Bond 1975, Science 189, 453 — the other mechanism is direct excitation of the retina); reported by
+  // most astronauts, more often in the SAA (Fuglesang et al. 2006, Aviat. Space Environ. Med. 77, 449). Visible light,
+  // but made inside the eye by particles the air stops: no ground observer sees it
+  eyeFlash:     { name: 'light flashes in the eye (Cherenkov light of cosmic-ray nuclei in the vitreous)', lam: 450e-9, ground: false },
+  // sprites: red N₂ first-positive emission at 50–90 km above large positive cloud-to-ground strokes, ~10–100 ms
+  // (Sentman et al. 1995, Geophys. Res. Lett. 22, 1205; spectrum: Mende et al. 1995, GRL 22, 2633); seen from the
+  // ground and from the ISS (ASIM: Neubert et al. 2019, Space Sci. Rev. 215, 26)
+  sprite:       { name: 'sprite (red N₂ first-positive glow, 50–90 km)', lam: 680e-9 },
+  // elves: a ring of N₂ first-positive emission at ~90 km where the lightning's EM pulse heats the lower ionosphere,
+  // < 1 ms, expanding to 300+ km (Fukunishi et al. 1996, Geophys. Res. Lett. 23, 2157)
+  elve:         { name: 'elve (expanding red ring at ~90 km from the lightning EM pulse)', lam: 680e-9 },
+  // OH Meinel bands: vibrationally excited hydroxyl at ~87 km, the brightest airglow, mostly 1–2 µm (Meinel 1950,
+  // ApJ 111, 555; Rousselot et al. 2000, A&A 354, 1134: the near-IR night-sky lines seen from the ground)
+  ohMeinel:     { name: 'OH Meinel airglow (near-IR ~1.6 µm, ~87 km)', lam: 1.6e-6 },
+  // O I 135.6 nm nightglow: O⁺ radiative recombination in the F region, brightest in the equatorial arcs either side of
+  // the magnetic equator (ICON FUV: Mende et al. 2017, Space Sci. Rev. 212, 655); absorbed by O₂ below ~100 km
+  fuvNightglow: { name: 'O I 135.6 nm nightglow (F-region recombination, equatorial arcs)', lam: 135.6e-9, ground: false },
+  // cold cloud tops (~210–240 K) against the ~290 K surface in the 10.3 µm window channel of geostationary imagers
+  // (GOES-16 ABI band 13: Schmit et al. 2017, Bull. Am. Meteorol. Soc. 98, 681)
+  cloudTopIR:   { name: 'cold cloud tops (~220 K) in the 10–12 µm window', lam: 10.3e-6 },
+  // Earth seen in microwaves from orbit at 19.35 GHz (SSM/I: Hollinger, Peirce & Poe 1990, IEEE TGRS 28, 781): land
+  // Tb ≈ 260–280 K (emissivity ~.9), the ocean only ~130–180 K (emissivity ~.5, Ulaby, Moore & Fung vol. I)
+  earthMicrowave: { name: 'Earth in microwaves: warm land, radiometrically cold ocean (19.35 GHz)', f: 19.35e9 },
+  // Earth's own thermal radio glow seen from above: Rayleigh–Jeans, Tb = emissivity × T ≈ 290 K over land, ~150 K over
+  // the sea (Fresnel reflectivity of sea water ~.5 at VHF: Ulaby, Moore & Fung vol. I); fainter than the galactic
+  // synchrotron sky at 100 MHz (600–9000 K, the 'synchrotron' key)
+  earthRadio:   { name: 'Earth\'s thermal radio glow (Tb ≈ 150–290 K at VHF)', f: 100e6 },
 };
 
 const RANGES = [['radio', 1, Infinity], ['micro', 1e-3, 1], ['ir', 700e-9, 1e-3], ['vis', 380e-9, 700e-9],

@@ -18,8 +18,18 @@ import { COMMON } from '../render/shaders.js';
 // the Sun along its track (re-evaluated at the start of each atmosphere update) and the twilight keyframes are read on
 // the twilight clock twi(): the script time at which the default track reaches the same solar depression, so the sky
 // colours follow the Sun's depression rather than the clock (a polar Sun sets slowly and slantwise).
+// A track may also be a function of t returning degrees (M12/T5: the orbit's Sun circles the sky once per script, which
+// no cubic follows).
 let SITE = null;
-const poly = (c, t) => c[0] + t * (c[1] + t * (c[2] + t * c[3]));
+const poly = (c, t) => (typeof c === 'function' ? c(t) : c[0] + t * (c[1] + t * (c[2] + t * c[3])));
+// Atmosphere switch (createAtmosphere opts.air, M12/T5): false = no air around the observer (orbit). The day sky and the
+// cloud deck are not drawn, the night sky is black down to whatever occludes it (no horizon mask, no airglow, no
+// twinkling, stars always on: the spectral eye's adaptation decides whether they show), its microwave and IR terms
+// drop to the cold sky (CMB only, ~3 K), its UV term becomes the geocoronal Lyman-α glow plus hot stars, and the eye
+// skips the air between emitters and the observer (compose.js eyeAtm). The lights still follow the site's Sun; a
+// scenario whose horizon is not at elevation 0 (the Earth's limb) re-sets ENV.sunLight / ENV.hemi in world.update().
+// Without the option every value is the original one: trail, seaside, city … are unchanged.
+export let AIR = true;
 export let SUN_AZ = 295;
 export const sunEl = () => SITE ? poly(SITE.sunEl, S.t) : 4 - S.t * .55;   // kept low and dim: sets at t≈7
 export const twi = () => SITE ? (4 - sunEl()) / .55 : S.t;      // twilight clock: the default track's time at this solar elevation
@@ -70,6 +80,7 @@ export const ENV = {};
 export function createAtmosphere(opts = {}) {
   const { scene, camera, TIME } = S;
   setSite(opts.site);
+  AIR = opts.air !== false;
   const lp = opts.lightPollution || 0;
 
   const sky = new Sky(); sky.scale.setScalar(20000); sky.renderOrder = -10; scene.add(sky);
@@ -79,10 +90,10 @@ export function createAtmosphere(opts = {}) {
   sky.material.fragmentShader = 'uniform float uFade;\n' + sky.material.fragmentShader.replace('gl_FragColor = vec4( retColor, 1.0 );', 'gl_FragColor = vec4( retColor * uFade, 1.0 );');
 
   const nightMat = new THREE.ShaderMaterial({
-    uniforms: { uTime: TIME, uStars: { value: 0 }, uMW: { value: 0 }, uCMB: { value: 0 }, uAir: { value: 0 }, uGlow: { value: new THREE.Color(0, 0, 0) }, uGalN: { value: GAL_N }, uGalC: { value: GAL_C } },
+    uniforms: { uTime: TIME, uStars: { value: 0 }, uMW: { value: 0 }, uCMB: { value: 0 }, uAir: { value: 0 }, uNoAir: { value: AIR ? 0 : 1 }, uGlow: { value: new THREE.Color(0, 0, 0) }, uGalN: { value: GAL_N }, uGalC: { value: GAL_C } },
     vertexShader: `varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
     fragmentShader: COMMON + `
-    varying vec3 vDir; uniform float uTime, uStars, uMW, uCMB, uAir; uniform vec3 uGalN, uGalC, uGlow;
+    varying vec3 vDir; uniform float uTime, uStars, uMW, uCMB, uAir, uNoAir; uniform vec3 uGalN, uGalC, uGlow;
     float h31(vec3 p){ p = fract(p*.3183099+.1); p *= 17.; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
     float n3(vec3 x){ vec3 i=floor(x), f=fract(x); f=f*f*(3.-2.*f);
       return mix(mix(mix(h31(i),h31(i+vec3(1,0,0)),f.x), mix(h31(i+vec3(0,1,0)),h31(i+vec3(1,1,0)),f.x),f.y),
@@ -95,11 +106,11 @@ export function createAtmosphere(opts = {}) {
       float dd = length(f-sp), fw = clamp(length(fwidth(p))*.6, 1e-4, .2);
       float b = pow(h31(c+51.), 5.)*boost + .15;
       float s = 1. - smoothstep(0., fw*(.6 + .9*b), dd);
-      float tw = .7 + .3*sin(uTime*(2.+5.*h31(c+3.)) + h*40.);
+      float tw = uNoAir > .5 ? 1. : .7 + .3*sin(uTime*(2.+5.*h31(c+3.)) + h*40.);   // no air: no scintillation
       return mix(vec3(.65,.75,1.), vec3(1.,.8,.58), h31(c+71.)) * s * b * tw;
     }
     void main(){
-      vec3 d = normalize(vDir); float above = smoothstep(-.03,.12,d.y); vec3 col = vec3(0.);
+      vec3 d = normalize(vDir); float above = uNoAir > .5 ? 1. : smoothstep(-.03,.12,d.y); vec3 col = vec3(0.);
       col += uAir*vec3(.007,.004,.015)*(1.+3.*pow(1.-max(d.y,0.),5.));
       col += uGlow*pow(1.-max(d.y,0.),7.);                       // city light dome
       float g = dot(d, uGalN), band = exp(-g*g/.02), core = pow(max(dot(d,uGalC),0.),5.);
@@ -146,13 +157,18 @@ export function createAtmosphere(opts = {}) {
   //          Ackermann 2012) → ~6e-6 per frame per sr through the pupil: L ≈ 2.3e-9 toward the inner Galaxy. 'gammaDiffuse'.
   //          Both are honestly near-black: a human-sized eye almost never catches one.
   // X-ray / gamma come from space: absorbed in Ground mode. The UV airglow amplitude is a STAND-IN (faint).
+  // No air (opts.air false, M12/T5): microwave = the CMB alone (2.725 K: black), IR = the ~3 K sky (black), and UV =
+  //          geocoronal Lyman-α, sunlight resonantly scattered by exospheric hydrogen: a few kR over the whole sky at
+  //          ISS altitude (Meier 1991, Space Sci. Rev. 58, 1), ~12× the 400 R airglow term above, amplitude STAND-IN on
+  //          that scale ('geocoronaLyA'), plus the far-UV of hot O/B stars, the bluest field stars here ('starUV').
+  //          Both far-UV: absorbed in Ground mode, like the X-ray and gamma backgrounds.
   const pos = (lam, E) => bandPos(E ? { E } : { lam });
   nightMat.userData.eyeBands = `
 #define EYE_SKY
 #define EYE_POS_A vec3(${pos(10e-6).toFixed(4)}, ${pos(340e-9).toFixed(4)}, ${pos(0, 1e8).toFixed(4)})
 #define EYE_POS_L vec3(${bandPos({ f: 100e6 }).toFixed(4)}, ${bandPos({ f: 20e9 }).toFixed(4)}, ${bandPos(SPECTRUM.cxb).toFixed(4)})
 void eyeBands(out vec4 o1, out vec4 o3){
-  vec3 d = normalize(vDir); float above = smoothstep(-.03, .12, d.y), sel = max(d.y, .02);
+  vec3 d = normalize(vDir); float above = uNoAir > .5 ? 1. : smoothstep(-.03, .12, d.y), sel = max(d.y, .02);
   float g = dot(d, uGalN), core = pow(max(dot(d, uGalC), 0.), 5.);
   float Tr = 36.*(17. + 230.*exp(-g*g/.06)*(1. + 2.5*core)*(.8 + .4*fbm3(d*4.)));
   float r = .006*Tr/1000.;
@@ -162,6 +178,8 @@ void eyeBands(out vec4 o1, out vec4 o3){
   float i = eyeL(thermal(xi))*(.04 + .5*xi*xi);
   float u = 2e-4*(1. + 3.*pow(1. - sel, 5.));
   float space = 1. - eyeGround, x = space*1.1e-9, gm = space*2.3e-9*(.1 + exp(-g*g/.008)*(1. + 3.*core)/4.);
+  if(uNoAir > .5){ vec3 s = stars(d, 90., .25, 4.) + stars(d, 220., .3, 1.5);
+    m = 0.; i = 0.; u = space*(2.5e-3 + uStars*max(s.b - s.r, 0.)*.6); }
   o1 = vec4(i, u, gm, 1.)*above; o1.a = 1.;
   o3 = vec4(r, m, x, 1.)*above; o3.a = 1.; }`;
   const nightSky = new THREE.Mesh(new THREE.SphereGeometry(15000, 64, 32), nightMat); nightSky.renderOrder = -9; scene.add(nightSky);
@@ -202,17 +220,17 @@ void eyeBands(out vec4 o1, out vec4 o3){
     const dim = 1 - .75 * lp;                                       // light pollution washes out faint stars
     // field stars follow the Sun's depression, not night(): mag 2–3 from δ ≈ 7–8° to mag 6 by δ ≈ 15° (astronomical
     // twilight), so the first planet and bright stars (sky.firstStars) come out on their own first (M8 physics audit)
-    const stars = sm(7, 15, -el);
+    const stars = AIR ? sm(7, 15, -el) : 1;
     nightMat.uniforms.uStars.value = on.vis ? stars * (1 - .4 * ml) * dim : 0; S.act.vis += n * .2;
-    nightMat.uniforms.uAir.value = on.vis ? n * (1 + 2 * ml) : 0;
+    nightMat.uniforms.uAir.value = on.vis && AIR ? n * (1 + 2 * ml) : 0;
     nightMat.uniforms.uGlow.value.copy(glow).multiplyScalar(on.vis ? n : 0);
     ENV.starDim = dim;
     const [lit, shade] = kf(CLOUD, t);
     cloudMat.uniforms.uLit.value.setRGB(lit[0] + .05 * ml + .06 * lp * n, lit[1] + .055 * ml + .035 * lp * n, lit[2] + .07 * ml + .015 * lp * n);
     cloudMat.uniforms.uShade.value.setRGB(...shade);
     cloudMat.uniforms.uCover.value = lerp(c0, c1, sm(14, 30, t));
-    const hor = kf(HOR, t)[0]; scene.fog.color.setRGB(on.vis ? hor[0] + .02 * ml : 0, on.vis ? hor[1] + .025 * ml : 0, on.vis ? hor[2] + .04 * ml : 0);
-    S.act.vis += 1 - sm(5, 20, t);
+    const hor = kf(HOR, t)[0], fv = on.vis && AIR; scene.fog.color.setRGB(fv ? hor[0] + .02 * ml : 0, fv ? hor[1] + .025 * ml : 0, fv ? hor[2] + .04 * ml : 0);
+    if (AIR) S.act.vis += 1 - sm(5, 20, t);
 
     const sd = dirAE(SUN_AZ, el); sunLight.position.copy(cam).addScaledVector(sd, 1000); sunLight.target.position.copy(cam);
     sunLight.intensity = 1.4 * sm(-1, 6, el); sunLight.color.setRGB(1, lerp(.24, .55, sm(0, 9, el)), lerp(.09, .3, sm(0, 9, el)));
@@ -221,8 +239,9 @@ void eyeBands(out vec4 o1, out vec4 o3){
     S.renderer.toneMappingExposure = lerp(.42, 1.1, n);
   }
 
-  function setVis(vis) { sky.visible = clouds.visible = vis; }
+  function setVis(vis) { sky.visible = clouds.visible = vis && AIR; }
+  setVis(true);
 
-  Object.assign(ENV, { sky, SU, nightMat, nightSky, cloudMat, clouds, sunLight, moonLight, hemi, headlamp, flashLight, update, setVis, starDim: 1 });
+  Object.assign(ENV, { air: AIR, sky, SU, nightMat, nightSky, cloudMat, clouds, sunLight, moonLight, hemi, headlamp, flashLight, update, setVis, starDim: 1 });
   return ENV;
 }
