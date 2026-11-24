@@ -146,7 +146,7 @@ function seaMaterial(instr) {
       col += vec3(.75,.82,1.)*uMoonI*(pow(m, 1200.)*6. + pow(m, 90.)*.12);              // moon glitter path
       col = mix(col, uSky*1.6 + uHor*.6, foam*.5);
       // dinoflagellates flash where the hull and the wake shear the water (mechanical stimulation), nowhere else
-      // (cells of ~25 cm flashing for a second or so: a speckle of sparks, densest against the hull)
+      // (cells of ~25 cm flashing for ~0.1 s: a speckle of sparks, densest against the hull)
       float bio = wash*wash*smoothstep(.55, .9, n2(p*4. + uSurfTime*.7))*(.4 + .6*n2(p*9. - uSurfTime*3.));
       col += vec3(.1,.55,1.)*uBio*bio*.9;
       col = mix(col, uHor, 1. - exp(-pow(dist*.00008, 2.)));

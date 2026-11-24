@@ -10,7 +10,7 @@ run({
   title: 'Open Ocean',
   loading: 'Casting off…',
   hint: 'Drag to look out over the ocean (a quarter sphere ahead) · scroll to zoom · click a band or press 1–7 to filter · space = play/pause · lasts 2 minutes',
-  // no light pollution; a few trade-wind cumulus at sunset that clear away after dark (uCover is a threshold: higher = fewer)
+  // no light pollution; a few fair-weather cumulus at sunset that clear away after dark (uCover is a threshold: higher = fewer)
   atmosphere: { lightPollution: 0, cloudCover: [.62, .9] },
   fog: .00006,
   build,

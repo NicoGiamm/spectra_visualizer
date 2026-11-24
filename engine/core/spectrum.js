@@ -87,7 +87,7 @@ export const SPECTRUM = {
   thermal290:      { name: 'thermal emission ~290 K (ground, water)', lam: 10e-6 },
   thermal310:      { name: 'thermal emission ~310 K (bodies)', lam: 9.3e-6 },
   thermal700:      { name: 'thermal emission ~700 K (exhaust, chimney)', lam: 4.1e-6 },
-  wetExhaust:      { name: 'wet diesel exhaust: gas and cooling water (~330 K)', lam: 8.8e-6 },   // raw-water-cooled exhaust ~50–60 °C (ABYC P-1; temperature a STAND-IN); Wien 2898 µm·K / 330 K
+  wetExhaust:      { name: 'wet diesel exhaust: gas and cooling water (~330 K)', lam: 8.8e-6 },   // raw-water-injected exhaust, ~330 K STAND-IN; Wien 2898 µm·K / 330 K
   flame:           { name: 'flame light (glowing soot)', lam: 600e-9 },
   thermal1200:     { name: 'thermal emission ~1200 K (flames, embers)', lam: 2.4e-6 },
   // --- artificial light ---

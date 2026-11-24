@@ -28,7 +28,7 @@ const masthead = () => boatP(MAST.u, BOAT.deck + MAST.h + .3, 0);      // VHF / 
 
 // Whale blows at dusk: a humpback surfacing a few hundred metres off. The blow is exhaled air at ~35 °C, saturated,
 // condensing into a spray column 3–5 m tall; thermal cameras pick blows out against the sea at several km (Zitterbart
-// et al. 2013, PLoS ONE 8:e71819), while the back itself, under blubber, is barely warmer than the water.
+// et al. 2013, PLoS ONE 8:e71217), while the back itself, under blubber, is barely warmer than the water.
 const BLOWS = [[2.6, 251, 520], [4.4, 254, 540], [6.3, 258, 560], [10.2, 262, 600]];   // [t, az, distance m]
 export const whale = () => event({ name: 'Whale blows', t0: 2, t1: 12, bands: ['vis', 'ir'], freq: ['sunlight', 'steam'], tags: ['rare'],
   note: 'A humpback breathing as it travels: each blow is a warm, wet column of exhaled air that hangs a few seconds in the twilight. In thermal infrared the blow stands out far better than the animal, whose back is barely warmer than the sea.',
@@ -55,9 +55,9 @@ export const engine = () => event({ name: 'Diesel engine', t0: 0, t1: 60, bands:
     this.p = boatP(-3, BOAT.deck + .45, -1.27); },
   where() { return this.p; } });
 
-// Navigation lights under engine: a sailing yacht motoring is a power-driven vessel (COLREGs 1972 Rule 25(e), Rule 23):
-// a white masthead ("steaming") light 225° forward on the mast, a red/green bicolour at the bow (Rule 25(b): allowed
-// below 20 m) and the sternlight on the transom; the masthead tricolour is for sailing only. From the cockpit you are
+// Navigation lights under engine: a sailing yacht motoring is a power-driven vessel (COLREGs 1972 Rules 3(b)–(c) and 23):
+// a white masthead ("steaming") light 225° forward on the mast, a red/green bicolour at the bow (Rule 21(b): sidelights
+// combined below 20 m) and the sternlight on the transom; the masthead tricolour is for sailing only (Rule 25(b)). From the cockpit you are
 // abaft all three arcs ahead of you (Annex I §9: cut-off within a few degrees), so you see their lenses' back-glow and
 // the light they throw on the foredeck and the bow wave, red to port, green to starboard.
 export const navLights = () => event({ name: 'Your navigation lights', t0: 8, t1: 60, bands: ['vis'], freq: ['navWhiteLED', 'navRed', 'navGreen'], tags: ['common'],
@@ -73,7 +73,7 @@ export const navLights = () => event({ name: 'Your navigation lights', t0: 8, t1
 
 // Your own AIS (Class B "CS", ITU-R M.1371-5): a position report on 161.975 / 162.025 MHz every 30 s above 2 kn, from
 // the masthead antenna. The ship on the horizon is the only receiver in VHF range (~20 nmi); its AIS answers with its
-// own Class A reports (every 10 s at 14–23 kn). Drawn as one burst every few script-seconds (real: many more).
+// own Class A reports (every 10 s at 0–14 kn, as a bulk carrier at ~13 kn; 6 s at 14–23 kn). Drawn as one burst every few script-seconds (real: many more).
 const AIS_EVERY = 5;
 export const ownAIS = () => event({ name: 'Your AIS transponder', t0: 0, t1: 60, bands: ['radio'], freq: ['ais'], tags: ['time-compressed'],
   note: 'The boat broadcasts its position, course and speed on VHF (162 MHz) every 30 seconds. Out here the only station that hears it is the ship on the horizon, which plots you on its chart display; its AIS reports come back the same way.',
@@ -85,12 +85,12 @@ export const ownAIS = () => event({ name: 'Your AIS transponder', t0: 0, t1: 60,
   where() { return this.p; } });
 
 // A cargo ship crossing ~11 km off: COLREGs Rule 23 lights for a vessel ≥ 50 m (two white masthead lights, the after
-// one higher; sidelight; sternlight), floodlit decks, X- and S-band radars (SOLAS V/19: both on ships ≥ 3000 GT), AIS
+// one higher; sidelight; sternlight, hidden from you: you are forward of its arc), decks dark at sea (Rule 20(b)) bar a few bridge windows, a 9 GHz radar plus a second, usually 3 GHz (SOLAS V/19.2.7), AIS
 // Class A, a hot funnel. Her radar horizon (antenna ~40 m) is ~30 km, so her X-band sweep finds your boat: each pass
 // lights your mast and radar reflector for an instant, as on her screen.
 export const SHIP = { on: 0, ais: new V3(), p: new V3() };
-export const cargoShip = () => event({ name: 'Cargo ship on the horizon', t0: 6, t1: 58, bands: ['vis', 'micro', 'radio', 'ir'], freq: ['navWhiteLED', 'navGreen', 'deckLight', 'xbandRadar', 'sbandRadar', 'ais', 'thermal700'], tags: ['time-compressed'],
-  note: 'The only other vessel for hundreds of kilometres: a bulk carrier on the great-circle route. Two white masthead lights and a green sidelight (she shows you her starboard side), floodlit decks, two rotating radars (9.4 GHz for detail, 3 GHz through rain) whose X-band beam paints your mast each time it sweeps past, AIS reports on VHF and a hot funnel.',
+export const cargoShip = () => event({ name: 'Cargo ship on the horizon', t0: 6, t1: 58, bands: ['vis', 'micro', 'radio', 'ir'], freq: ['navWhiteLED', 'navGreen', 'xbandRadar', 'sbandRadar', 'ais', 'thermal700'], tags: ['time-compressed'],
+  note: 'The only other vessel for hundreds of kilometres: a bulk carrier on the great-circle route. Two white masthead lights and a green sidelight (she shows you her starboard side), a few lit bridge windows, two rotating radars (9.4 GHz for detail, 3 GHz through rain) whose X-band beam paints your mast each time it sweeps past, AIS reports on VHF and a hot funnel. Her crossing is slowed down: a real bulk carrier would cross this arc in about 25 minutes.',
   init() {
     const hull = new THREE.MeshStandardMaterial({ color: 0x15100f, roughness: .8 }), G = new THREE.Group();
     const h = new THREE.Mesh(new THREE.BoxGeometry(230, 12, 36), hull); h.position.y = 4; G.add(h);
@@ -108,8 +108,8 @@ export const cargoShip = () => event({ name: 'Cargo ship on the horizon', t0: 6,
     this.g.position.copy(pos); this.g.rotation.y = -hd * DEG;
     const fw = new V3(Math.cos(hd * DEG), 0, Math.sin(hd * DEG)), at = (f, y, s = 0) => pos.clone().addScaledVector(fw, f).add(new V3(-fw.z * s, y, fw.x * s));
     const I = env(t, this.t0, this.t1, 1.5), nav = sm(9, 14, t) * I, k = 10;     // k: light sizes readable at 11 km (as the seaside fishing boats scale theirs)
-    this.L.set(0, at(40, 38), 9 * k, nav).set(1, at(-95, 50), 9 * k, nav).set(2, at(-90, 24, 17), 7 * k, nav * .7).set(3, at(-112, 14), 6 * k, nav * .2);
-    for (let i = 0; i < 5; i++) this.L.set(4 + i, at(-60 + i * 30, 20), 10 * k, nav * .35);
+    this.L.set(0, at(60, 38), 9 * k, nav).set(1, at(-95, 50), 9 * k, nav).set(2, at(-90, 24, 17), 7 * k, nav * .7);   // no sternlight: at ~102° relative you are outside its 135° arc (Rule 21(c))
+    for (let i = 0; i < 3; i++) this.L.set(4 + i, at(-95, 26 + i * 4, 17.5), 3 * k, nav * .12);   // dim bridge windows; working lights stay off at sea (Rule 20(b))
     const toMe = Math.atan2(c.z - pos.z, c.x - pos.x), ra = T * 2.4, face = Math.max(0, Math.cos(ra - toMe)) ** 16;   // the X-band antenna turns ~24 rpm
     this.radar.set(at(-95, 36), 90 + 260 * face, I * (.2 + .9 * face));
     const sface = Math.max(0, Math.cos(T * 2.1 + 1.7 - toMe)) ** 8; this.sband.set(at(-95, 31), 80 + 180 * sface, I * (.15 + .6 * sface));
@@ -147,8 +147,8 @@ export const gnss = () => event({ name: 'GPS & Galileo satellites', t0: 0, t1: 6
   where() { const q = this.pos(this.s[3], 3, S.t); return skyP(q.az, q.el); } });
 
 // Satellite phone: the evening weather download (GRIB files) through an Iridium terminal clipped to the port cockpit coaming. Iridium
-// satellites fly at 780 km and cross the sky in ~10 min, so the link hands over as one sets; on this clock a pass is a
-// few script-seconds (time-compressed). The terminal and the satellite talk in short TDMA bursts (8.28 ms every 90 ms).
+// satellites fly at 780 km and cross the sky in ~10 min, so the link hands over as one sets; drawn here over 8 script units
+// with the bursts slowed down (time-compressed). The terminal and the satellite talk in short TDMA/TDD bursts (8.28 ms every 90 ms).
 const SAT_T0 = 34, SAT_T1 = 42;
 export const satphone = () => event({ name: 'Satellite phone (Iridium)', t0: SAT_T0, t1: SAT_T1, bands: ['micro'], freq: ['iridium'], tags: ['time-compressed'],
   note: 'No phone network reaches this far, so the weather forecast comes down through an Iridium satellite 780 km up: the terminal on the cockpit coaming and the satellite trade short L-band bursts (1.6 GHz) as it crosses the sky. Apart from the GPS signals it is the only microwave link aboard.',
@@ -162,7 +162,7 @@ export const satphone = () => event({ name: 'Satellite phone (Iridium)', t0: SAT
     packet(this.up, a, sat, ph / .5, 1600, 14, I * .6); },
   where() { return this.p; } });
 
-// Bioluminescence: dinoflagellates (Noctiluca, Pyrocystis) flash when the water is sheared, so only the hull's wash and
+// Bioluminescence: oceanic dinoflagellates (Pyrocystis and others) flash when the water is sheared, so only the hull's wash and
 // the bow wave light up, blue (~475 nm), streaming aft past you. The sea shader draws the glow in the wash; these are
 // the brighter individual flashes. Cold light: nothing in IR.
 export const bioluminescence = () => event({ name: 'Bioluminescent wake', t0: 20, t1: 60, bands: ['vis'], freq: ['dinoflagellate'], tags: ['common'],
