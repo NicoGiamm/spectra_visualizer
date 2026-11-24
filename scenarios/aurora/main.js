@@ -1,4 +1,4 @@
-// Polar night under an aurora: a snowfield near Tromsø on an October evening; the Sun sets in the south-west and an
+// Arctic evening aurora: a snowfield near Tromsø on an October evening (an early cold spell); the Sun sets in the south-west and an
 // auroral substorm builds, breaks up overhead and fades into pulsating patches.
 import { run } from 'spectra/app.js';
 import * as sky from 'spectra/events/sky.js';
@@ -28,13 +28,18 @@ const SITE = {
   moonElong: 122.3,
 };
 
-// The curtain: a close substorm, the same library event as the distant arc of the other scenarios, retimed and
-// brought overhead: quiet arc from t 18, breakup at t 40, pulsating recovery to the end.
-const curtain = sky.aurora({ name: 'Auroral substorm overhead', t0: 18, t1: 60, brk: 22, az0: FOV_SKY.az0 + 12, az1: FOV_SKY.az1, elBot: 12, topK: 2.3, ampK: 1.3,
-  note: 'A substorm right overhead. A quiet green arc (oxygen, 557.7 nm, ~110 km up) lies across the northern sky in the twilight; then it brightens and breaks up into rays and folds racing along the curtain, red tops (oxygen 630 nm, 200–300 km) and a pink-violet lower edge (N₂⁺ 427.8 nm, N₂ first positive); then it falls apart into patches that pulse every few seconds. Its near-IR glow and VHF radar echoes reach the ground; its far-UV and the X-rays the electrons make when they stop in the air are absorbed high up (Orbit only).' });
+// The curtain: a close substorm, the same library event as the distant arc of the other scenarios, retimed: quiet arc
+// from t 18, breakup at t 40, pulsating recovery to the end. Geometry: arcs run along geomagnetic east–west — at Tromsø
+// (IGRF-13, 2026: declination +11.3°, inclination 78.4°) that is az ≈ 101 / 281, the magnetic zenith at az ≈ 191,
+// el ≈ 78 (south, out of view). So in the west-facing cone the arc rises from the WNW horizon (az0 280) toward the
+// north-west (az1 330, tilt), and during the breakup it climbs toward the zenith (rise) — where the corona would be.
+const curtain = sky.aurora({ name: 'Auroral substorm', t0: 18, t1: 60, brk: 22, az0: 280, az1: FOV_SKY.az1, elBot: 6, tilt: 12, rise: 16, topK: 1.1, ampK: 1.3, tags: ['common'],
+  note: 'A substorm builds over you. A quiet green arc (oxygen, 557.7 nm, ~110 km up) rises out of the west-north-west across the northern sky in the twilight; then it brightens, climbs and breaks up into rays and folds racing along the curtain, red tops (oxygen 630 nm, 200–300 km) and a pink-violet lower edge (N₂⁺ 427.8 nm, N₂ first positive); then it falls apart into patches that pulse every few seconds. The rays would really converge on the magnetic zenith (the corona), almost overhead and out of view; drawn here straight up (stylised). Its near-IR glow and VHF radar echoes reach the ground; its far-UV and the X-rays the electrons make when they stop in the air are absorbed high up (Orbit only).' });
 
 run({
-  title: 'Polar night aurora',
+  title: 'Arctic evening aurora',
+  // start facing the arc: yaw −.6 rad ≈ az 304, the middle of the geomagnetically aligned arc (az 280–330); pitch up a little for the curtain
+  view: { yaw: -.6, pitch: .22 },
   loading: 'Laying the snow…',
   hint: 'Drag to look ahead and up (a quarter sphere, you can\'t turn behind yourself) · scroll to zoom · click a band or press 1–7 to filter · space = play/pause · the evening lasts 2 minutes',
   atmosphere: { site: SITE, cloudCover: [.86, .9] },
@@ -44,7 +49,7 @@ run({
     sky.sunset(), curtain, local.snowfield(curtain), local.frozenLake(curtain), local.cabin(),
     observer({ name: 'You', note: 'Your phone still pings the nearest mast (microwave) every few seconds and sends short Bluetooth bursts (2.4 GHz).' }),
     local.auroraNearUV(curtain), local.akr(curtain), local.riometer(curtain), local.snowmobile(),
-    sky.satellitePass(), sky.cmb(),
-    sky.airShowers({ note: 'Cosmic rays hit the upper air and their particle cascades fan out as they descend. Near the magnetic pole the geomagnetic field turns fewer of the low-energy ones away. From the ground: a near-UV Cherenkov flash, N₂ fluorescence and a 30–80 MHz radio pulse; the gamma secondaries are absorbed. Real showers last microseconds.' }),
+    sky.cmb(),   // no satellite pass: an ISS pass cannot culminate in the west cone at 69.65° N
+    sky.airShowers({ note: 'Cosmic rays hit the upper air and their particle cascades fan out as they descend. Near the magnetic pole the geomagnetic field turns fewer of the low-energy ones away. The big showers drawn here, though, come from primaries far too energetic to be deflected. From the ground: a near-UV Cherenkov flash, N₂ fluorescence and a 30–80 MHz radio pulse; the gamma secondaries are absorbed. Real showers last microseconds.' }),
   ],
 });

@@ -1,4 +1,4 @@
-// Polar snowfield near Tromsø (69.65° N): open snow sloping gently down to a frozen lake ahead (west), low ridges to
+// Arctic snowfield near Tromsø (69.65° N): open snow sloping gently down to a frozen lake ahead (west), low ridges to
 // the north (right), the Lyngen-like peaks far to the west where the Sun sets in the south-west, a red cabin on the
 // lake's south shore. The viewer walks slowly toward the shore along a snowshoe track.
 import * as THREE from 'three';
@@ -26,24 +26,29 @@ const slopeAt = (x, z) => { const e = 2, hx = heightAt(x + e, z) - heightAt(x - 
 
 // Local surfaces, same shape and source keys as PRESET (engine/render/surface.js: P(T0, Teq, tau, eIR, eMW, uvAlb,
 // gamma, rRadio, gloss, [Tradio, Tmicro, Tgamma])):
-//   snow  cold dry snow on a clear Arctic evening: T0 −12 °C at sunset → Teq −22 °C (surface radiative cooling under
-//         a clear sky; snow's low conductivity, k ≈ 0.1–0.3 W m⁻¹ K⁻¹ (Sturm et al. 1997, J. Glaciol. 43, 26), keeps
-//         the surface decoupled from the warmer snowpack) — temperatures STAND-IN, tau fast (μ 130 [Oke]); eIR .99
-//         [Hori]; eMW .7 dry snow at 37 GHz [Mätzler]; uvAlb .85 [WHO, Blumthaler & Ambach]; gamma .1 [UN]
-//   ice   bare, wind-swept lake ice: conducts heat up from the 0 °C water (k_ice ≈ 2.2 W m⁻¹ K⁻¹ vs snow's 0.1–0.3,
-//         Sturm et al. 1997), so it stays several degrees warmer than the snow — T0 −4 → Teq −8 °C STAND-IN; eIR .97
-//         [Hori, ice]; eMW .6 — STAND-IN: clear freshwater ice is nearly lossless at 10–37 GHz, so a radiometer sees
-//         through it to the water below (calm water .45 [Wilheit, UMF]), raised a little by bubbles; uvAlb .1 — STAND-IN (clear ice, like water
-//         < 0.1 [WHO]); gamma .05 (water shields the ground [UN]); rRadio .5 STAND-IN; glossy (mirrors the sky at
-//         grazing angles)
+//   snow  a shallow early-season cover in an October cold spell: T0 −4 °C at sunset → Teq −12 °C (surface radiative
+//         cooling under a clear sky; snow's low conductivity, k ≈ 0.1–0.3 W m⁻¹ K⁻¹ (Sturm et al. 1997, J. Glaciol. 43,
+//         26), keeps the surface decoupled from the warmer ground) — temperatures STAND-IN, tau fast (μ 130 [Oke]); eIR
+//         .99 [Hori]; eMW .8 — a thin, fine-grained cover scatters less than deep dry snow (.7 at 37 GHz [Mätzler]) and
+//         lets the moist ground below show, STAND-IN; uvAlb .85 [WHO, Blumthaler & Ambach]; gamma .1 [UN]
+//   ice   new, bare lake ice a few cm thick: conducts heat up from the 0 °C water (k_ice ≈ 2.2 W m⁻¹ K⁻¹ vs snow's
+//         0.1–0.3, Sturm et al. 1997), so it stays warmer than the snow — T0 −1 → Teq −4 °C STAND-IN; eIR .97 [Hori,
+//         ice]; eMW .7: the low-loss ice passes the microwaves to the water, and the two interfaces reflect R ≈ .08
+//         (air–ice, ε' ≈ 3.15) and R ≈ .26 (ice–water) at 37 GHz [UMF], so e ≈ (1 − .08)(1 − .26) ≈ .7 — much warmer
+//         than open water (.45 [Wilheit]), about like the snow; uvAlb .1 — STAND-IN (clear ice, like water < 0.1
+//         [WHO]); gamma .05 (water shields the ground [UN]); rRadio .5 STAND-IN; glossy (mirrors the sky at grazing angles)
 //   rock  frost-shattered schist on the ridges: as PRESET.rock [Sal, EL, UMF, UN], temperatures STAND-IN (−6 → −14 °C)
+//   cabin the outside of a heated, insulated log cabin: only a few K above the snow (the heat leaks at the windows
+//         and the stove pipe, drawn as sources) — T0 −1 → Teq −8 °C STAND-IN; wood's eIR .9, eMW .9, uvAlb .05
+//         (PRESET.wood [EL, UMF]); gamma .1 STAND-IN; transmission TRANS.wood
 //   birch leafless mountain birch: PRESET.canopy's emissivities and transmission [EL, MOD, UMF, UN; TRANS.canopy], at
 //         air temperature (−10 → −18 °C STAND-IN) — not the summer canopy's 21 °C
-const GROUND = [.05, 0, 0], CANOPY = [.9, .25, .95];   // surface.js TRANS.ground / TRANS.canopy
+const GROUND = [.05, 0, 0], CANOPY = [.9, .25, .95], WOOD = [.95, .6, .88];   // surface.js TRANS.ground / .canopy / .wood
 const P = (T0, Teq, tau, eIR, eMW, uvAlb, gamma, rRadio, gloss = 0, tr = GROUND) => ({ A: [T0, Teq, tau ? 1 / tau : 0, eIR], B: [eMW, uvAlb, gamma, rRadio], C: [gloss, ...tr] });
 export const SURF = {
-  snow: P(-12, -22, 8, .99, .7, .85, .1, .3, .2),
-  ice: P(-4, -8, 25, .97, .6, .1, .05, .5, 1),
+  snow: P(-4, -12, 8, .99, .8, .85, .1, .3, .2),
+  ice: P(-1, -4, 25, .97, .7, .1, .05, .5, 1),
+  cabin: P(-1, -8, 12, .9, .9, .05, .1, .3, 0, WOOD),
   rock: P(-6, -14, 40, .9, .88, .12, 1, .5),
   birch: P(-10, -18, 25, .97, .93, .03, .25, .3, 0, CANOPY),
 };

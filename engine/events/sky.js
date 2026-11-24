@@ -158,7 +158,10 @@ export const blackHoleBinary = o => event({ name: 'Black-hole X-ray binary', t0:
 // from one displacement function (`at(u, v)`), so the side ribbons (near-IR, radar, UV, X-ray) follow its folds.
 // Overrides: az0 / az1 (arc extent, deg), elBot (lower border, deg), dist (m); phases scale with t0 / t1.
 // Close-up overrides (M12/T1, the aurora scenario; unset = the distant arc above, unchanged): brk (breakup offset after
-// t0, default 7 s), topK (curtain height × topK above elBot instead of the absolute top), ampK (fold amplitude ×).
+// t0, default 7 s), topK (curtain height × topK above elBot instead of the absolute top), ampK (fold amplitude ×),
+// tilt (deg the lower border climbs from az0 to az1: an arc along geomagnetic east–west seen from inside the oval
+// rises from the horizon toward the magnetic north), rise (deg the lower border climbs during the breakup and
+// recovery: the arc moves toward the zenith). Both need topK.
 const AUR_FS = `float h21(vec2 p){ p = fract(p*vec2(123.34,456.21)); p += dot(p,p+45.32); return fract(p.x*p.y); }
   float n2(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f); return mix(mix(h21(i),h21(i+vec2(1,0)),f.x), mix(h21(i+vec2(0,1)),h21(i+vec2(1,1)),f.x), f.y); }
   uniform float uTime, uI, uRay, uRed, uPulse, uPhase, uBlue; varying vec2 vUv;
@@ -206,7 +209,8 @@ export const aurora = o => event({ name: 'Aurora', t0: 26, t1: 50, az0: 295, az1
     const st = this.st, ph = st.phi;
     const d = st.amp * (.6 * Math.sin(u * 9 + ph) + .3 * Math.sin(u * 23 - ph * 1.7 + 1.3) + .1 * st.bk * Math.sin(u * 51 + ph * 2.3));
     const r = this.dist + d, az = (this.az0 + (this.az1 - this.az0) * u) * DEG;
-    const top = (this.topK ? this.elBot + st.top * this.topK : st.top) * (.82 + .18 * Math.sin(u * 5.3 + ph * .3)), el = lerp(this.elBot, top, v) * DEG;
+    const eb = this.topK ? this.elBot + (this.tilt || 0) * u + (this.rise || 0) * (st.bk + .6 * st.rc * (1 - st.bk)) : this.elBot;
+    const top = (this.topK ? eb + st.top * this.topK : st.top) * (.82 + .18 * Math.sin(u * 5.3 + ph * .3)), el = lerp(eb, top, v) * DEG;
     return out.set(Math.cos(az) * r, Math.tan(el) * r, Math.sin(az) * r);
   },
   update() {
