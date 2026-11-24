@@ -12,7 +12,8 @@ There is no lint or unit test: these two commands are the checks. Arguments: `$A
 ## Steps
 
 1. **Scope.** Scenario ids from the arguments; if none, derive them from `git status --short`: a change under
-   `scenarios/<id>/` → that id; anything under `engine/` or `src/` → all of `trail seaside city`.
+   `scenarios/<id>/` → that id; anything under `engine/` or `src/` → every scenario (`uv run spectra list`: trail seaside city aurora storm volcano
+   ocean orbit — aurora and orbit are the only users of the atmosphere `site` / `air: false` / site clock paths).
    Bands for the instrument view: from `--bands`, else the bands the touched events/materials use
    (default `ir,micro`). Moments: from `--t`, else `5,30,54`.
 2. **Timeline** — one call for all ids: `uv run spectra timeline <ids>`. Read the physics-check section: it must

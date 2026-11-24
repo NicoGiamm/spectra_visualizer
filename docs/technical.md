@@ -205,8 +205,9 @@ compose `events()` from the shared library plus your own; the landing page picks
 
 Most scenes share one sky: a mid-latitude summer sunset, about 3.4 minutes per script-second. A scene elsewhere
 passes `atmosphere.site` with its own Sun and Moon tracks, computed for its place and date and cited in its
-`main.js` (the aurora at 69.65° N; the orbit, whose Sun circles once per script); the twilight colours then follow
-the Sun's depression. `atmosphere.air: false` removes the air altogether (the orbit): no day sky, clouds or fog, a
+`main.js` (the aurora at 69.65° N; the orbit, whose Sun circles once per script, so its tracks are functions of t
+rather than cubics); the twilight colours then follow the Sun's depression, and `site.clock: { start, minPerUnit }`
+sets the HUD's local time (otherwise 19:30 → 23:30). `atmosphere.air: false` removes the air altogether (the orbit): no day sky, clouds or fog, a
 black cold sky, no extinction between emitter and eye. Sky events placed for mid-latitude (Milky Way, planets) are
 left out where the site makes them wrong.
 

@@ -25,8 +25,10 @@ its terrain, props, camera walk and ground height.
    keyframes `HEMI`/`HOR`/`CLOUD`/`CONTRAIL` read with `kf()`. Atmosphere also owns the lights (sun, moon, hemi,
    headlamp, storm flash) via `ENV`. Scenario options: `lightPollution` (dims stars/Milky Way, adds a horizon glow),
    `cloudCover`, and (M12) `site`: a scenario at another latitude/date passes its own Sun/Moon track fits
-   (`{sunAz, sunEl, moonAz, moonEl, moonElong}`, computed, cited in its main.js); the twilight colours then follow the
-   Sun's depression through `twi()`. Without a site everything is the shared mid-latitude summer track. Never give a
+   (`{sunAz, sunEl, moonAz, moonEl, moonElong}`: cubic coefficients in t, or functions of t when no cubic follows the
+   track, as in the orbit; computed, cited in its main.js) and optionally `clock: { start, minPerUnit }` (local hours
+   at t = 0, minutes per script unit) for the HUD (`clockHours()`; without it 19:30 + 4 h). The twilight colours then
+   follow the Sun's depression through `twi()`. Without a site everything is the shared mid-latitude summer track. Never give a
    scenario a sun or clock outside this mechanism; library sky events placed for mid-latitude (Milky Way, Venus,
    planets, Moon) are left out of a scenario whose site makes them wrong.
 3. **Solids go through `solid(mesh, instrMat?)`, visible-only sprites through `visOnly()`**, or the instrument view
