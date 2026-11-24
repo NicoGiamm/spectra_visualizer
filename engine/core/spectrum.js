@@ -267,6 +267,27 @@ export const SPECTRUM = {
   // imaging riometer, Detrick & Rosenberg 1990, Radio Sci. 25, 325; method: Little & Leinbach 1959, Proc. IRE 47, 315);
   // the energetic electrons of a substorm ionise the D region, which absorbs a few dB of it
   cosmicNoise38: { name: 'cosmic radio noise at 38.2 MHz (riometer)', f: 38.2e6 },
+  // ===== storm additions (M12/T2)
+  // WSR-88D (NEXRAD) operates in 2700–3000 MHz, the meteorological-aids / radiolocation S-band (NOAA Radar Operations
+  // Center, WSR-88D system specification; ITU RR Art. 5); 10 cm wavelength, chosen because rain attenuates it little
+  nexrad:       { name: 'NEXRAD weather radar pulses (S-band 2.7–3.0 GHz) and their rain echoes', f: 2.8e9 },
+  // whistlers: lightning VLF energy ducted along geomagnetic field lines to the other hemisphere and back, dispersed
+  // into a falling tone of ~1–10 kHz lasting about a second (Storey 1953, Phil. Trans. R. Soc. A 246, 113;
+  // Helliwell 1965, "Whistlers and Related Ionospheric Phenomena")
+  whistler:     { name: 'whistlers (dispersed lightning VLF, falling ~10→1 kHz tone)', f: 5e3 },
+  // lightning leaders radiate impulsive VHF from every step; lightning mapping arrays locate them at 60–66 MHz
+  // (Rison et al. 1999, Geophys. Res. Lett. 26, 3573)
+  lightningVHF: { name: 'lightning leader VHF bursts (LMA band, 60–66 MHz)', f: 63e6 },
+  // liquid water emits strongly at 20–40 GHz: a ground radiometer's sky brightness temperature rises from ~20–30 K
+  // clear to ≳ 250 K under heavy rain (Westwater 1978, Radio Sci. 13, 677; Ulaby, Moore & Fung vol. I); 31.4 GHz is
+  // the standard liquid-water channel
+  rainMicro:    { name: 'rain and cloud water thermal emission (31.4 GHz, warm against the cold sky)', f: 31.4e9 },
+  // wet soil: the dielectric constant of water lowers the emissivity 0.92 → ~0.7 (Schmugge 1983, IEEE TGRS GE-21,
+  // 321); L-band 1.41 GHz is the soil-moisture channel (SMAP: Entekhabi et al. 2010, Proc. IEEE 98, 704)
+  wetSoilMW:    { name: 'wet soil: microwave emissivity drop (L-band 1.41 GHz)', f: 1.41e9 },
+  // rain-cooled ground under the outflow cold pool, 5–10 K below the air ahead of the storm (Engerer, Stensrud &
+  // Coniglio 2008, Mon. Wea. Rev. 136, 4839), seen in the 8–14 µm window
+  coldPool:     { name: 'rain-cooled ground and hail (cold pool, ~275–285 K)', lam: 10.5e-6 },
 };
 
 const RANGES = [['radio', 1, Infinity], ['micro', 1e-3, 1], ['ir', 700e-9, 1e-3], ['vis', 380e-9, 700e-9],
