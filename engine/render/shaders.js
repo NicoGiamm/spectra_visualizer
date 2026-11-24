@@ -87,8 +87,9 @@ void main(){
 }`;
 
 // Path source: camera-facing ribbon. u runs 0..1 along the path, v is -1..1 across it.
-// Old view: uLen = length / width, so dash patterns keep a constant aspect; a wide-tipped ribbon breaks
-// the radio dashes into confetti — build cones from streamlines + a mouth ring instead.
+// Old view: uLen = length / width, so dash patterns keep a constant aspect; a ribbon whose width changes a lot
+// along it breaks the radio dashes into confetti. Extended sky objects (remnant shells, nebula outlines, M11/T5) are
+// closed loops of constant width.
 export const RIB_VS = `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`;
 
 export const RIB_FS = COMMON + `
