@@ -64,7 +64,7 @@ shared uniform `uPhys` (sources.js `PHYS`, 1 while `S.eye`; shaders.js header).
    (`surfNIR`: nirAlb × (sky hemisphere + Moon + near-IR lamps)); a custom surface defines `#define EYE_NIR` with
    `float eyeNIR()` in its hook (the sea, the valley fog, the night sky — without it it is black in near-IR). Lamps
    that light the ground in near-IR register `addTx('nir', () => ({ p, power }))` (power at 1 m in scene light units:
-   the city's sodium lamps, the 850 nm camera rings). The near-IR sky (`skyNIR`, airglow + twilight) and every other
+   the city's sodium lamps, the 850 nm camera rings). The near-IR sky (`skyNIR`, airglow + twilight) lights the ground but is **not drawn** (`NIR_SKY_SHOWN = 0`, user decision M11: drawn, it washed the night into a pale haze) — and every other
    band sky are ONE table, `BAND_SKY` / `BAND_SKY_GLSL` in `engine/world/atmosphere.js`, injected into the sky hook and
    the surfaces' reflections — don't copy the formulas.
 8. **Surfaces take their physics from `PRESET`s in `engine/render/surface.js`**, packed as

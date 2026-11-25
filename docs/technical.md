@@ -133,7 +133,7 @@ In the spectral eye every surface also **reflects** each band's light (Kirchhoff
 transmitters and the synchrotron sky (sea, wet ground and metal are radio mirrors), microwave from transmitters and the
 cold sky (metal and calm water read cold), thermal IR the cold sky at grazing angles, UV the skylight; whether a
 surface mirrors or scatters a band follows its roughness against the wavelength (Beckmann), with Schlick's Fresnel
-law for the angle. In near-IR the surfaces are seen only by reflection: `nirAlb` × the twilight / airglow sky, the
+law for the angle. In near-IR the sky itself is drawn dark (`NIR_SKY_SHOWN = 0`, a stylised choice: the real airglow sky is bright in night-vision goggles but washed the combined view out), and the surfaces are seen only by reflection: `nirAlb` × the twilight / airglow sky, the
 Moon and the near-IR lamps a scene registers (`addTx('nir', …)`: the city's sodium lamps and 850 nm camera
 illuminators); the sea mirrors the bright near-IR sky and the Moon's glitter path, fog glows. The formulas and every
 reflectivity's source are in the header of `engine/render/surface.js`.

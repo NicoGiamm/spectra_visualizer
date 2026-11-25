@@ -305,7 +305,7 @@ float eyeNIR(){
   vec3 M = uNirMoon.xyz; float cosv = clamp(dot(-V, N), 0., 1.), F = fresnelS(uSurfD.z, cosv), s = max(2.*uSurfD.w, .03);
   float Eh = uNirSky + uNirMoon.w*max(M.y, 0.);                                   // irradiance on a level surface
   float glint = uNirMoon.w*step(0., M.y)*exp(-(1. - dot(Rf, M))/(s*s))/(2.*s*s);
-  float L = mix(F*(skyNIR(Rf, uNirSky, uNirGlow) + glint) + (1. - F)*uSurfD.y*Eh, .3*Eh, foam);
+  float L = mix(F*(NIR_SKY_SHOWN*skyNIR(Rf, uNirSky, uNirGlow) + glint) + (1. - F)*uSurfD.y*Eh, .3*Eh, foam);
   L = mix(L, .5*Eh, uMist*(1. - exp(-dist/700.)));
   return uSOnI_*L; }`;
 

@@ -67,6 +67,7 @@ export const BAND_SKY = {
 };
 const gf = x => (Number.isInteger(x) ? x.toFixed(1) : String(x));
 const { radio: BR, micro: BM, ir: BI, nir: BN } = BAND_SKY;
+export const NIR_SKY_SHOWN = 0;   // see the note above NIR_SKY
 export const BAND_SKY_GLSL = `
 float skyRadioM(vec3 d, float mottle){ float g = dot(d, uGalN), core = pow(max(dot(d, uGalC), 0.), 5.);
   return ${gf(BR.scale)}*(${gf(BR.cold)} + ${gf(BR.plane)}*exp(-g*g/${gf(BR.width)})*(1. + ${gf(BR.core)}*core)*mottle); }
@@ -78,7 +79,11 @@ float skyNIR(vec3 d, float L, float glow){ float y = clamp(d.y, 0., 1.), s2 = 1.
   float T = pow(10., -.4*${gf(BN.extK)}*X), V = inversesqrt(1. - ${BN.shellK.toFixed(6)}*s2);
   return L*mix(1., (V*T + (1. - T)*${gf(BN.fill)})/${gf(BN.mean)}, glow); }
 const float SKY_RADIO_MEAN = ${gf(BR.mean)}, SKY_MICRO_MEAN = ${gf(BM.mean)}, SKY_IR_MEAN = ${gf(BI.mean)};
+const float NIR_SKY_SHOWN = ${gf(NIR_SKY_SHOWN)};
 `;
+// NIR_SKY_SHOWN — whether the near-IR sky's own glow is drawn (and mirrored by the sea): 0, a stylised choice (user
+// decision, M11 #67). Physically the OH-airglow sky is the brightest thing in night-vision goggles, but drawn it washed
+// the combined night view into a pale haze (IR 34–73 % of the image); the sky still lights the ground in near-IR.
 // the near-IR sky for the eye (M11/T3/T6): L = the sky's near-IR irradiance in scene units, glow = the OH airglow's share
 // of it (0 in twilight → 1 in full night) — both written by surface.js nirLight() each frame; on = the IR band is on
 export const NIR_SKY = { L: { value: 0 }, glow: { value: 0 }, on: { value: 0 } };
@@ -183,7 +188,7 @@ export function createAtmosphere(opts = {}) {
 #define EYE_POS_L vec3(${bandPos({ f: 100e6 }).toFixed(4)}, ${bandPos({ f: 20e9 }).toFixed(4)}, ${bandPos(SPECTRUM.cxb).toFixed(4)})
 ${BAND_SKY_GLSL}
 #define EYE_NIR
-float eyeNIR(){ vec3 d = normalize(vDir); return uNirOn*skyNIR(d, uNirL, uNirGlow)*smoothstep(-.03, 0., d.y); }   // full brightness down to the horizon (skyNIR has its own horizon shape)
+float eyeNIR(){ vec3 d = normalize(vDir); return NIR_SKY_SHOWN*uNirOn*skyNIR(d, uNirL, uNirGlow)*smoothstep(-.03, 0., d.y); }   // full brightness down to the horizon (skyNIR has its own horizon shape)
 void eyeBands(out vec4 o1, out vec4 o3){
   vec3 d = normalize(vDir); float above = smoothstep(-.03, .12, d.y), sel = max(d.y, .02);
   float g = dot(d, uGalN);
