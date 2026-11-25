@@ -194,7 +194,8 @@ export const microquasar = o => event({ name: 'Microquasar SS 433 & W50', t0: 30
     const [u, v] = this.uv, ca = Math.cos(MQ_PA), sa = Math.sin(MQ_PA);
     const P = (x, y) => tpt(this.d, u, v, x * ca - y * sa, x * sa + y * ca), A = (r, a) => P(r * Math.cos(a), r * Math.sin(a));   // x along the jet axis (east +), y across
     const p = onSky(this.d), fl = .45 + .55 * Math.abs(Math.sin(T * 13) * Math.sin(T * 7.1));
-    this.v.set(p, deg(.15), I * .05);   // V ≈ 14: below the naked eye, like the pulsar's counterpart this.x.set(p, deg(.6), I * .45 * fl); this.core.set(p, deg(.5), I * .4);
+    this.v.set(p, deg(.15), I * .05);   // V ≈ 14: below the naked eye, like the pulsar's counterpart
+    this.x.set(p, deg(.6), I * .45 * fl); this.core.set(p, deg(.5), I * .4);
     this.fill.set(p, deg(3.5), I * .1);                                                                          // W50: the shell ~1° across …
     this.shell.set(Array.from({ length: 73 }, (_, i) => { const a = i / 72 * 6.283; return A(w50R(a), a); }), deg(.2), deg(.2), I * .6);   // … and its ears
     for (let s = 0; s < 2; s++) { const sg = s ? -1 : 1, pts = [];                                                // the kinematic corkscrew, far end first

@@ -87,8 +87,8 @@
 // Sources split their IR light by spectral position (smoothstep 3 µm → 1 µm: an 850 nm illuminator or the sodium
 // 819 nm line is near-IR, a 4 µm exhaust thermal); surfaces bring eyeNIR() (surface.js surfNIR: nirAlb × the Moon and
 // sky). Each channel has its own adaptation (state column 7 for near-IR): thermal the shared receptor model; near-IR the
-// tube's automatic brightness control (full adaptation, p = 1, above its threshold NIR.floorLx), so the screen holds its
-// brightness and the darkness shows as photon grain: the near-IR photons are counted at the real near-IR radiance
+// same partial adaptation p (NIR.abc = false, decision on #67: a tube's automatic brightness control, p = 1, would hold
+// the screen's brightness but took half the combined image), floor NIR.floorLx; the darkness shows as photon grain: the near-IR photons are counted at the real near-IR radiance
 // (the scene-scale layer × surface.js uNirPhot, real / scene light), so a moonlit field scintillates. Thermal is blurred by diffraction at 10 µm (its position is now fixed at
 // the window centre), near-IR is sharp (0.42 · 0.8 µm / 7 mm ≈ 5e-5 rad, below a pixel). Near-IR is drawn in NIR.color
 // (a white-phosphor tube), thermal in the IR hue.
@@ -320,8 +320,8 @@ uniform vec3 uHue[7]; uniform float uOn[7], uLref[7], uW[7]; uniform float uKey,
 // for every band — the invisible bands then show at their raw level next to visible light
 float gain(int b){ float La = texelFetch(tA, ivec2(uAbs > .5 ? 3 : b, 0), 0).b;
   return uKey/(pow(uLref[b], 1. - uP)*pow(max(La, uFloorRel*uLref[b]), uP)); }
-// near-IR (M11/T3): the intensifier's own adaptation (state column 7): automatic brightness control, p = 1 above
-// its threshold uNirFloor (bands.js NIR)
+// near-IR (M11/T3): its own adaptation state (column 7), with p = uNirP = EYE.p (NIR.abc = false; 1 would be a tube's
+// automatic brightness control) above its threshold uNirFloor (bands.js NIR)
 float gainN(){ float La = texelFetch(tA, ivec2(uAbs > .5 ? 3 : 7, 0), 0).b;
   return uKey/(pow(uNirRef, 1. - uNirP)*pow(max(La, uNirFloor), uNirP)); }
 // band b's colour: its hue rotated around the grey axis by (position − .5)·uShift (Rodrigues), brightest channel 1
