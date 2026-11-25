@@ -15,7 +15,8 @@ Arguments: `$ARGUMENTS`. A new scenario is a mission of its own (`/mission-track
    aurora/Milky Way), 3–6 local events with their `SPECTRUM` processes, surface presets for the ground and props.
    Write it as the mission's tasks; get the user's approval (`approve`), `start`, work in the worktree.
 2. **Copy** `scenarios/seaside/` → `scenarios/<id>/`. In `index.html` change `<title>Spectra · Name</title>` and
-   `<meta name="description">`; keep the import map (`spectra/` → engine).
+   `<meta name="description">`; keep the import map (`spectra/` → engine). Check `git status` lists the new
+   `index.html` (discovery needs it; only the generated root `/index.html` is git-ignored, M12).
 3. **`world.js`**: terrain (heightfield or flat `gridMat`), props via `solid(mesh, instrMat?)`, visible-only sprites
    via `visOnly()`, spectral surfaces from `engine/render/surface.js` presets; return `{ walk(t, camera),
    groundAt(x, z), update(t) }`. Camera faces west (az 270). Merge/instance static scenery.

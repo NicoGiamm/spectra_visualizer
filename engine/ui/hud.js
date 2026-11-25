@@ -3,6 +3,7 @@ import { V3, DEG, clamp, lerp, PLAY } from '../core/util.js';
 import { S } from '../core/state.js';
 import { BANDS, BAND, PRESETS, TRANSMIT, ABSORB_AT } from '../core/bands.js';
 import { SPECTRUM, bandOf, describe } from '../core/spectrum.js';
+import { clockHours } from '../world/atmosphere.js';
 
 // Per event and band: the processes it lists (`freq`) and whether all of them are absorbed before the ground.
 const INFO = new WeakMap();
@@ -82,7 +83,7 @@ export function createHud({ onFilter }) {
   function frame(active, norm) {
     scrub.value = PLAY.real(S.t);
     BANDS.forEach(b => { meter[b.id] = lerp(meter[b.id], 1 - Math.exp(-S.act[b.id] / norm[b.id]), .15); fills[b.id].style.height = (meter[b.id] * 100) + '%'; });
-    const hrs = 19.5 + S.t / 60 * 4;
+    const h = clockHours(), hrs = ((h % 24) + 24) % 24;   // the scenario's local time (site clock), else 19:30 + 4 h
     clock.textContent = `${Math.floor(hrs)}:${String(Math.floor((hrs % 1) * 60)).padStart(2, '0')}`;
     const key = active.map(e => e.name).join('|'); if (key === lastEv) return; lastEv = key;
     evlist.innerHTML = active.map(evHtml).join('');

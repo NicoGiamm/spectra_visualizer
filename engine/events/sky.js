@@ -215,6 +215,11 @@ export const microquasar = o => event({ name: 'Microquasar SS 433 & W50', t0: 30
 // Gated by darkness (night()). The curtain is a ribbon mesh whose vertices are rebuilt on the CPU every frame
 // from one displacement function (`at(u, v)`), so the side ribbons (near-IR, radar, UV, X-ray) follow its folds.
 // Overrides: az0 / az1 (arc extent, deg), elBot (lower border, deg), dist (m); phases scale with t0 / t1.
+// Close-up overrides (M12/T1, the aurora scenario; unset = the distant arc above, unchanged): brk (breakup offset after
+// t0, default 7 s), topK (curtain height × topK above elBot instead of the absolute top), ampK (fold amplitude ×),
+// tilt (deg the lower border climbs from az0 to az1: an arc along geomagnetic east–west seen from inside the oval
+// rises from the horizon toward the magnetic north), rise (deg the lower border climbs during the breakup and
+// recovery: the arc moves toward the zenith). Both need topK.
 const AUR_FS = `float h21(vec2 p){ p = fract(p*vec2(123.34,456.21)); p += dot(p,p+45.32); return fract(p.x*p.y); }
   float n2(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f); return mix(mix(h21(i),h21(i+vec2(1,0)),f.x), mix(h21(i+vec2(0,1)),h21(i+vec2(1,1)),f.x), f.y); }
   uniform float uTime, uI, uRay, uRed, uPulse, uPhase, uBlue; varying vec2 vUv;
@@ -250,19 +255,20 @@ export const aurora = o => event({ name: 'Aurora', t0: 26, t1: 50, az0: 295, az1
   },
   // substorm state at script time t
   phase(t) {
-    const a = this.t0, out = 1 - sm(this.t1 - 4, this.t1, t);
-    const gr = sm(a, a + 6, t), bk = sm(a + 7, a + 9.5, t) * (1 - sm(a + 11, a + 14, t)), rc = sm(a + 11, a + 14, t);
-    const I = night() * out * Math.max(.32 * gr, bk, rc * lerp(.45, .16, sm(a + 14, this.t1 - 3, t)));
-    return { I, gr, bk, rc, amp: 35 * gr + 420 * bk + 170 * rc, top: 7 + 12 * bk + 5 * rc,
+    const a = this.t0, b = a + (this.brk ?? 7) - 7, out = 1 - sm(this.t1 - 4, this.t1, t);   // b = a unless brk is set
+    const gr = sm(a, a + 6, t), bk = sm(b + 7, b + 9.5, t) * (1 - sm(b + 11, b + 14, t)), rc = sm(b + 11, b + 14, t);
+    const I = night() * out * Math.max(.32 * gr, bk, rc * lerp(.45, .16, sm(b + 14, this.t1 - 3, t)));
+    return { I, gr, bk, rc, amp: (35 * gr + 420 * bk + 170 * rc) * (this.ampK ?? 1), top: 7 + 12 * bk + 5 * rc,
       ray: .06 + .9 * bk + .25 * rc, red: .12 * gr + .95 * bk + .3 * rc, pulse: rc * (1 - bk),
-      phi: S.T * .1 + .3 * t + 2.4 * (ramp(t, a + 7, a + 9.5) - ramp(t, a + 11, a + 14)) };      // folds speed up during breakup
+      phi: S.T * .1 + .3 * t + 2.4 * (ramp(t, b + 7, b + 9.5) - ramp(t, b + 11, b + 14)) };      // folds speed up during breakup
   },
   // curtain point (camera-relative) at u ∈ [0,1] along the arc, v ∈ [0,1] bottom → top
   at(u, v, out = new V3()) {
     const st = this.st, ph = st.phi;
     const d = st.amp * (.6 * Math.sin(u * 9 + ph) + .3 * Math.sin(u * 23 - ph * 1.7 + 1.3) + .1 * st.bk * Math.sin(u * 51 + ph * 2.3));
     const r = this.dist + d, az = (this.az0 + (this.az1 - this.az0) * u) * DEG;
-    const top = st.top * (.82 + .18 * Math.sin(u * 5.3 + ph * .3)), el = lerp(this.elBot, top, v) * DEG;
+    const eb = this.topK ? this.elBot + (this.tilt || 0) * u + (this.rise || 0) * (st.bk + .6 * st.rc * (1 - st.bk)) : this.elBot;
+    const top = (this.topK ? eb + st.top * this.topK : st.top) * (.82 + .18 * Math.sin(u * 5.3 + ph * .3)), el = lerp(eb, top, v) * DEG;
     return out.set(Math.cos(az) * r, Math.tan(el) * r, Math.sin(az) * r);
   },
   update() {

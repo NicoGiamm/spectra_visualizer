@@ -10,10 +10,16 @@ contracts for writing scenes and events. The front page is the [README](../READM
 | **Mountain trail** | Walking ~80 m along an alpine trail: a hut, a deer on a thermal camera, cows, fireflies, bats, a campfire, distant hikers' headlamps, a valley cell mast. |
 | **Seaside** | On a west-facing beach. The Sun sets into the sea (with a green flash), the sand and the sea swap places in infrared, a lighthouse sweeps the bay, a container ship's radar paints the cliffs, sea mist rolls in. |
 | **City** | Out of a street canyon into a park: traffic, pedestrians with phones, Wi-Fi and 5G with multipath reflections, a tram arcing, LiDAR delivery robots, security cameras with near-IR illuminators, fireworks under a light-polluted sky. |
+| **Arctic evening aurora** | A snowfield near Tromsø (69.65° N) on an October evening: an auroral substorm builds along the geomagnetic east–west and breaks up, the snow turns green and UV-bright under it, a frozen lake, a cabin, a riometer, auroral kilometric radiation that almost never reaches the ground. |
+| **Thunderstorm on the plains** | Open grassland as a supercell passes over at sunset: close lightning with leader X-rays, a terrestrial gamma-ray flash, sferics and whistlers, a weather radar, rain warm in microwave, hail, power-line corona and a farmhouse losing power. |
+| **Volcano at dusk** | A ridge facing a lava lake and a fountaining vent: lava blazing in infrared and microwave, cooling flows, an SO₂ plume dark in UV, volcanic lightning, faint radon gamma at a fumarole, a monitoring station. |
+| **Open ocean** | The cockpit of a yacht ~1000 km from land: almost no human radio (GPS, a satphone, the boat's AIS), a cargo ship's radar painting your mast, a bioluminescent wake, the darkest sky of all. |
+| **Above the atmosphere** | The space station's cupola over one 93-minute orbit: no air, so every band arrives — the Sun in X-rays, the Earth's limb in gamma rays, airglow, cities, storms and sprites from above, the South Atlantic Anomaly. |
 
-All three share one sky: sunset and twilight, Venus, an airliner, satellites, the Milky Way and the cosmic
+The trail, seaside and city share one sky: sunset and twilight, Venus, an airliner, satellites, the Milky Way and the cosmic
 microwave background, meteors, a pulsar, a comet, aurora, a setting waxing Moon and halos, cosmic-ray air showers, a
-thunderstorm, a fast radio burst, a supernova and a gamma-ray burst.
+thunderstorm, a fast radio burst, a supernova and a gamma-ray burst. The newer scenes reuse what fits their place
+and date, and the aurora and the orbit run on their own Sun and Moon tracks (see *Writing a scene* below).
 
 ## Controls
 
@@ -207,8 +213,8 @@ A scenario is one object:
 ```js
 run({
   title, loading, hint,                       // UI text
-  atmosphere: { lightPollution, cloudCover }, // optional
-  fog, meterNorm,                             // optional
+  atmosphere: { lightPollution, cloudCover, site, air }, // optional (site, air: see below)
+  fog, meterNorm, view,                       // optional; view = { yaw, pitch } starting look
   build()  { /* add meshes */ return { walk(t, camera), groundAt(x, z), update(t) }; },
   events() { return [sky.sunset(), local.lighthouse(), ...]; },
 });
@@ -228,6 +234,14 @@ Physical processes (`freq`) are keys of `engine/core/spectrum.js`, where each on
 wavelength and the band is derived from it. To add a scene, copy `scenarios/seaside/`, write its `world.js` and
 compose `events()` from the shared library plus your own; the landing page picks it up automatically.
 
-A few conventions keep the scenes consistent: the view always faces west (where the Sun sets), randomness is
+Most scenes share one sky: a mid-latitude summer sunset, about 3.4 minutes per script-second. A scene elsewhere
+passes `atmosphere.site` with its own Sun and Moon tracks, computed for its place and date and cited in its
+`main.js` (the aurora at 69.65° N; the orbit, whose Sun circles once per script, so its tracks are functions of t
+rather than cubics); the twilight colours then follow the Sun's depression, and `site.clock: { start, minPerUnit }`
+sets the HUD's local time (otherwise 19:30 → 23:30). `atmosphere.air: false` removes the air altogether (the orbit): no day sky, clouds or fog, a
+black cold sky, no extinction between emitter and eye. Sky events placed for mid-latitude (Milky Way, planets) are
+left out where the site makes them wrong.
+
+A few conventions keep the scenes consistent: the front is always west (a scene may start looking elsewhere with `view`), randomness is
 seeded so scrubbing replays identically, and glowing things always go through the `Em` / `Rib` / `EmField`
 emitters so band filtering and the meters work everywhere.
