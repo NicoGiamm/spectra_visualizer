@@ -80,10 +80,10 @@ too).
 
 | Step | What happens |
 |---|---|
-| Layers | the scene is drawn once into several outputs: visible light, and each invisible band's emission (surfaces through a per-band hook, sources by their band) |
+| Layers | the scene is drawn once into several outputs: visible light, and each invisible band's emission (surfaces through a per-band hook, sources by their band); infrared fills two channels, thermal (8–14 µm) and near-IR (0.7–1.4 µm, what night-vision goggles see: moonlight, twilight and airglow reflected, lamps and IR illuminators) |
 | Air | ground-level light is attenuated over its distance per band: microwave barely, IR through the 8–14 µm window, UV by Rayleigh + haze (which also glows at dusk), X-rays within metres, terrestrial gamma within ~160 m |
 | Matter | radio, microwave and gamma pass through what blocks light, by each material's transmission: radio through buildings and round hills, microwave through foliage |
-| Sky | every band has its own sky: galactic synchrotron in radio, a dark microwave sky with a glowing horizon (the CMB is too faint to show next to warm ground), a warm IR horizon, UV twilight and airglow, a near-black X-ray / gamma sky |
+| Sky | every band has its own sky: galactic synchrotron in radio, a dark microwave sky with a glowing horizon (the CMB is too faint to show next to warm ground), a warm IR horizon, the near-IR twilight and OH airglow (brightest ~10° up; computed and lighting the ground, but drawn dark: `NIR_SKY_SHOWN = 0`), UV twilight and airglow, a near-black X-ray / gamma sky — one table (`BAND_SKY`, engine/world/atmosphere.js) for the sky and for what surfaces reflect |
 | Adaptation | each band's receptor adapts (partly) to its own field, from one shared model with no per-band gains; night stays darker than dusk |
 | Sharpness | each band is blurred by diffraction, 1.22 λ/D, for its receptor aperture (7 mm pupil, a 1 m dish for microwave, a 100 m array for radio) |
 | Statistics | light is counted as photons: X-ray and gamma (few, energetic photons) flicker as single hits; coherent radio shows speckle |
@@ -91,18 +91,28 @@ too).
 
 `spectra timeline` reports each band's share of the displayed luminance at t 20 / 40.
 
+**Sources look physical in the eye** (M11): a point source is one compact glow and a path one smooth line, at the
+band's own sharpness — the band symbols of the old view (radio rings, microwave crackle, UV rays, X-ray scanlines,
+gamma starburst) are behind the `uPhys` switch and appear only with `?eye=0`. Antennas have real beam patterns: an
+event passes the gain toward the viewer as `set()`'s last argument (`see`), from `BEAM` in
+`engine/render/sources.js` — dipole / monopole doughnuts, stacked broadcast arrays, 3GPP sector panels, Gaussian
+dishes and rotating radars that flash once per turn as their beam crosses you. A beam through clear air is not
+drawn (air does not scatter it back); what it lights is. Deep-sky objects keep their true angular size and
+morphology (the Vela supernova remnant, the W50 nebula around SS 433).
+
 ### Spectral surfaces
 
 The landscape's own emission comes from the `PRESET` table in `engine/render/surface.js`: `water`, `wetSand`,
-`sand`, `rock`, `snow`, `meadow`, `forest`, `canopy` (tree crowns), `dirt`, `asphalt`, `concrete`, `facade`, `wood`
-and `body` (warm-blooded animals and people). Each preset packs
-its physics into three vectors that reach the shaders as uniforms or per-vertex attributes:
+`sand`, `rock`, `snow`, `meadow`, `forest`, `canopy` (tree crowns), `dirt`, `asphalt`, `concrete`, `facade`, `wood`,
+and the parts of animals, people and vehicles: `skin`, `limb`, `fur`, `coat`, `glass`, `tyre`, `engine`, `exhaust`.
+Each preset packs its physics into four vectors that reach the shaders as uniforms or per-vertex attributes:
 
 | Vector | Fields |
 |---|---|
 | `A` | `T0` (°C at sunset), `Teq` (°C night equilibrium), `1/tau` (cooling rate per script second), `eIR` (8–14 µm emissivity) |
 | `B` | `eMW` (microwave emissivity), `uvAlb` (UV albedo), `gamma` (terrestrial activity, granite = 1), `rRadio` (radio reflectivity) |
 | `C` | `gloss` (0 matte … 1 water/glass: emissivity drops at grazing angles), `Tradio`, `Tmicro`, `Tgamma` (what passes through from behind, for the eye) |
+| `D` | `h` (sub-facet roughness, m), `nirAlb` (near-IR albedo: leaves and grass bright, water and asphalt dark), `R0opt` (optical Fresnel reflectance at normal incidence), `slope` (rms unresolved slope: how wide a mirror image is) |
 
 Every value cites a source, by the short keys listed above the table (`[Sal]`, `[EL]`, `[UMF]`, `[FG]`, `[WHO]`,
 `[UN]`, `[RP112]`, `[Oke]`), or is marked STAND-IN. The temperatures and cooling times are stand-ins chosen per
@@ -120,10 +130,31 @@ all that's left of the landscape with Visible off. Each band shows:
 |---|---|
 | Infrared | the radiated temperature `T(t) = Teq + (T0 − Teq)·exp(−t/tau)`: sand and meadows cool fast, rock and asphalt slowly, water barely at all (the beach's thermal crossover); wet and glossy surfaces at grazing angles mirror the cold sky |
 | Microwave | brightness temperature `eMW·T + (1 − eMW)·50 K`, so calm water reads cold and land warm, lit up by microwave transmitters (routers, masts) and by short flashes where a ray hits a surface (multipath) |
-| Radio | light from radio transmitters only: falls off as 1/r², Lambertian, with moving dashes |
+| Radio | the eye: its own brightness temperature plus the reflected sky and transmitters (above); the old view: light from radio transmitters only, 1/r², Lambertian, with moving dashes |
 | UV | `uvAlb` × the UV skylight left after sunset: snow and sand glow at dusk, grass doesn't |
 | Gamma | emission in proportion to activity (the eye turns it into single photon hits; the old view draws a speckle): granite sparkles, the sea is almost silent |
 | X-ray | nothing: the ground is dark in X-rays |
+
+In the spectral eye every surface also **reflects** each band's light (Kirchhoff, e + R + T = 1; T is the
+transmission of a thin pane or a crown, `C.yzw`): radio from
+transmitters and the synchrotron sky (sea, wet ground and metal are radio mirrors), microwave from transmitters and the
+cold sky (metal and calm water read cold), thermal IR the cold sky at grazing angles, UV the skylight; whether a
+surface mirrors or scatters a band follows its roughness against the wavelength (Beckmann), with Schlick's Fresnel
+law for the angle. In near-IR the sky itself is drawn dark (`NIR_SKY_SHOWN = 0`, a stylised choice: the real airglow sky is bright in night-vision goggles but washed the combined view out), and the surfaces are seen only by reflection: `nirAlb` × the twilight / airglow sky, the
+Moon and the near-IR lamps a scene registers (`addTx('nir', …)`: the city's sodium lamps and 850 nm camera
+illuminators); the sea shows the Moon's glitter path, fog glows. The real near-IR sky and Moon (Brown 1952 twilight
+× a near-IR/visible ratio of .4, the OH airglow ×3.5 the visible night sky, the Moon in linear light) reach the scene
+through one shared scale factor, so their ratio is the real one, and carry three.js's physical 1/π (a Lambertian
+surface reads albedo·E/π, as in visible light). The Moon's glint on the sea, in near-IR and in visible light, is one
+flux-conserving lobe whose width is what the sea shader's own waves leave of Cox & Munk's measured slope
+(`scenarios/seaside/world.js` `SEA_WAVES`). The formulas and every reflectivity's source are in the header of
+`engine/render/surface.js`.
+
+Animals, people and vehicles are **built from parts** (`partsGeometry`, drawn with `spectralParts` in one draw call,
+instanced or not): each part keeps its own preset, so a thermal camera sees warm faces, hands, eyes, udders and
+thin-haired legs, insulating fur and clothes near the air's temperature, a hot bonnet, tyres and tailpipe, cold
+window glass. The city's walker, cyclist, scooter, car and bus builders are in `scenarios/city/street.js`. Such a
+body is its own thermal emitter: its event keeps a body-heat glow for the meters only (`see = 0` in the eye).
 
 Surfaces also feed the band meters with the same formulas the shaders use, scaled by each surface's `weight`.
 

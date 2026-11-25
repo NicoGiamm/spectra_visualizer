@@ -5,8 +5,10 @@ import { V3, sm, hash2 } from 'spectra/core/util.js';
 import { dirAE } from 'spectra/core/geom.js';
 import { S } from 'spectra/core/state.js';
 import { event } from 'spectra/core/events.js';
-import { Em, Rib, EmField } from 'spectra/render/sources.js';
+import { Em, Rib, EmField, BEAM, toViewer } from 'spectra/render/sources.js';
 import { solid } from 'spectra/render/instrument.js';
+import { spectralParts, addTx } from 'spectra/render/surface.js';
+import { carGeo } from './street.js';
 import { burst, inWin } from './events.js';
 import { night } from 'spectra/world/atmosphere.js';
 import { SIGNS, CAMS, PLUMES, MANHOLES, PARK_Z, SIDEWALK_X } from './world.js';
@@ -25,12 +27,13 @@ export const signs = () => event({ name: 'Neon & LED shop signs', t0: 9, t1: 60,
 
 // A band lesson: the 850 nm illuminator ring in front of every security camera is all but dark to the eye.
 export const cams = () => event({ name: 'Security cameras: 850 nm rings', t0: 12, t1: 60, bands: ['ir'], freq: ['ir850'], note: 'Security cameras over the sidewalks switch on a ring of 850 nm near-infrared LEDs after dusk. Up close the eye catches only a faint deep-red glow from the ring (940 nm illuminators are the nearly invisible kind), and an 8–14 µm thermal camera sees nothing; to the cameras themselves and to any night-vision sensor it is a floodlight.',
-  init() { this.f = new EmField('ir', CAMS.length); },
-  update() { const { t, T } = S, on = sm(12, 17, t);
-    CAMS.forEach((q, k) => {
-      const pulse = .5 + .3 * Math.max(0, Math.sin(T * 1.6 + k * 1.9));
-      this.f.set(k, q.p.clone().addScaledVector(q.n, .5), 1.5, on * pulse * .5);
-    }); },
+  // near-IR (M11/T6): each ring lights the sidewalk below for night vision (surface.js addTx('nir')). A 12–24-LED 850 nm
+  // ring is rated for 20–30 m of night-vision range — of the order of a tenth of a sodium street lamp's near-IR
+  // (city events.js streetLights) at the camera: power 8 STAND-IN, isotropic (the real beam is a 30–60° cone).
+  // Steady: illuminators run at a constant current (the old slow pulse was decoration; its mean .6 kept).
+  init() { this.f = new EmField('ir', CAMS.length); this.on = 0; CAMS.forEach(q => addTx('nir', () => (this.on > 0 ? { p: q.p.clone().addScaledVector(q.n, .5), power: 8 * this.on } : null))); },
+  update() { const { t } = S, on = sm(12, 17, t); this.on = inWin(this) ? on : 0;
+    CAMS.forEach((q, k) => this.f.set(k, q.p.clone().addScaledVector(q.n, .5), 1.5, on * .6 * .5)); },
   where: () => null });
 
 // Rooftop cooling towers (the office blocks' air-conditioning): their saturated exhaust partly condenses in the humid night
@@ -80,7 +83,9 @@ export const robot = () => event({ name: 'Delivery robot: LiDAR sweep', t0: 16, 
     this.vis.set(head.clone().setY(1.25), .7, .55);
     this.s.set(head, 1.1, .45);
     const d = new V3(Math.sin(T * 2.4), 0, 1).normalize();   // the fan scans ahead of it, east toward you
-    this.l.set([head, head.clone().addScaledVector(d, 1.4), head.clone().addScaledVector(d, 3)], .14, .22, .8);
+    // the fan is the old view's: clear air does not scatter 905 nm pulses back (as the radar fan, M11/T1), so the eye
+    // sees only the LiDAR window (this.s, near-IR by the event's lidar905) — metered, not seen (M11/T6 review)
+    this.l.set([head, head.clone().addScaledVector(d, 1.4), head.clone().addScaledVector(d, 3)], .14, .22, .8, 0, 0);
     this.m.set(head.clone().setY(1.2), .9, burst(t, 3.2, .5, .2) * .6); },
   where() { return new V3(SIDEWALK_X - 1.8, 1, ROBOT_Z(S.t)); } });
 
@@ -92,20 +97,21 @@ export const radar = () => event({ name: 'Airport radar (S-band)', t0: 8, t1: 60
   },
   update() { const { T, camera } = S; if (!inWin(this)) return;
     const near = 1 - sm(1200, 2200, this.c.distanceTo(camera.position));
-    this.mast.set(this.c, 26, .4 * near);
     const a = (T % 4) / 4 * Math.PI * 2, r = 120, pts = [];
-    for (let k = 0; k <= 7; k++) { const th = a - .5 + k / 7; pts.push(this.c.clone().add(new V3(Math.cos(th) * r, 0, Math.sin(th) * r))); }
+    // the eye: the antenna's real fan beam, 1.4° wide in azimuth (ASR-9 / ASR-11 class; ≈ 70 λ/D for a ~5 m reflector
+    // at 2.8 GHz), turning at 2π / 4 s: one short flash per turn as it sweeps across you (sources.js BEAM.sweep), dark
+    // in between (−30 dB sidelobes). The fan itself is the old view's: clear air does not scatter a 10 cm beam back to
+    // you (Rayleigh ∝ λ⁻⁴; only rain, insects and aircraft echo it), so the eye does not draw it.
+    this.mast.set(this.c, 26, .4 * near, BEAM.sweep(a - toViewer(this.c).az, 1.4 * Math.PI / 180, 2 * Math.PI / 4));    for (let k = 0; k <= 7; k++) { const th = a - .5 + k / 7; pts.push(this.c.clone().add(new V3(Math.cos(th) * r, 0, Math.sin(th) * r))); }
     pts.push(this.c.clone());
-    this.fan.set(pts, .7, 2.6, .5 * near); },
+    this.fan.set(pts, .7, 2.6, .5 * near, 0, 0); },
   where() { return this.c; } });
 
-export const police = () => event({ name: 'Police car: LEDs & TETRA', t0: 30, t1: 40, bands: ['vis', 'micro'], freq: ['ledBlue', 'tetra'], note: 'A cruiser runs down the avenue: the light bar flashes its left and right blue LED heads in turn (amber is only a rear traffic advisor on European cars), and its TETRA radio (the European emergency-services net, ~390 MHz = 77 cm, microwave in this band table) chirps in short bursts.',
+export const police = () => event({ name: 'Police car: LEDs & TETRA', t0: 30, t1: 40, bands: ['vis', 'micro', 'ir'], freq: ['ledBlue', 'tetra', 'thermal310'], note: 'A cruiser runs down the avenue: the light bar flashes its left and right blue LED heads in turn (amber is only a rear traffic advisor on European cars), and its TETRA radio (the European emergency-services net, ~390 MHz = 77 cm, microwave in this band table) chirps in short bursts.',
   init() {
-    const g = new THREE.BoxGeometry(1.8, .8, 4.3); g.translate(0, .7, 0);
-    const g2 = new THREE.BoxGeometry(1.55, .55, 2.2); g2.translate(0, 1.32, -.25);
-    this.body = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: 0x101418, roughness: .5, metalness: .5 }));
-    this.body.add(new THREE.Mesh(g2, new THREE.MeshStandardMaterial({ color: 0x0c0e12, roughness: .6, metalness: .4 })));
-    solid(this.body); this.body.visible = false; S.scene.add(this.body);
+    // by parts (M11/T4, street.js carGeo): hot bonnet, tyres and tailpipe, cold glass cabin, cooling paint — one draw
+    this.body = spectralParts(new THREE.Mesh(carGeo(0x101418, true), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .45, metalness: .45 })), { weight: 0 });
+    this.body.visible = false; S.scene.add(this.body);
     this.b1 = new Em('vis', '#3060ff'); this.b2 = new Em('vis', '#3060ff'); this.r = new Em('micro');
   },
   update() { const { t, T } = S;

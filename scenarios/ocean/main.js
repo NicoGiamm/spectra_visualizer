@@ -22,7 +22,7 @@ run({
     local.ownAIS(), local.cargoShip(), local.gnss(),
     sky.airliner({ note: 'An airliner at cruise on an oceanic track, far beyond any radar: nav lights and contrail, hot engines (IR), its ADS-B position (microwave) relayed by satellites, and its weather radar (microwave). Out of VHF range of land, it keeps a listening watch on the air-to-air and guard frequencies.' }),
     sky.venus(), sky.purpleLight(), sky.firstStars(), sky.satellitePass(), sky.cmb(), sky.milkyWay({ note: 'No artificial light for a thousand kilometres: the whole band with its dark dust lanes, the dust glowing in IR and Sgr A* in radio.' }),
-    sky.meteorShower(), sky.pulsar(), sky.comet(), sky.starlink(), sky.blackHoleBinary(), sky.moonrise(), sky.airShowers(),
+    sky.meteorShower(), sky.pulsar(), sky.comet(), sky.starlink(), sky.microquasar(), sky.moonrise(), sky.airShowers(),
     sky.thunderstorm({ note: 'A squall line far over the sea: lightning, radio "sferics" and terrestrial gamma-ray flashes.' }),
     sky.fastRadioBurst(), sky.supernova(), sky.gammaRayBurst(), sky.fireball(),
     local.vhf16(), local.satphone(), local.bioluminescence(),

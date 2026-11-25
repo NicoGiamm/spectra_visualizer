@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { V3, clamp, lerp, sm, R, fbm2, ridged2 } from 'spectra/core/util.js';
 import { S } from 'spectra/core/state.js';
-import { spectral, PRESET, mixSurf } from 'spectra/render/surface.js';
+import { spectral, PRESET, mixSurf, collectSurfD } from 'spectra/render/surface.js';
 import { heightfield } from 'spectra/world/heightfield.js';
 
 // ---------------------------------------------------------------- terrain
@@ -43,12 +43,20 @@ const slopeAt = (x, z) => { const e = 3; return Math.hypot(heightAt(x + e, z) - 
 //   ashSoil: the ridge's thin soil on old ash with dry grass. eIR .95 [EL]; eMW .9 dry soil [UMF]; uvAlb .05 [FG]; gamma .25 [UN]
 //   warmFlow: last weeks' flows on the valley floor, still 10–20 °C warmer than the ground (STAND-IN: thick flows take months to
 //     cool; Harris 2013, "Thermal Remote Sensing of Active Volcanoes", ch. 4); emissivities as basalt
-const surf = (T0, Teq, tau, eIR, eMW, uvAlb, gamma, rRadio) => ({ A: [T0, Teq, tau ? 1 / tau : 0, eIR], B: [eMW, uvAlb, gamma, rRadio], C: [0, ...PRESET.rock.C.slice(1)] });
+// Reflection data D = [h (m), nirAlb, R0opt, slope (rad)] (M11/T2, as surface.js REFL; keys from its header):
+//   basalt   nirAlb .08 — dark basalt .05–.1 at ~0.8 µm [EL] (ASTER / ECOSTRESS basalt spectra); h, slope as REFL.rock;
+//            R0opt .05 (basaltic glass n ~1.55–1.6)
+//   scoria   nirAlb .15 — oxidised red cinder: hematite coatings brighten it beyond 0.7 µm, STAND-IN above basalt; loose
+//            clasts: h .03, slope .4 STAND-IN
+//   ashSoil  nirAlb .3 — dry grass on ash soil: soils .25–.35, dry grass ~.3–.4 [EL]; h, slope as REFL.meadow
+//   warmFlow nirAlb .06 — weeks-old pāhoehoe: a glassy black rind, as basalt's low end [EL]; R0opt .05 (glass); its
+//            ropy, smooth crust h .01, slope .25 STAND-IN
+const surf = (T0, Teq, tau, eIR, eMW, uvAlb, gamma, rRadio, D) => ({ A: [T0, Teq, tau ? 1 / tau : 0, eIR], B: [eMW, uvAlb, gamma, rRadio], C: [0, ...PRESET.rock.C.slice(1)], D });
 export const SURF = {
-  basalt:   surf(30, 12, 40, .95, .88, .05, .2, .5),
-  scoria:   surf(32, 9, 18, .95, .88, .05, .2, .4),
-  ashSoil:  surf(24, 8, 12, .95, .9, .05, .25, .3),
-  warmFlow: surf(34, 26, 0, .95, .88, .05, .2, .5),
+  basalt:   surf(30, 12, 40, .95, .88, .05, .2, .5, [.05, .08, .05, .35]),
+  scoria:   surf(32, 9, 18, .95, .88, .05, .2, .4, [.03, .15, .05, .4]),
+  ashSoil:  surf(24, 8, 12, .95, .9, .05, .25, .3, [.05, .3, .04, .3]),
+  warmFlow: surf(34, 26, 0, .95, .88, .05, .2, .5, [.01, .06, .05, .25]),
 };
 // the valley floor where last weeks' flows lie (a band below the cone's foot)
 const onOldFlow = (x, z) => sm(.62, .7, fbm2(x * .004 + 2, z * .004, 3)) * sm(-650, -900, z) * (1 - sm(-1200, -1400, z));
@@ -58,18 +66,20 @@ function terrain() {
   const C = { soil: [.07, .06, .045], grass: [.09, .08, .04], basalt: [.035, .032, .03], scoria: [.11, .05, .035], flow: [.018, .017, .017] };
   const mix = (a, b, k) => a.map((v, i) => lerp(v, b[i], k));
   const coneK = (x, z) => 1 - sm(500, 780, Math.hypot(x - CRATER.x, z - CRATER.z));
+  const surfAt = collectSurfD((x, y, z, slope) => {
+    const L = (a, b, k) => mixSurf([[a, 1 - k], [b, k]]);
+    let s = L(SURF.ashSoil, SURF.basalt, clamp(sm(.25, .5, slope) + sm(-300, -700, z) * .7));
+    s = L(s, SURF.scoria, coneK(x, z) * .9);
+    return L(s, SURF.warmFlow, onOldFlow(x, z));
+  });
   const g = heightfield({ heightAt, colorAt(x, y, z, slope) {
     const nz = fbm2(x * .03, z * .03, 3);
     let c = mix(C.soil, C.grass, sm(.4, .7, nz) * (1 - sm(-200, -500, z)));
     c = mix(c, C.basalt, clamp(sm(.25, .5, slope) + sm(-300, -700, z) * .7));
     c = mix(c, C.scoria, coneK(x, z) * .9);
     return mix(c, C.flow, onOldFlow(x, z));
-  }, surfAt(x, y, z, slope) {
-    const L = (a, b, k) => mixSurf([[a, 1 - k], [b, k]]);
-    let s = L(SURF.ashSoil, SURF.basalt, clamp(sm(.25, .5, slope) + sm(-300, -700, z) * .7));
-    s = L(s, SURF.scoria, coneK(x, z) * .9);
-    return L(s, SURF.warmFlow, onOldFlow(x, z));
-  } });
+  }, surfAt });
+  surfAt.attach(g);                  // per-vertex reflection data (aSurfD)
   S.scene.add(spectral(new THREE.Mesh(g, terrainMat), 'attr', { lines: 'topo', mean: g.userData.surfMean, weight: 1.2 }));
 }
 

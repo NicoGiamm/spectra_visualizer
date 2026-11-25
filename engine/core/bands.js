@@ -60,11 +60,42 @@ export const EXTINCTION = { radio: 0, micro: 1.2e-5, ir: 2e-4, vis: 0, uv: 2.3e-
 export const XCOM_AIR = [[1, 3606], [2, 527.9], [3, 162.5], [5, 40.27], [10, 5.12], [20, .7779], [30, .3538], [50, .208],
   [100, .1541], [200, .1233], [500, .08712], [1000, .06358], [2000, .04447], [5000, .02751], [1e4, .02045], [1e5, .0173]];
 // UV path radiance: the haze between the eye and a surface glows with the UV skylight; its asymptote (an infinitely
-// long path) is taken as the radiance of a white Lambertian surface under the same sky (uniform-sky approximation,
-// in the surface terms' units: 1.3 × uUVsky, engine/render/surface.js).
-export const UV_PATH = 1.3;
+// long path) is taken as the radiance of a white Lambertian surface under the same sky (uniform-sky approximation).
+// Units (M11/T6): the surfaces' UV term is a COLOUR, UV_COL × albedo × UV_SURF_K × uUVsky (engine/render/surface.js,
+// the sea), which the eye reads as its luminance (compose.js eyeL); the path radiance is added straight to the eye's
+// UV LUMINANCE channel (compose.js eyeUVpath). So UV_PATH = UV_SURF_K × lum(UV_COL) — luminance units — and a white
+// horizontal surface and an infinitely long haze path read the same. (Before M11/T6 the colour-unit 1.3 was added as
+// a luminance: the haze was 1 / .42 = 2.4× too bright for its own definition.)
+export const UV_SURF_K = 1.3, UV_COL = [.62, .3, 1];
+export const UV_PATH = UV_SURF_K * (.2126 * UV_COL[0] + .7152 * UV_COL[1] + .0722 * UV_COL[2]);   // ≈ .544
 
 export const LREF = { radio: .37, micro: .37, ir: .37, vis: .37, uv: .37, xray: .37, gamma: .37 };
+
+// Near-IR vs thermal IR (M11/T3). "Infrared" is two worlds seen by two different detectors: thermal IR (8–14 µm,
+// microbolometer heat cameras: emission, warmer is brighter) and near-IR (0.7–1.4 µm, image-intensifier night-vision
+// goggles: reflected moonlight / twilight / airglow and lamps — leaves are bright, the red edge). The eye's IR band is a
+// fused goggle with both channels, like the US Army's ENVG (AN/PSQ-20: image intensifier + thermal camera fused in one
+// eyepiece): thermal in the IR hue, near-IR in a pale warm hue (a white-phosphor tube, P45), each channel with its own
+// adaptation. In the eye's outputs the IR channel of output 1 carries thermal and its position channel (output 2)
+// carries near-IR (engine/render/compose.js).
+//   lux0    the illuminance (lx) that is 1 in the near-IR surface units: the sunset field (Sun at 0°, ~400 lx clear
+//           sky; Brown 1952, Natural Illumination Charts, US Navy Bureau of Ships report 374-1 — engine/render/surface.js NIR_LIGHT),
+//           so near-IR radiances sit on the same scale as the visible dusk field (LREF .37).
+//   floorLx the tube's absolute threshold: a usable Gen II/III picture needs ~1e-4 lx (overcast starlight; the
+//           tubes' rated range 1e-4–1e-1 lx, MIL-PRF-A3256363 test light levels) — STAND-IN within that range
+//   abc     automatic brightness control: an intensifier holds its screen brightness constant above its threshold
+//           (the power supply lowers the MCP gain as the photocurrent rises — every Gen II/III tube; Csorba 1985,
+//           Image Tubes), i.e. full adaptation (p = 1) instead of the eye's partial p: a dusk field and a
+//           moonlit one show alike on the screen, the darkness shows as photon grain (photocathode shot noise)
+//   color   pale warm white — the near-IR hue (white-phosphor tubes, P45; the classic P43 green is gamma's hue here)
+//   split   a source's near-IR share from its spectral position (sources carry only the mean position of their
+//           event's IR processes): smoothstep from 3 µm (thermal) to 1 µm (near-IR) — STAND-IN for the Planck / line share
+// abc is off (M11/T3, decision on #67): with a tube's full adaptation near-IR took 49–60 % of the combined image —
+// a per-band privilege the eye's one receptor model (M10) doesn't allow; shared partial adaptation gives 14–38 %.
+export const NIR = { lux0: 400, floorLx: 1e-4, abc: false, color: '#ffe7b0', split: [3e-6, 1e-6] };
+// near-IR extinction (1/m) at ~0.85 µm, horizontal sea-level path: Rayleigh 1.16e-5 × (550/850)⁴ = 2e-6 (Bucholtz 1995) +
+// aerosol 1e-4 × (550/850)^1.3 = 5.7e-5 (as EXTINCTION.uv: Koschmieder ~39 km, Ångström 1.3) ≈ 6e-5
+export const EXTINCTION_NIR = 6e-5;
 
 // Meter normalisation (activity that fills a bar). Scenarios may override via `meterNorm`.
 // Rule (M7/T1, with the M1 surfaces and M7/T4 presets in): in hud.js's 1 - exp(-act/norm) each bar peaks at

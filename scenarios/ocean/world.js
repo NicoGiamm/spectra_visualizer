@@ -40,15 +40,36 @@ function pose(T) {   // the swell (period ~9 s, λ ≈ 120 m): a gentle roll of 
 //     ~40 °C — STAND-IN (engine rooms run 40–50 °C; the steps over the engine are warm to the touch)
 //   mast & boom (anodised aluminium): eIR .8 (anodised Al 0.77–0.85, bare Al ~0.05) [EL]; eMW 0 and no transmission
 //     (a metal reflects microwaves: e = 1 − R ≈ 0 [UMF]); gamma 0; rRadio 1 (a conductor); slow to cool — STAND-IN
-//   sea: the engine's water preset, 18 °C [Masuda, Wilheit]; open-ocean water barely cools overnight
+//   sea: the engine's water preset, 18 °C [Masuda, Wilheit]; open-ocean water barely cools overnight; rRadio .91 sea
+//     water (ε' 70, σ 5 S/m) [P527], as the seaside's sea (PRESET.water's .64 is fresh water)
+// Reflection data D = [h (m), nirAlb, R0opt, slope (rad)] (M11/T2, as surface.js REFL; keys from its header):
+//   deck     white gelcoat: nirAlb .75 — TiO₂-pigmented white coatings reflect .7–.85 at 0.8 µm [EL] (ECOSTRESS white
+//            paints), STAND-IN for gelcoat; R0opt .04 (polyester n ~1.55); a smooth moulded skin, non-slip texture
+//            h .0005, slope .1 STAND-IN
+//   topsides dark grey gelcoat: nirAlb .1 — dark paints .05–.15 [EL], STAND-IN; glossy, h .0001, slope .03 STAND-IN
+//   engine   the varnished teak companionway: wood .35–.5 [EL] → .4; h .002, slope .1 as REFL.wood
+//   mast     clear-anodised aluminium: nirAlb .6 — bare aluminium ~.85 at 0.8 µm, the oxide layer and grime lower
+//            it, STAND-IN; R0opt .1 — the anodic oxide's own surface (n ~1.65) gives ((n−1)/(n+1))² ≈ .06, the metal
+//            under the clear film adds to it; .1 between the two, STAND-IN; h .0002, slope .05 STAND-IN
+//   sea      PRESET.water's REFL row; its slope is the sea shader's own (SEA_SLOPE below)
 const GFRP = [.95, .9, .95];
 export const SURF = {
-  deck:     { A: [31, 13, 1 / 14, .9], B: [.15, .08, .02, .1], C: [0, ...GFRP] },
-  topsides: { A: [18, 18, 0, .9], B: [.15, .08, .02, .1], C: [.3, ...GFRP] },
-  engine:   { A: [40, 40, 0, .9], B: [.15, .06, .02, .1], C: [0, ...GFRP] },
-  mast:     { A: [26, 14, 1 / 30, .8], B: [0, .1, 0, 1], C: [.2, 0, 0, 1] },
-  sea:      PRESET.water,
+  deck:     { A: [31, 13, 1 / 14, .9], B: [.15, .08, .02, .1], C: [0, ...GFRP], D: [.0005, .75, .04, .1] },
+  topsides: { A: [18, 18, 0, .9], B: [.15, .08, .02, .1], C: [.3, ...GFRP], D: [.0001, .1, .04, .03] },
+  engine:   { A: [40, 40, 0, .9], B: [.15, .06, .02, .1], C: [0, ...GFRP], D: [.002, .4, .04, .1] },
+  mast:     { A: [26, 14, 1 / 30, .8], B: [0, .1, 0, 1], C: [.2, 0, 0, 1], D: [.0002, .6, .1, .05] },
+  sea:      { ...PRESET.water, B: [...PRESET.water.B.slice(0, 3), .91] },
 };
+// The sea's unresolved slope for the Moon's near-IR glitter (as the seaside's seaSlope): Cox & Munk 1954 (J. Opt. Soc.
+// Am. 44:838) σ² = .003 + .00512·U for both axes, at U = 2 m/s (the evening calm, STAND-IN) → .0066 per axis, less
+// what the shader's own waves already tilt (per axis Σ (a|k|)²/4 of the wave table in seaGeo: the long swell × its
+// distance fade (.5 + .5 fd)², the short waves × fd2²)
+// wave table [kx, kz, ω, a] (the GLSL in seaGeo is generated from it): a long swell from the south-west (λ ≈ 120 m)
+// under a light wind sea, and the short waves near the boat
+const LONG_W = [[.035, .038, .52, 1.5], [.06, -.02, .7, .5], [-.05, .09, 1, .45], [.12, .05, 1.2, .3]], SHORT_W = [[.55, .8, 2.6, .07], [-.9, .45, 3.1, .05], [.3, -1.1, 3.4, .04]];
+const slopeVar = w => w.reduce((a, [kx, kz, , A]) => a + (A * Math.hypot(kx, kz)) ** 2 / 4, 0);
+const waveGLSL = w => w.map(([kx, kz, om, A]) => `wave(p, vec2(${kx.toFixed(3)}, ${kz.toFixed(3)}), ${om.toFixed(2)}, ${A.toFixed(3)})`).join(' + ');
+const CM_AXIS = (.003 + .00512 * 2) / 2, WAVE_L = slopeVar(LONG_W), WAVE_S = slopeVar(SHORT_W);
 
 export const SEA = { mat: null };
 const G = new THREE.Group();                                     // the yacht, built in its own frame (x = u, z = v)
@@ -77,6 +98,8 @@ float washAt(vec2 xz){
   float stern = u < -5.5 ? exp(-av/(1.4 + .12*(-5.5 - u)))*exp((u + 5.5)/90.) : 0.;
   return clamp(side*.9 + arm*.55 + stern*.7, 0., 1.);
 }
+float seaSlope(float d){ float a = .5 + .5*(1. - smoothstep(150., 3000., d)), b = 1. - smoothstep(20., 400., d);
+  return sqrt(max(${CM_AXIS.toFixed(6)} - a*a*${WAVE_L.toFixed(6)} - b*b*${WAVE_S.toFixed(6)}, 0.)); }
 vec3 seaBands(vec3 W, vec3 N, vec3 V, vec3 Rf, float dist, float foam, float inVis){
   vec3 col = vec3(0.); float cosv = clamp(dot(-V, N), 0., 1.), gz = pow(1. - cosv, 5.);
   float T = uSurfA.x + .3*(n2(W.xz*.003) - .5);                  // open ocean: a uniform surface, ±0.15 K
@@ -119,10 +142,10 @@ function seaMaterial(instr) {
       W = vSurfW; vec3 toP = W - cameraPosition; dist = length(toP); V = toP/dist;
       fd = 1. - smoothstep(150., 3000., dist); float fd2 = 1. - smoothstep(20., 400., dist);
       p = W.xz + uBoatF*${BOAT.speed.toFixed(1)}*uSurfTime; vec2 g = vec2(0.);
-      // a long swell from the south-west (λ ≈ 120 m) under a light wind sea
-      g += wave(p, vec2(.035,.038), .52, 1.5) + wave(p, vec2(.06,-.02), .7, .5) + wave(p, vec2(-.05,.09), 1., .45) + wave(p, vec2(.12,.05), 1.2, .3);
+      // a long swell from the south-west (λ ≈ 120 m) under a light wind sea (LONG_W / SHORT_W)
+      g += ${waveGLSL(LONG_W)};
       g *= .5 + .5*fd;
-      g += fd2*(wave(p, vec2(.55,.8), 2.6, .07) + wave(p, vec2(-.9,.45), 3.1, .05) + wave(p, vec2(.3,-1.1), 3.4, .04)
+      g += fd2*(${waveGLSL(SHORT_W)}
              + .05*vec2(n2(p*1.3+uSurfTime*.6)-.5, n2(p*1.3-uSurfTime*.5+7.)-.5));
       N = normalize(vec3(-g.x, 1., -g.y)); Rf = reflect(V, N);
       Rf.y = abs(Rf.y);
@@ -168,7 +191,21 @@ void eyeBands(out vec4 o1, out vec4 o3){
   o1 = vec4(eyeSeaL(0., 0., 1., 0., 0., W, N, V, Rf, dist, foam), eyeSeaL(0., 0., 0., 1., 0., W, N, V, Rf, dist, foam),
             eyeSeaL(0., 0., 0., 0., 1., W, N, V, Rf, dist, foam), 1.);
   o3 = vec4(eyeSeaL(1., 0., 0., 0., 0., W, N, V, Rf, dist, foam), eyeSeaL(0., 1., 0., 0., 0., W, N, V, Rf, dist, foam), 0., 1.);
-  eyeMR = eyeMM = eyeMI = eyeMU = eyeMG = 1.; eyeSmooth = 0.; }`;
+  eyeMR = eyeMM = eyeMI = eyeMU = eyeMG = 1.; eyeSmooth = 0.; }
+// near-IR (the night-vision channel, render rule 7; as the seaside's sea, scenarios/seaside/world.js eyeNIR): water
+// absorbs the near-IR within centimetres, so the sea is a dark mirror — Fresnel (R0opt .02, Hale & Querry 1973) of the
+// near-IR sky (not drawn: NIR_SKY_SHOWN) and the Moon's glitter path, a flux-conserving lobe of width s = 2 × seaSlope,
+// L = F·E·exp(−(1 − R·M)/s²)/(2 s²) with E/π in the uniforms; under the mirror the water body's albedo .02 (D.y); foam
+// and the wash .3 (whitecap reflectance falls ~40–50 % from the visible to 0.85 µm: Frouin, Schwindling & Deschamps
+// 1996, JGR 101:14361; STAND-IN)
+#define EYE_NIR
+float eyeNIR(){
+  vec3 W, V, N, Rf; vec2 p; float dist, fd, wash, foam;
+  seaGeo(W, dist, V, N, Rf, p, fd, wash, foam);
+  vec3 M = uNirMoon.xyz; float cosv = clamp(dot(-V, N), 0., 1.), F = fresnelS(uSurfD.z, cosv), s = max(2.*seaSlope(dist), .03);
+  float Eh = uNirSky + uNirMoon.w*max(M.y, 0.);
+  float glint = uNirMoon.w*step(0., M.y)*exp(-(1. - dot(Rf, M))/(s*s))/(2.*s*s);
+  return uSOnI_*mix(F*(NIR_SKY_SHOWN*skyNIR(Rf, uNirSky, uNirGlow) + glint) + (1. - F)*uSurfD.y*Eh, .3*Eh, foam); }`;
 
 function sea() {
   const mat = seaMaterial(false);

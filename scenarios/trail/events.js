@@ -4,9 +4,9 @@ import { V3, DEG, lerp, sm, env, R, fbm2 } from 'spectra/core/util.js';
 import { S } from 'spectra/core/state.js';
 import { event } from 'spectra/core/events.js';
 import { deg, skyP, dirAE, FOV_SKY } from 'spectra/core/geom.js';
-import { Em, Rib, EmField } from 'spectra/render/sources.js';
+import { Em, Rib, EmField, BEAM, toViewer } from 'spectra/render/sources.js';
 import { solid, visOnly } from 'spectra/render/instrument.js';
-import { spectralGroup, addTx, SURF_U } from 'spectra/render/surface.js';
+import { spectralGroup, spectralParts, partsGeometry, addTx, SURF_U } from 'spectra/render/surface.js';
 import { COMMON } from 'spectra/render/shaders.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { softTex } from 'spectra/render/textures.js';
@@ -29,7 +29,10 @@ export const radioTower = () => event({ name: 'Radio / TV tower', t0: 0, t1: 60,
     this.top = new V3(x, y + H, z); this.uhf = new V3(x, y + H * .82, z); this.light = new Em('vis', '#ff2020'); this.rad = new Em('radio'); this.mw = new Em('micro');
     addTx('radio', () => ({ p: this.top, power: 1.4 }));   // FM paints the valley slopes
   },
-  update() { this.light.set(this.top, 5, S.T % 1.5 < .5 ? 1.3 : .05); this.rad.set(this.top, 170, .8); this.mw.set(this.uhf, 60, .55);
+  // beams toward the eye (sources.js BEAM.array): FM from a 4-bay stack about one wavelength apart, UHF TV from an
+  // 8-tier panel array (typical broadcast antennas, STAND-IN), both omnidirectional in azimuth, tilted ~0.75° down —
+  // from below the ridge you sit under the main beam, so UHF (the narrower stack) looks dimmer than FM
+  update() { this.light.set(this.top, 5, S.T % 1.5 < .5 ? 1.3 : .05); this.rad.set(this.top, 170, .8, BEAM.array(toViewer(this.top).el, 4)); this.mw.set(this.uhf, 60, .55, BEAM.array(toViewer(this.uhf).el, 8));
     TRAIL_U.uMTx.value[1].set(this.uhf.x, this.uhf.y, this.uhf.z, S.on.micro ? .5 : 0); S.act.micro += .15; },   // TV UHF coverage on the terrain
   where() { return this.top; } });
 
@@ -73,24 +76,58 @@ export const hut = () => event({ name: 'Mountain hut', t0: 8, t1: 34, bands: ['v
     });
   }, where() { return this.roof; } });
 
-export const deer = () => event({ name: 'Deer crossing', t0: 13, t1: 27, bands: ['ir'], freq: ['thermal310'], note: 'Hard to see by eye at dusk, bright on a thermal camera.',
+// Deer (M11/T4): a red-deer stag in summer coat, one merged body + one instanced draw for the four swinging legs, each
+// part with its own surface (engine/render/surface.js partsGeometry): the coat reads only a few °C above the air, the
+// eyes, nose, ears, lower legs and the antlers in velvet (living, blood-filled skin in summer) are the warm windows.
+const SPH = new THREE.SphereGeometry(1, 12, 8);
+const DEER_LEG = partsGeometry([
+  { from: [0, .04, 0], to: [0, -.42, 0], r0: .075, r1: .05, surf: 'fur', col: 0x3a2416 },     // thigh / forearm in the coat
+  { from: [0, -.42, 0], to: [0, -.86, 0], r0: .04, r1: .028, surf: 'limb', col: 0x2a1a10 },   // thin-haired cannon bone
+  { from: [0, -.86, 0], to: [0, -.92, 0], r0: .03, r1: .036, surf: 'fur', col: 0x0c0806 },    // hoof (keratin, near air)
+]);
+function deerBody() {
+  const fur = 0x3a2416, pale = 0x7a6450, P = [
+    { g: SPH, s: [.66, .33, .26], at: [0, 1.12, 0], surf: 'fur', col: fur },               // barrel
+    { g: SPH, s: [.3, .32, .25], at: [.42, 1.14, 0], surf: 'fur', col: fur },              // chest / shoulders
+    { g: SPH, s: [.28, .3, .24], at: [-.42, 1.13, 0], surf: 'fur', col: fur },             // haunches
+    { g: SPH, s: [.1, .19, .18], at: [-.66, 1.14, 0], surf: 'fur', col: pale },            // rump patch
+    { from: [.5, 1.22, 0], to: [.86, 1.66, 0], r0: .15, r1: .09, n: 8, surf: 'fur', col: fur },   // neck
+    { g: SPH, s: [.19, .1, .095], rot: [0, 0, -.45], at: [.96, 1.68, 0], surf: 'fur', col: fur },   // head
+    { from: [1.05, 1.63, 0], to: [1.2, 1.55, 0], r0: .06, r1: .035, surf: 'skin', col: 0x120c0a }, // muzzle: bare, warm nose
+    { from: [.84, 1.76, .07], to: [.8, 1.92, .2], r0: .04, r1: .012, n: 5, surf: 'limb', col: 0x2e1c12 },   // ears
+    { from: [.84, 1.76, -.07], to: [.8, 1.92, -.2], r0: .04, r1: .012, n: 5, surf: 'limb', col: 0x2e1c12 },
+    { g: SPH, s: [.022, .022, .022], at: [1.0, 1.72, .075], surf: 'skin', col: 0x050404 },   // eyes: the warmest spots
+    { g: SPH, s: [.022, .022, .022], at: [1.0, 1.72, -.075], surf: 'skin', col: 0x050404 },
+    { g: SPH, s: [.05, .08, .045], at: [-.72, 1.2, 0], surf: 'fur', col: pale },            // tail
+  ];
+  for (const z of [1, -1]) {                                                                // antlers in velvet: skin
+    const b0 = [.9, 1.8, .05 * z], b1 = [.82, 2.1, .2 * z], b2 = [.7, 2.38, .3 * z];
+    P.push({ from: b0, to: b1, r0: .025, r1: .02, n: 5, surf: 'skin', col: 0x3a2a20 }, { from: b1, to: b2, r0: .02, r1: .012, n: 5, surf: 'skin', col: 0x3a2a20 },
+      { from: [.86, 1.95, .12 * z], to: [1.02, 2.06, .16 * z], r0: .014, r1: .006, n: 4, surf: 'skin', col: 0x3a2a20 },
+      { from: b1, to: [.95, 2.28, .25 * z], r0: .013, r1: .006, n: 4, surf: 'skin', col: 0x3a2a20 });
+  }
+  return partsGeometry(P);
+}
+export const deer = () => event({ name: 'Deer crossing', t0: 13, t1: 27, bands: ['ir'], freq: ['thermal310'], note: 'Hard to see by eye at dusk, bright on a thermal camera: a stag in his summer coat. The coat itself reads only a few degrees above the air (fur insulates); eyes, nose, ears, the thin-haired lower legs and the antlers, still in their blood-filled velvet, glow warm.',
   init() {
-    const m = new THREE.MeshStandardMaterial({ color: new THREE.Color(.09, .06, .04), roughness: .9 }), G = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.CapsuleGeometry(.32, .9, 4, 8), m); body.rotation.z = Math.PI / 2; body.position.y = 1.05; G.add(body);
-    const neck = new THREE.Mesh(new THREE.CylinderGeometry(.09, .14, .7, 6), m); neck.position.set(.66, 1.38, 0); neck.rotation.z = -.6; G.add(neck);
-    const head = new THREE.Mesh(new THREE.CapsuleGeometry(.1, .26, 3, 6), m); head.position.set(.88, 1.66, 0); head.rotation.z = Math.PI / 2 - .4; G.add(head);
-    [[-1, .3], [1, .3], [-1, -.2], [1, -.2]].forEach(([s, a]) => { const an = new THREE.Mesh(new THREE.CylinderGeometry(.015, .02, .45, 4), m); an.position.set(.82 + a * .1, 1.95, s * .1); an.rotation.set(s * .4, 0, a); G.add(an); });
-    this.legs = [[.45, .15], [.45, -.15], [-.45, .15], [-.45, -.15]].map(([x, z]) => { const L = new THREE.Group(); L.position.set(x, .9, z); const c = new THREE.Mesh(new THREE.CylinderGeometry(.045, .03, .9, 5), m); c.position.y = -.45; L.add(c); G.add(L); return L; });
-    this.g = spectralGroup(G, 'body', { weight: 0 }); S.scene.add(G); G.visible = false;   // warm surface (M10/T9); its IR is metered by the sources
+    const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .9 }), G = new THREE.Group();
+    G.add(spectralParts(new THREE.Mesh(deerBody(), m), { weight: 0 }));
+    this.legs = new THREE.InstancedMesh(DEER_LEG, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .9 }), 4); this.legs.frustumCulled = false; this.legs.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    G.add(spectralParts(this.legs, { weight: 0 })); this.tmp = new THREE.Object3D();
+    this.g = G; S.scene.add(G); G.visible = false;   // warm surfaces by part (M11/T4); its IR is metered by the sources
     this.a = new V3(30, 0, -2); this.b = new V3(-32, 0, -13); this.body = new Rib('ir', null, 4, 1); this.headIR = new Em('ir', null, 1);
   },
   update() {
     const { t, T } = S, p = (t - 13) / 14; this.g.visible = p > 0 && p < 1; if (!this.g.visible) { this.p = null; return; }
     const x = lerp(this.a.x, this.b.x, p), z = lerp(this.a.z, this.b.z, p), y = heightAt(x, z), dx = this.b.x - this.a.x, dz = this.b.z - this.a.z;
     this.g.position.set(x, y, z); this.g.rotation.y = Math.atan2(-dz, dx);
-    this.legs.forEach((L, i) => L.rotation.z = Math.sin(T * 7 + (i % 2 ? Math.PI : 0) + (i > 1 ? 1.2 : 0)) * .45);
+    [[.42, .15], [.42, -.15], [-.42, .15], [-.42, -.15]].forEach(([lx, lz], i) => {
+      this.tmp.position.set(lx, .92, lz); this.tmp.rotation.set(0, 0, Math.sin(T * 7 + (i % 2 ? Math.PI : 0) + (i > 1 ? 1.2 : 0)) * .45);
+      this.tmp.updateMatrix(); this.legs.setMatrixAt(i, this.tmp.matrix); });
+    this.legs.instanceMatrix.needsUpdate = true;
     const I = env(t, 13, 27, 1), fw = new V3(dx, 0, dz).normalize();
-    this.p = new V3(x, y + 1.05, z); this.body.set([this.p.clone().addScaledVector(fw, -.72), this.p.clone().addScaledVector(fw, .55)], 1.5, 1.1, I * .55); this.headIR.set(this.p.clone().addScaledVector(fw, .9).add(new V3(0, .62, 0)), 1.1, I * .4);
+    this.p = new V3(x, y + 1.05, z); // body heat: metered, but in the eye the parts' own surfaces (fur, skin, limbs) are the emitter — see 0 (M11/T6)
+    this.body.set([this.p.clone().addScaledVector(fw, -.72), this.p.clone().addScaledVector(fw, .55)], 1.5, 1.1, I * .55, 0, 0); this.headIR.set(this.p.clone().addScaledVector(fw, .9).add(new V3(0, .62, 0)), 1.1, I * .4, 0);
   }, where() { return this.p; } });
 
 export const fireflies = () => event({ name: 'Fireflies', t0: 15, t1: 35, bands: ['vis'], freq: ['luciferin'], note: 'Bioluminescence is "cold light": visible flashes with almost no infrared.',
@@ -160,7 +197,8 @@ export const valleyFog = () => event({ name: 'Valley fog', t0: 30, t1: 60, bands
     banks.forEach((b, i) => { quad.forEach(([qx, qy]) => { pos.push(qx, qy, 0); aC.push(b.x, b.y, b.z); aS.push(b.w, b.hh, b.s, 0); }); const a = i * 4; idx.push(a, a + 1, a + 2, a, a + 2, a + 3); });
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('aC', new THREE.Float32BufferAttribute(aC, 3)); g.setAttribute('aS', new THREE.Float32BufferAttribute(aS, 4)); g.setIndex(idx);
-    this.u = { uAmt: { value: 0 }, uGrow: { value: .5 }, uCol: { value: new THREE.Color() }, uTime: S.TIME };
+    this.u = { uAmt: { value: 0 }, uGrow: { value: .5 }, uCol: { value: new THREE.Color() }, uTime: S.TIME,
+      uNirSky: SURF_U.uNirSky, uNirMoon: SURF_U.uNirMoon, uSOnI_: SURF_U.uSOnI_ };
     const common = { vertexShader: FOG_VS, transparent: true, depthWrite: false };
     const vis = new THREE.ShaderMaterial({ ...common, uniforms: this.u, fragmentShader: COMMON + `uniform float uAmt, uTime; uniform vec3 uCol; varying vec2 vQ; varying float vSeed; ${FOG_SHAPE}
       void main(){ float a = fogA(); gl_FragColor = vec4(uCol*(.8 + .35*(vQ.y*.5 + .5)), a*.8); }` });
@@ -169,7 +207,14 @@ export const valleyFog = () => event({ name: 'Valley fog', t0: 30, t1: 60, bands
       void main(){ if(uSOnI < .5) discard; float a = fogA(); gl_FragColor = vec4(thermal(.06 + .05*(vQ.y*.5 + .5))*.22, a*.92); }` });
     // spectral eye (engine/render/compose.js): the same cold fog top in the IR channel, with its own coverage, so it
     // hides the warm ground in IR only (radio, microwave and gamma pass through fog)
-    vis.userData.eyeBands = `void eyeBands(out vec4 o1, out vec4 o3){ float a = fogA(); o1 = vec4(eyeL(thermal(.06 + .05*(vQ.y*.5 + .5))*.22), 0., 0., a*.92); o3 = vec4(0.); }`;
+    // Near-IR (night vision, M11/T6): fog droplets (~10 µm) scatter 0.8 µm as they scatter light (Mie, size ≫ λ, no
+    // absorption: King et al. 1992, IEEE TGRS 30:2, the 0.86 µm cloud channel), so a fog bank glows under the Moon
+    // and sky as in visible light and hides the ground behind it — albedo .6 STAND-IN for a bank of optical depth ~10,
+    // in the surfaces' units (engine/render/surface.js surfNIR: white Lambertian = E/π on a level top, M11/T6)
+    vis.userData.eyeBands = `uniform float uNirSky, uSOnI_; uniform vec4 uNirMoon;
+#define EYE_NIR
+float eyeNIR(){ return uSOnI_*.6*(uNirSky + uNirMoon.w*max(uNirMoon.y, 0.)); }   // coverage: o1.a, as the thermal layer
+void eyeBands(out vec4 o1, out vec4 o3){ float a = fogA(); o1 = vec4(eyeL(thermal(.06 + .05*(vQ.y*.5 + .5))*.22), 0., 0., a*.92); o3 = vec4(0.); }`;
     this.mesh = new THREE.Mesh(g, vis); this.mesh.frustumCulled = false; this.mesh.renderOrder = 4; S.scene.add(solid(this.mesh, ir));
     const near = banks.reduce((a, b) => (Math.hypot(b.x - c0.x, b.z - c0.z) < Math.hypot(a.x - c0.x, a.z - c0.z) ? b : a), banks[0]);
     this.p = near ? new V3(near.x, near.y + 4, near.z) : null;
@@ -229,31 +274,61 @@ export const farHikers = () => event({ name: 'Headlamps on the switchbacks', t0:
       this.field.set(i, p, 9, I * .5 * (.75 + .25 * Math.sin(T * 1.7 + h.b))); if (i === 2) this.p = p; }); },
   where() { return this.p; } });
 
-export const cows = () => event({ name: 'Cows on the alp', t0: 3, t1: 42, bands: ['ir'], freq: ['cowBody'], note: 'A herd grazing on the meadow, bells clanking: dark lumps by eye at dusk, unmistakable warm bodies (~39 °C) on a thermal camera.',
+// Cows (M11/T4): a brown alpine cow by parts — coat near the air, eyes, ears, lower legs and udder warm — and, once the
+// alp cools after dark, the breath condensing into a faint droplet plume at each exhalation (droplets, not the warm air,
+// show at 8–14 µm: SPECTRUM.steam, as the city's steam). A resting cow breathes ~20–30 times a minute (STAND-IN; drawn
+// as one breath per 2.5 s of real time); condensation needs air near or below ~10 °C at high humidity — STAND-IN
+// timing: from t ≈ 20 on, as the meadow cools.
+function cowBody() {
+  const fur = 0x3b2c22, dark = 0x1a120e, P = [
+    { g: SPH, s: [.86, .4, .34], at: [0, 1.08, 0], surf: 'fur', col: fur },               // barrel
+    { g: SPH, s: [.36, .42, .34], at: [.5, 1.1, 0], surf: 'fur', col: fur },               // shoulders
+    { g: SPH, s: [.36, .4, .35], at: [-.55, 1.12, 0], surf: 'fur', col: fur },             // hips
+    { from: [.7, 1.12, 0], to: [1.0, 1.02, 0], r0: .24, r1: .17, n: 8, surf: 'fur', col: fur },   // neck, head lowered to graze
+    { g: SPH, s: [.24, .15, .14], rot: [0, 0, -.7], at: [1.14, .9, 0], surf: 'fur', col: fur },   // head
+    { g: SPH, s: [.1, .09, .11], at: [1.3, .72, 0], surf: 'limb', col: 0x4a3a36 },          // muzzle (moist: evaporation keeps it below skin)
+    { g: SPH, s: [.025, .025, .025], at: [1.16, .98, .12], surf: 'skin', col: 0x050404 },   // eyes: the warmest spots
+    { g: SPH, s: [.025, .025, .025], at: [1.16, .98, -.12], surf: 'skin', col: 0x050404 },
+    { g: SPH, s: [.1, .035, .06], at: [1.04, 1.05, .2], rot: [.5, 0, 0], surf: 'limb', col: fur },   // ears
+    { g: SPH, s: [.1, .035, .06], at: [1.04, 1.05, -.2], rot: [-.5, 0, 0], surf: 'limb', col: fur },
+    { from: [1.06, 1.08, .09], to: [1.02, 1.2, .2], r0: .03, r1: .01, n: 5, surf: 'fur', col: 0x8a8070 },   // horns (keratin, near air)
+    { from: [1.06, 1.08, -.09], to: [1.02, 1.2, -.2], r0: .03, r1: .01, n: 5, surf: 'fur', col: 0x8a8070 },
+    { g: SPH, s: [.2, .13, .17], at: [-.38, .7, 0], surf: 'skin', col: 0x5a4440 },          // udder [Ber]
+    { from: [-.88, 1.24, 0], to: [-.92, .5, 0], r0: .025, n: 5, surf: 'fur', col: fur },   // tail
+    { g: SPH, s: [.05, .11, .05], at: [-.92, .44, 0], surf: 'fur', col: dark },             // tail switch
+    { from: [.88, .86, 0], to: [.88, .74, 0], r0: .06, r1: .08, n: 7, surf: 'fur', col: 0x6a5a30 },   // the bell (drawn at the coat's T)
+  ];
+  for (const [x, z] of [[.55, .2], [.55, -.2], [-.58, .2], [-.58, -.2]]) P.push(
+    { from: [x, 1.0, z], to: [x, .5, z], r0: .12, r1: .08, n: 7, surf: 'fur', col: fur },   // upper leg in the coat
+    { from: [x, .5, z], to: [x, .07, z], r0: .065, r1: .05, n: 6, surf: 'limb', col: fur },  // lower leg: thin-haired, warm
+    { from: [x, .07, z], to: [x, 0, z], r0: .06, r1: .07, n: 6, surf: 'fur', col: dark });   // hoof
+  return partsGeometry(P);
+}
+export const cows = () => event({ name: 'Cows on the alp', t0: 3, t1: 42, bands: ['ir'], freq: ['cowBody', 'steam'], note: 'A herd grazing on the meadow, bells clanking: dark lumps by eye at dusk, unmistakable warm bodies (~39 °C core) on a thermal camera — the insulating coat a few degrees above the air, eyes, ears, udder and lower legs warm. Once the alp cools after dark, each breath condenses into a faint plume.',
   init() {
-    const parts = [], box = (w, h, d, x, y, z) => { const g = new THREE.BoxGeometry(w, h, d); g.translate(x, y, z); return g; };
-    parts.push(box(1.7, .78, .68, 0, 1.05, 0), box(.5, .4, .34, 1.08, 1.12, 0), box(.2, .16, .26, 1.32, 1.02, 0));
-    [[.62, .24], [.62, -.24], [-.62, .24], [-.62, -.24]].forEach(([x, z]) => parts.push(box(.15, .74, .15, x, .37, z)));
-    parts.push(box(.06, .5, .06, -.88, .85, 0));   // tail
-    const geo = mergeGeometries(parts.map(g => g.toNonIndexed()));
+    const geo = cowBody();
     this.c = []; for (let i = 0; i < 400 && this.c.length < 8; i++) {
       const z = -12 - R() * 95, side = R() < .5 ? -1 : 1, x = trailX(z) + side * (9 + R() * 30);
       if (Math.abs(z - STREAM.z) < 14 || this.c.some(c => Math.hypot(c.x - x, c.z - z) < 5)) continue;
       this.c.push({ x, z, y: heightAt(x, z), a: R() * 6.28, s: .9 + R() * .2, ph: R() * 6 });
     }
-    this.mesh = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ color: new THREE.Color(.05, .038, .03), roughness: .95 }), this.c.length);
-    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); S.scene.add(spectralGroup(this.mesh, 'body', { weight: 0 }));   // warm coats (M10/T9)
-    this.ir = new EmField('ir', this.c.length * 3, null, 1); this.tmp = new THREE.Object3D(); this.p = null;
+    this.mesh = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .95 }), this.c.length);
+    this.c.forEach((c, i) => this.mesh.setColorAt(i, new THREE.Color().setScalar(.55 + .9 * ((i * .618) % 1))));   // lighter and darker coats (by index, not R)
+    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); S.scene.add(spectralParts(this.mesh, { weight: 0 }));   // warm parts (M11/T4)
+    this.ir = new EmField('ir', this.c.length * 3, null, 1); this.br = new EmField('ir', this.c.length, null, 1); this.tmp = new THREE.Object3D(); this.p = null;
   },
-  update() { const { t, T } = S, I = env(t, 3, 42, 2);
+  update() { const { t, T } = S, I = env(t, 3, 42, 2), cold = sm(20, 32, t);
     this.mesh.visible = I > 0; if (I <= 0) { this.p = null; return; }
     let best = 1e9; const cam = S.camera.position;
     this.c.forEach((c, i) => { const a = c.a + .35 * Math.sin(T * .05 + c.ph), fw = new V3(Math.cos(a), 0, -Math.sin(a));
       const x = c.x + Math.sin(T * .03 + c.ph) * 1.5, z = c.z + Math.cos(T * .025 + c.ph) * 1.5, y = heightAt(x, z);
       this.tmp.position.set(x, y, z); this.tmp.rotation.set(0, a, 0); this.tmp.scale.setScalar(c.s); this.tmp.updateMatrix(); this.mesh.setMatrixAt(i, this.tmp.matrix);
       const b = new V3(x, y + 1.05 * c.s, z);
-      this.ir.set(i * 3, b.clone().addScaledVector(fw, -.42 * c.s), 1.35 * c.s, I * .5); this.ir.set(i * 3 + 1, b.clone().addScaledVector(fw, .38 * c.s), 1.25 * c.s, I * .5);
-      this.ir.set(i * 3 + 2, b.clone().addScaledVector(fw, 1.12 * c.s).add(new V3(0, .08, 0)), .6 * c.s, I * .42);
+      // body heat: metered; the eye sees the parts' surfaces instead (see 0, M11/T6) — only the breath plume is extra
+      this.ir.set(i * 3, b.clone().addScaledVector(fw, -.42 * c.s), 1.35 * c.s, I * .5, 0); this.ir.set(i * 3 + 1, b.clone().addScaledVector(fw, .38 * c.s), 1.25 * c.s, I * .5, 0);
+      this.ir.set(i * 3 + 2, b.clone().addScaledVector(fw, 1.12 * c.s).add(new V3(0, .08, 0)), .6 * c.s, I * .42, 0);
+      const ph = ((T + c.ph) / 2.5) % 1, puff = ph < .4 ? Math.sin(ph / .4 * Math.PI) : 0;   // one exhalation per 2.5 s
+      if (cold * puff > .02) this.br.set(i, new V3(x, y + .7 * c.s, z).addScaledVector(fw, (1.45 + .35 * ph) * c.s).add(new V3(0, .15 * ph, 0)), (.25 + .5 * ph) * c.s, I * cold * puff * .14);
       const d = b.distanceTo(cam); if (z < cam.z - 6 && d < best) { best = d; this.p = b.clone().add(new V3(0, 1, 0)); } });
     this.mesh.instanceMatrix.needsUpdate = true; },
   where() { return this.p; } });
@@ -272,8 +347,11 @@ export const cellMast = () => event({ name: 'Cell mast on the ridge', t0: 0, t1:
     S.scene.add(solid(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0x0b0b10 }))));
     this.top = top.clone().add(new V3(0, -2.2, 0)); this.e = new Em('micro');
   },
-  update() { const { T } = S, f = .75 + .25 * Math.sin(T * 3.1) * Math.sin(T * 1.3);
-    this.e.set(this.top, 28, .55 * f); TRAIL_U.uMTx.value[0].set(this.top.x, this.top.y, this.top.z, .9); S.act.micro += .2; },
+  // the eye sees the three sector panels' beams (sources.js BEAM.sectors: 3GPP panel pattern, 65° wide, 4° downtilt,
+  // boresights along the drawn panels at k·120°): bright where you stand in a sector's main lobe, ~7 dB down between
+  // two sectors (each 60° off its boresight: −10.2 dB, the two together −7 dB). The load flicker f is the old view's; the eye shows the steady pilot/reference-signal power.
+  update() { const { T } = S, f = .75 + .25 * Math.sin(T * 3.1) * Math.sin(T * 1.3), v = toViewer(this.top);
+    this.e.set(this.top, 28, .55 * f, BEAM.sectors(v.az, -v.el, [0, 2.094, -2.094]) / f); TRAIL_U.uMTx.value[0].set(this.top.x, this.top.y, this.top.z, .9); S.act.micro += .2; },
   where() { return this.top; } });
 
 export const weatherStation = () => event({ name: 'Weather-station radio link', t0: 0, t1: 60, bands: ['radio'], freq: ['wxTelemetry'], note: 'An automatic weather station on the knoll ahead sends its readings in short VHF bursts to the transmitter mast on the ridge.',

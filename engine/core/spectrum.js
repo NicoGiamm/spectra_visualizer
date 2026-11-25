@@ -43,19 +43,50 @@ export const SPECTRUM = {
   // diffuse Galactic gamma rays from cosmic-ray interactions, concentrated in the plane (Fermi-LAT: Ackermann et al.
   // 2012, ApJ 750, 3); absorbed by the air column
   gammaDiffuse:    { name: 'diffuse Galactic gamma rays', E: 1e8, ground: false },
-  pulsarRadio:     { name: 'pulsar radio beam', f: 150e6 },
+  // --- the Vela pulsar and its supernova remnant (M11/T5, engine/events/sky.js pulsar) ---
+  // the beam is seen only as pulses when it sweeps across the Earth; Vela (PSR B0833−45, P = 89 ms) is among the
+  // brightest pulsars at low radio frequencies
+  pulsarRadio:     { name: 'pulsar radio pulses (the beam sweeping across us)', f: 150e6 },
+  // optical counterpart V ≈ 23.6 (Lasker 1976; Nasuti et al. 1997, A&A 323, 839), pulses at B ≈ 25.2 (Wallace et al. 1977, Nature 266, 692)
   pulsarOptical:   { name: 'pulsar optical pulses', lam: 500e-9 },
-  pulsarXray:      { name: 'pulsar X-rays', E: 1e3, ground: false },
-  accretionXray:   { name: 'accretion-disk X-rays', E: 5e3, ground: false },
-  jetSynchrotron:  { name: 'relativistic jet synchrotron', f: 150e6 },
+  // the pulsar and its arcminute X-ray wind nebula, torus and jets (Chandra: Helfand, Gotthelf & Halpern 2001, ApJ 556, 380)
+  pulsarXray:      { name: 'pulsar & compact wind nebula X-rays', E: 1e3, ground: false },
+  // the ~8° shell, broadband synchrotron mapped at 2.4 GHz (Duncan et al. 1996, MNRAS 280, 252); brighter still at low
+  // frequencies (34.5 MHz: Dwarakanath 1991, JApA 12, 199), sampled at 150 MHz like the other deep-sky radio keys;
+  // Green's catalogue gives the radio remnant 255′ (G263.9−3.3), the 8° is the ROSAT X-ray shell
+  snrShellRadio:   { name: 'supernova-remnant shell, radio synchrotron', f: 150e6 },
+  // thermal soft X-rays of the shock-heated shell, kT ≈ 0.1–0.3 keV: the ROSAT all-sky survey, 0.1–2.4 keV (Aschenbach,
+  // Egger & Trümper 1995, Nature 373, 587; Lu & Aschenbach 2000, A&A 362, 1083)
+  snrShellXray:    { name: 'supernova-remnant shell, thermal soft X-rays', E: 3e2, ground: false },
+  // Vela X, the pulsar-wind nebula: ~2° × 3° of flat-spectrum synchrotron south of the pulsar (Frail et al. 1997, ApJ 475, 224; Dwarakanath 1991, JApA 12, 199)
+  pwnRadio:        { name: 'pulsar-wind nebula radio synchrotron (Vela X)', f: 150e6 },
+  // shock-excited filaments along the shell, Hα 656.3 nm (with [O III] 500.7 nm; line data NIST ASD)
+  snrFilaments:    { name: 'remnant filaments: Hα 656.3 nm', lam: 656.3e-9 },
+  // --- the microquasar SS 433 and the W50 nebula (M11/T5, engine/events/sky.js microquasar) ---
+  // thermal X-rays from the hot base of the jets, Doppler-shifted Fe XXV / XXVI lines near 6.7 keV (Kotani et al. 1996, PASJ 48, 619)
+  jetBaseXray:     { name: 'SS 433 jet base: thermal X-ray lines (Fe XXV, 6.7 keV)', E: 6.7e3, ground: false },
+  // the X-ray lobes along the jet axis inside W50, ROSAT / ASCA (Safi-Harb & Ögelman 1997, ApJ 483, 868)
+  w50Xray:         { name: 'W50 X-ray lobes along the jets', E: 2e3, ground: false },
+  // the corkscrew of the precessing jets (kinematic model: Hjellming & Johnston 1981, ApJ 246, L141, VLA 4.9 GHz);
+  // optically thin synchrotron down into the radio band, the core detected by LOFAR at 140 MHz (Broderick et al. 2018)
+  jetSynchrotron:  { name: 'relativistic jet synchrotron (SS 433 corkscrew)', f: 150e6 },
+  // W50, ~2° × 1° with ears along the jet axis: VLA 1.4 GHz (Dubner et al. 1998, AJ 116, 1842) and LOFAR 140 MHz
+  // (Broderick et al. 2018, MNRAS 475, 5360)
+  w50Radio:        { name: 'W50 nebula radio synchrotron', f: 140e6 },
+  // faint Hα filaments near W50's ears (Zealey, Dopita & Malin 1980, MNRAS 192, 731)
+  w50Halpha:       { name: 'W50 filaments: Hα 656.3 nm', lam: 656.3e-9 },
+  // SS 433's companion, an A-type supergiant (Hillwig et al. 2004, ApJ 615, 422); V ≈ 14
   companionStar:   { name: 'companion star light', lam: 550e-9 },
+  // --- transients ---
   frb:             { name: 'fast radio burst (low band)', f: 150e6 },
   snUV:            { name: 'supernova shock-breakout UV', lam: 100e-9, ground: false },
   snOptical:       { name: 'supernova light curve', lam: 550e-9 },
-  snXray:          { name: 'supernova remnant X-rays', E: 2e3, ground: false },
+  // X-rays of the shock running into the gas the star shed before it exploded (Immler & Lewin 2003, Lect. Notes Phys. 598, 91)
+  snXray:          { name: 'supernova X-rays (shock in circumstellar gas)', E: 2e3, ground: false },
   snGamma:         { name: 'Ni-56/Co-56 decay lines', E: 8.47e5, ground: false },
   snDust:          { name: 'new dust forming (IR)', lam: 10e-6 },
-  snRadio:         { name: 'remnant radio synchrotron', f: 150e6 },
+  // radio synchrotron of the same shock, rising months after the explosion at low frequencies (Weiler et al. 2002, ARA&A 40, 387)
+  snRadio:         { name: 'supernova radio synchrotron (shock in circumstellar gas)', f: 150e6 },
   grbGamma:        { name: 'gamma-ray burst prompt emission', E: 3e5, ground: false },
   afterglowXray:   { name: 'GRB X-ray afterglow', E: 1e3, ground: false },
   afterglowOptical:{ name: 'GRB optical afterglow', lam: 550e-9 },
@@ -244,6 +275,20 @@ export const SPECTRUM = {
   // 169.400–169.475 MHz: metering and telemetry band (CEPT ERC Rec. 70-03, Annex 2); remote monitoring stations send
   // seismic, tilt and GNSS data in short bursts over VHF/UHF links
   monTelemetry: { name: 'monitoring-station telemetry bursts (VHF 169.4 MHz)', f: 169.4e6 },
+
+  // ===== near-IR (M11/T3: the night-vision channel of the IR band, engine/render/surface.js surfNIR) =====
+  // leaves reflect ~0.45–0.5 at 0.8 µm against ~0.05 in the red — the red edge at ~0.7 µm (mesophyll scattering, no
+  // chlorophyll absorption beyond 0.7 µm: Jacquemoud & Baret 1990, Remote Sens. Environ. 34:75, PROSPECT; ASTER /
+  // ECOSTRESS library spectra); the illuminant is the Moon, the twilight sky and the airglow
+  nirReflect:      { name: 'near-IR moonlight / skylight reflected (leaves bright: the red edge)', lam: 800e-9 },
+  // moonlight is sunlight × the lunar reflectance, which rises from ~0.07 at 400 nm to ~0.17 at 900 nm (ROLO model:
+  // Kieffer & Stone 2005, Astron. J. 129:2887) — redder than sunlight, so the Moon is a strong near-IR illuminator
+  moonNIR:         { name: 'moonlight in the near-IR (lunar reflectance rising to the red)', lam: 850e-9 },
+  // OH Meinel bands: vibration–rotation airglow of OH at ~87 km, 0.6–2.5 µm (Meinel 1950, ApJ 111:555); in the
+  // 0.6–0.9 µm range of a Gen III GaAs photocathode it makes the night sky ~3–4× brighter than sunlight's I/V ratio
+  // would (Benn & Ellison 1998, La Palma night-sky brightness: V 21.9, I 20.0 mag/arcsec²; Vatsia 1972, Atmospheric
+  // Optical Environment, US Army ECOM) — what lights a moonless night for night-vision goggles
+  ohAirglow:       { name: 'OH Meinel-band airglow (night-sky near-IR)', lam: 850e-9 },
 
   // ===== aurora additions (M12/T1)
   // auroral kilometric radiation: electron-cyclotron maser emission at 50–500 kHz, peak ~250 kHz, from 1–3 Earth radii

@@ -8,7 +8,7 @@ import { event } from 'spectra/core/events.js';
 import { skyP } from 'spectra/core/geom.js';
 import { Em, Rib } from 'spectra/render/sources.js';
 import { solid, visOnly } from 'spectra/render/instrument.js';
-import { spectralGroup } from 'spectra/render/surface.js';
+import { spectralGroup, partsGeometry, spectralParts, PRESET } from 'spectra/render/surface.js';
 import { softTex } from 'spectra/render/textures.js';
 import { night } from 'spectra/world/atmosphere.js';
 import { heightAt, LAKE, SNOW_U, ICE, SPOTS, SURF } from './world.js';
@@ -91,7 +91,9 @@ export const akr = cur => event({ name: 'Auroral kilometric radiation', t0: cur.
 
 // Riometer: crossed dipoles on a frame near the cabin, listening to the cosmic radio noise straight up; during the
 // breakup the D-region absorption swallows part of it. Drawn as the received noise coming down the antenna's beam
-// (streamlines + a mouth ring), dimming with the absorption.
+// (streamlines + a mouth ring), dimming with the absorption — in the old view only: a receiver sends nothing toward
+// you and the noise it listens to comes from the whole sky, so the spectral eye meters it but draws none of it
+// (`see = 0`, render rule 6, as the auroral kilometric radiation keeps only its label).
 export const riometer = cur => event({ name: 'Riometer', t0: 0, t1: 60, bands: ['radio'], freq: ['cosmicNoise38'], tags: ['stylised'],
   note: 'A riometer measures how much of the steady radio hiss from the Galaxy (38 MHz) gets through the ionosphere. When the substorm\'s energetic electrons hit the lower ionosphere, it absorbs part of that noise and the received level drops by a few decibels — the antenna "sees" the sky go dark in radio while it lights up in visible light.',
   init() {
@@ -104,24 +106,50 @@ export const riometer = cur => event({ name: 'Riometer', t0: 0, t1: 60, bands: [
   },
   update() { const st = cur.st, absorb = st ? clamp(.8 * st.bk + .3 * st.rc) : 0, I = .55 * (1 - .75 * absorb);
     const ring = Array.from({ length: 25 }, (_, k) => { const a = k / 24 * 6.283; return this.top.clone().add(new V3(Math.cos(a) * 70, 0, Math.sin(a) * 70)); });
-    this.mouth.set(ring, 5, 5, I * .6);
-    for (let i = 0; i < 4; i++) this.lines[i].set([ring[i * 6], this.base], 6, 1.5, I * .5, 1);
-    this.lines[4].set([this.top, this.base], 8, 2, I * .7, 1);
-    this.e.set(this.base, 6, I * (.8 + .2 * Math.sin(S.T * 3)));
+    this.mouth.set(ring, 5, 5, I * .6, 0, 0);
+    for (let i = 0; i < 4; i++) this.lines[i].set([ring[i * 6], this.base], 6, 1.5, I * .5, 1, 0);
+    this.lines[4].set([this.top, this.base], 8, 2, I * .7, 1, 0);
+    this.e.set(this.base, 6, I * (.8 + .2 * Math.sin(S.T * 3)), 0);
     this.absorb = absorb; },
   where() { return this.base; } });
 
 // A snowmobile coming home along the south-west shore (on land: new ice won't carry it): LED headlight and tail light,
 // a hot two-stroke exhaust and a warm rider.
+// Built from parts (M11/T4, render rule 13; surface.js partsGeometry): the cowl over the running engine (PRESET.engine,
+// 55 °C), the rubber track and the skis cooled by the snow they run on (−5 °C, STAND-IN), a hot tailpipe
+// (PRESET.exhaust), the rider in an insulated snowmobile suit and helmet. A suit of ~2.5 clo (ISO 9920 cold-weather
+// ensembles) keeps its outer surface only a few K above the −10 °C air: +2 °C, STAND-IN (the city's `coat` row, 27 →
+// 20 °C, is for a summer street). The parts are the thermal emitters the eye sees; the old body-heat glows stay for
+// the meters only (`see = 0`, render rule 3).
 const SLED_A = new V3(-260, 0, -420), SLED_B = new V3(CABIN.x - 15, 0, CABIN.z - 10);
+const SNOW_RUN = { ...PRESET.tyre, A: [-5, -5, 0, PRESET.tyre.A[3]] }, SUIT = { ...PRESET.coat, A: [2, 2, 0, PRESET.coat.A[3]] };
+const SPH = new THREE.SphereGeometry(1, 10, 7);
+const sledGeo = () => partsGeometry([
+  { g: new THREE.BoxGeometry(.9, .45, 1), at: [0, .55, .75], surf: 'engine', col: 0x5a0c0a },          // cowl over the engine
+  { g: new THREE.BoxGeometry(.7, .3, 1.4), at: [0, .5, -.45], surf: SNOW_RUN, col: 0x101012 },         // seat and tunnel
+  { g: new THREE.BoxGeometry(.5, .35, 2.3), at: [0, .2, -.35], surf: SNOW_RUN, col: 0x0a0a0a },        // track
+  { g: new THREE.BoxGeometry(.12, .05, 1.3), at: [-.42, .03, 1.05], surf: SNOW_RUN, col: 0x18181a },   // skis
+  { g: new THREE.BoxGeometry(.12, .05, 1.3), at: [.42, .03, 1.05], surf: SNOW_RUN, col: 0x18181a },
+  { from: [.3, .45, -1.1], to: [.3, .5, -1.35], r0: .04, surf: 'exhaust', col: 0x303030 },            // tailpipe
+  { g: SPH, s: [.24, .34, .18], at: [0, 1.05, -.35], rot: [-.25, 0, 0], surf: SUIT, col: 0x1a2a40 },   // rider: torso
+  { g: SPH, s: [.15, .16, .17], at: [0, 1.52, -.25], surf: SUIT, col: 0x202020 },                     // helmet
+  ...[-1, 1].flatMap(sd => [
+    { from: [sd * .14, .72, -.45], to: [sd * .2, .7, .05], r0: .09, r1: .08, surf: SUIT, col: 0x1a2a40 },   // thighs
+    { from: [sd * .2, .7, .05], to: [sd * .22, .35, .0], r0: .07, surf: SUIT, col: 0x1a2a40 },             // shins
+    { from: [sd * .22, 1.28, -.3], to: [sd * .32, 1.0, .25], r0: .055, surf: SUIT, col: 0x1a2a40 },         // arms to the bars
+  ]),
+]);
 export const snowmobile = () => event({ name: 'Snowmobile', t0: 25, t1: 33, bands: ['vis', 'ir'], freq: ['ledWhite', 'ledRed', 'thermal700', 'thermal310'], tags: ['common', 'stylised'],
   note: 'Someone heads home along the shore: a white LED headlight and red tail light, the hot exhaust of the engine (~700 K) trailing a warm plume, and the rider\'s body heat — easy to follow in thermal infrared against the cold snow. Slowed right down so you can follow it: the real ride of about 300 m takes under a minute.',
-  init() { this.h = new Em('vis', '#f4f6ff'); this.tl = new Em('vis', '#ff2a20'); this.eng = new Em('ir', null, 1); this.ex = new Rib('ir', null, 6, 1); this.rider = new Em('ir', null, 1); },
-  update() { const { t } = S, f = (t - this.t0) / (this.t1 - this.t0); this.p = null; if (f < 0 || f > 1) return;
+  init() { this.h = new Em('vis', '#f4f6ff'); this.tl = new Em('vis', '#ff2a20'); this.eng = new Em('ir', null, 1); this.ex = new Rib('ir', null, 6, 1); this.rider = new Em('ir', null, 1);
+    this.body = spectralParts(new THREE.Mesh(sledGeo(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .6 })), { weight: 0 });
+    this.body.visible = false; S.scene.add(this.body); },
+  update() { const { t } = S, f = (t - this.t0) / (this.t1 - this.t0); this.p = null; this.body.visible = false; if (f < 0 || f > 1) return;
     const k = sm(0, 1, f), P = SLED_A.clone().lerp(SLED_B, k), dir = SLED_B.clone().sub(SLED_A).setY(0).normalize();
+    this.body.position.set(P.x, heightAt(P.x, P.z), P.z); this.body.rotation.set(0, Math.atan2(dir.x, dir.z), 0); this.body.visible = true;
     P.y = heightAt(P.x, P.z) + .6; this.p = P; const I = env(t, this.t0, this.t1, .8);
     this.h.set(P.clone().addScaledVector(dir, 1.2), 3.5, I * 1.1); this.tl.set(P.clone().addScaledVector(dir, -1.3), 1.2, I * .8);
     const ex = P.clone().addScaledVector(dir, -1.4);
-    this.eng.set(P, 1.6, I * .55); this.rider.set(P.clone().add(new V3(0, .8, 0)), 1.1, I * .4);
+    this.eng.set(P, 1.6, I * .55, 0); this.rider.set(P.clone().add(new V3(0, .8, 0)), 1.1, I * .4, 0);   // parts are the emitters in the eye
     this.ex.set([ex, ex.clone().addScaledVector(dir, -5).add(new V3(0, .8, 0))], .8, 2.2, I * .45, 1); },
   where() { return this.p; } });

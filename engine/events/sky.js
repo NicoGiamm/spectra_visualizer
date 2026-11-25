@@ -12,7 +12,7 @@ import { V3, DEG, clamp, lerp, sm, env, kf, R } from '../core/util.js';
 import { S } from '../core/state.js';
 import { event } from '../core/events.js';
 import { D, deg, dirAE, skyP, onSky, basis, ringPts, linePts, FOV_SKY, fovAz } from '../core/geom.js';
-import { Em, Rib, EmField } from '../render/sources.js';
+import { Em, Rib, EmField, BEAM, toViewer } from '../render/sources.js';
 import { visOnly } from '../render/instrument.js';
 import { canvasTex, cloudTex, moonTex, softTex } from '../render/textures.js';
 import { ENV, SUN_AZ, sunEl, moonDir, night, moonlit, moonFlux, MOON_ELONG, MOON_K, GAL_C, CONTRAIL } from '../world/atmosphere.js';
@@ -35,8 +35,13 @@ export const airliner = o => event({ name: 'Airliner', t0: 3, t1: 27, bands: ['v
     this.s.set(pos, deg(.7), T % 1 < .06 ? 1.6 : 0); this.b.set(pos, deg(.5), T % 1.3 < .15 ? 1.3 : 0); this.g.set(pos, deg(.25), .6);
     this.ir.set(pos, deg(.35), I * .55); if (pts.length > 3) this.ex.set([pts[pts.length - 4], pos], deg(.14), deg(.1), I * .45, 1);
     const cyc = (t - t0) % 3.4, talk = cyc < 1.4 ? sm(0, .1, cyc) * (1 - sm(1.2, 1.4, cyc)) * (.75 + .25 * Math.sin(T * 37)) : 0;   // pilot/ATC voice transmissions (118–137 MHz)
-    this.ra.set(pos, deg(1.7), I * talk * .9);
-    this.mi.set(pos, deg(.5), T % .45 < .05 ? I * .9 : 0); this.wx.set(pos, deg(.8), I * .3);       // Mode S replies (1090 MHz) + nose weather radar
+    // the eye: what each antenna sends down to you. VHF com and the Mode S transponder use belly blade monopoles (a
+    // dipole's doughnut by image theory, axis pointing down: a null straight below, full toward the horizon); the nose
+    // weather radar is a ~76 cm flat plate at 9.3 GHz (θ3dB ≈ 70 λ/D ≈ 3°) scanning ahead at ~2° down, so from the
+    // ground you only catch its sidelobes (−25 dB) — BEAM in sources.js
+    const v = toViewer(pos), belly = BEAM.dipole(Math.sin(-v.el)), wx = BEAM.dish(-v.el - 2 * DEG, 3 * DEG, 10 ** -2.5);
+    this.ra.set(pos, deg(1.7), I * talk * .9, belly);
+    this.mi.set(pos, deg(.5), T % .45 < .05 ? I * .9 : 0, belly); this.wx.set(pos, deg(.8), I * .3, wx);       // Mode S replies (1090 MHz) + nose weather radar
   }, where() { return this.p; } }, o);
 
 export const venus = o => event({ name: 'Evening star (Venus)', t0: 5, t1: 57, bands: ['vis'], freq: ['sunlight'], tags: ['common'], note: 'Reflected sunlight; the first "star" to appear after sunset.',
@@ -44,7 +49,10 @@ export const venus = o => event({ name: 'Evening star (Venus)', t0: 5, t1: 57, b
   update() { const { t } = S; this.p = skyP(287, 20 - t * .33); this.e.set(this.p, deg(.45), env(t, 5, 57, 4) * (.3 + .9 * sm(5, 15, t))); }, where() { return this.p; } }, o);
 
 export const cmb = o => event({ name: 'Cosmic microwave background', t0: 16, t1: 60, bands: ['micro'], freq: ['cmb'], tags: ['stylised'], note: 'Leftover glow from the Big Bang, mottled across the whole sky.',
-  update() { const I = sm(16, 26, S.t) * .9; ENV.nightMat.uniforms.uCMB.value = S.on.micro ? I : 0; S.act.micro += I * .6; }, where: () => null }, o);
+  // the mottled haze is the old view's symbol, painted into the night sky's visible colour; the spectral eye draws the real
+  // microwave sky instead (atmosphere.js BAND_SKY: 2.7 K behind the warm air — the CMB stays invisible next to the
+  // ~280 K ground, as it would to a microwave camera), so the eye does not paint it (M11/T6 review)
+  update() { const I = sm(16, 26, S.t) * .9; ENV.nightMat.uniforms.uCMB.value = S.on.micro && !S.eye ? I : 0; S.act.micro += I * .6; }, where: () => null }, o);
 
 export const milkyWay = o => event({ name: 'Milky Way', t0: 18, t1: 60, bands: ['vis', 'ir', 'radio'], freq: ['starlight', 'dustFIR', 'synchrotron'], tags: ['common'], note: 'Starlight with dark dust lanes; the dust glows in IR, Sgr A* (galactic centre, ahead-left) in radio.',
   init() { this.ir = new Em('ir'); this.ra = new Em('radio'); },
@@ -58,24 +66,52 @@ export const meteorShower = o => event({ name: 'Meteor shower', t0: 19, t1: 33, 
     m.v.set([tail, head], deg(.24), deg(.24), I, 1); m.u.set([tail, head], deg(.35), deg(.35), I * .5, 1); m.r.set(head, deg(2), 1 - p); }); },
   where: () => skyP(270, 46) }, o);
 
-// Two opposite arms, each with one faded sweep ghost; more arms read as a windmill.
-export const pulsar = o => event({ name: 'Pulsar', t0: 20, t1: 60, bands: ['radio', 'xray', 'vis'], freq: ['pulsarRadio', 'pulsarOptical', 'pulsarXray'], note: 'A spinning neutron star: the radio wind flares out in two opposite cones along the spin axis, ringed by a terminal shock wave. Its X-ray pulses only reach detectors in orbit.',
+// A point on the tangent plane of the sky at direction c (basis u, v): x, y in degrees
+const tpt = (c, u, v, x, y) => onSky(c.clone().addScaledVector(u, x * DEG).addScaledVector(v, y * DEG));
+// Pulsar in its supernova remnant, modelled on Vela (M11/T5). A pulsar's beam is seen only when it sweeps across the
+// Earth, so from here the neutron star is a point that pulses: no beam, cones or wind are drawn — nobody sees them from
+// the side. What is large on the sky is the remnant around it, drawn at true angular size:
+//   * the shell, ~8° across in soft X-rays (ROSAT all-sky survey: Aschenbach, Egger & Trümper 1995, Nature 373, 587)
+//     and in radio (Parkes 2.4 GHz: Duncan et al. 1996, MNRAS 280, 252), the catalogued remnant G263.9−3.3 (Green 2019,
+//     J. Astrophys. Astron. 40, 36); the pulsar PSR B0833−45 (l, b = 263.55°, −2.79°) sits ~0.6° off its centre;
+//   * the X-ray "shrapnel" A–F, ejecta fragments bow-shocked beyond the rim (Aschenbach et al. 1995): positions here
+//     schematic, at 1.05–1.3 shell radii as in the ROSAT map; clumpy soft X-ray patches inside the shell;
+//   * Vela X, the radio pulsar-wind nebula, ~2° × 3° mostly south of the pulsar (Frail et al. 1997, ApJ 475, 224, VLA 330 MHz; flat spectrum to 34.5 MHz:
+//     Dwarakanath 1991, JApA 12, 199), and the X-ray
+//     "cocoon" running ~45′ from the pulsar into it (Markwardt & Ögelman 1995, Nature 375, 40); the Chandra torus and
+//     jets are arcminutes across — part of the point here;
+//   * the optical filaments (Hα, [O III]) tracing the shell — far below the naked eye: a long-exposure camera's view;
+//     the pulsar's optical counterpart is V ≈ 23.6 (Lasker 1976; Nasuti et al. 1997, A&A 323, 839), its pulses detected
+//     at B ≈ 25.2 (Wallace et al. 1977, Nature 266, 692): drawn barely there.
+// The pulses are slowed (stylised): Vela's period is 89 ms, 11 pulses a second; drawn ~1.4 a second so they read.
+// Placed for display on the one stylised sky: Vela (Dec −45°) never rises at mid-northern latitudes.
+// The sky layout is fixed (built once in init, no R draws: the seeded stream is untouched).
+const VELA_R = 4, VELA_OFF = .6;                                  // shell radius (deg), pulsar offset from its centre (deg)
+const velaR = a => VELA_R * (1 + .045 * Math.sin(3 * a + 1.1) + .03 * Math.sin(5 * a + .4));   // a slightly irregular rim
+const VELA_SHRAPNEL = [[.55, 1.22], [1.25, 1.12], [2.3, 1.08], [3.2, 1.3], [4.1, 1.15], [5.4, 1.06]];   // A–F: [angle rad, r / R]
+const fract = s => s - Math.floor(s), hsh = x => fract(Math.sin(x) * 43758.5453);
+const VELA_KNOT = Array.from({ length: 12 }, (_, i) => [hsh(i * 12.9 + 1.3) * 6.283, Math.sqrt(hsh(i * 78.2 + 4.1)) * .82, .7 + hsh(i * 3.7 + 9.1) * .6]);   // [angle, r / R, brightness]
+const VELA_FIL = [[.2, 1.3], [1.9, 2.7], [3.4, 4.3], [4.9, 5.7]];    // optical filament arcs along the rim [a0, a1] rad
+export const pulsar = o => event({ name: 'Vela pulsar & supernova remnant', t0: 20, t1: 60, bands: ['radio', 'xray', 'vis'], freq: ['pulsarRadio', 'pulsarOptical', 'pulsarXray', 'snrShellRadio', 'snrShellXray', 'pwnRadio', 'snrFilaments'], tags: ['stylised'],
+  note: 'A spinning neutron star is seen only as a pulsing point — we catch its beam only when it sweeps across us (slowed here: Vela pulses 11 times a second). Around it lies what is big: the remnant of the supernova that made it, an 8° shell in radio and X-rays with fragments punched through the rim, the radio wind nebula Vela X beside the pulsar and faint glowing filaments in the visible. The X-rays only reach detectors in orbit.',
   init() { this.d = dirAE(242, 52); this.v = new Em('vis'); this.r = new Em('radio'); this.x = new Em('xray', null, 0, 'space');
-    this.arm = Array.from({ length: 4 }, () => ({ ray: Array.from({ length: 9 }, () => new Rib('radio', null, 4)), ring: new Rib('radio', null, 33) }));
-    this.shock = new Rib('radio', null, 49); },
+    const [u, v] = basis(this.d); this.c = this.d.clone().addScaledVector(v, -VELA_OFF * DEG).normalize();   // the shell's centre, below the pulsar
+    this.shellX = new Rib('xray', null, 65, 0, 'space'); this.shellR = new Rib('radio', null, 65); this.cocoon = new Rib('xray', null, 6, 0, 'space');
+    this.knots = new EmField('xray', VELA_SHRAPNEL.length + VELA_KNOT.length, null, 0, 'space');
+    this.velaX = [new Em('radio'), new Em('radio')]; this.fil = VELA_FIL.map(() => new Rib('vis', '#ff8a9a', 17));
+    const [cu, cv] = basis(this.c), P = (r, a) => tpt(this.c, cu, cv, r * Math.cos(a), r * Math.sin(a));
+    this.rim = Array.from({ length: 65 }, (_, i) => { const a = i / 64 * 6.283; return [velaR(a), a]; });
+    this.knotA = [...VELA_SHRAPNEL.map(([a, k]) => [k * velaR(a), a]), ...VELA_KNOT.map(([a, k]) => [k * velaR(a), a])];
+    this.filA = VELA_FIL.map(([a0, a1]) => Array.from({ length: 17 }, (_, i) => { const a = lerp(a0, a1, i / 16); return [velaR(a) * (.95 + .015 * Math.sin(i * .9)), a]; }));
+    this.P = P; this.uv = [u, v]; },
   update() { const { t, T } = S, I = env(t, this.t0, this.t1, 3); if (I <= 0) return;
-    const p = onSky(this.d), pulse = Math.max(0, Math.sin(T * 9)) ** 20, [u, v] = basis(this.d), a = T * 3.1, bl = (dir, f) => onSky(this.d.clone().lerp(dir, f));
-    this.v.set(p, deg(.2), I * .5); this.r.set(p, deg(1.3), I * (.3 + pulse)); this.x.set(p, deg(.5), I * .5 * pulse);
-    for (let s = 0; s < 2; s++) for (let k = 1; k >= 0; k--) {                     // arm s, k = 0 the arm itself, k = 1 its sweep ghost
-      const arm = this.arm[s * 2 + k], aa = a - k * .34 + s * Math.PI, w = (1 - k * .4) * (s ? .8 : 1), LEN = 6 - k * .5, mD = (1.6 + .35 * Math.sin(T * .8 + k * .6)) * (1 - k * .15);
-      const sv = u.clone().multiplyScalar(Math.cos(aa)).add(v.clone().multiplyScalar(Math.sin(aa))), md = this.d.clone().addScaledVector(sv, LEN * DEG).normalize(), [mu, mv] = basis(md);
-      arm.ring.set(ringPts(md, mD, 32), deg(.15), deg(.15), I * w * .22 * (.5 + pulse * .5));                             // the cone mouth
-      arm.ray[8].set([p, bl(md, .45), bl(md, .9)], deg(.26), deg(.12), I * w * (.34 + pulse * .2), 1);                   // spine
-      for (let i = 0; i < 8; i++) { const th = i / 8 * 6.283 + a * .7, rad = i < 4 ? mD : mD * .5;                        // 4 edge + 4 inner streamlines
-        const rd = md.clone().addScaledVector(mu, Math.cos(th) * rad * DEG).addScaledVector(mv, Math.sin(th) * rad * DEG).normalize();
-        arm.ray[i].set([p, bl(rd, .38), bl(rd, .7), bl(rd, 1)], deg(.16), deg(.05), I * w * (i < 4 ? .14 : .08), 1); }
-    }
-    this.shock.set(ringPts(this.d, 1.4 + .25 * Math.sin(T * .8), 48), deg(.2), deg(.2), I * (.3 + pulse * .3));
+    const p = onSky(this.d), pulse = Math.max(0, Math.sin(T * 9)) ** 20, [u, v] = this.uv, at = ([r, a]) => this.P(r, a);   // positions follow the camera (onSky)
+    this.r.set(p, deg(.8), I * (.25 + .9 * pulse)); this.x.set(p, deg(.4), I * (.1 + .1 * pulse)); this.v.set(p, deg(.15), I * (.04 + .2 * pulse));
+    const rim = this.rim.map(at); this.shellR.set(rim, deg(.7), deg(.7), I * .7); this.shellX.set(rim, deg(.9), deg(.9), I * .1);
+    this.velaX[0].set(tpt(this.d, u, v, -.35, -.7), deg(8), I); this.velaX[1].set(tpt(this.d, u, v, -.8, -1.9), deg(9), I * .8);   // Vela X: ~2° × 3°, south-west of the pulsar
+    this.cocoon.set(linePts(p, tpt(this.d, u, v, -.3, -.7), 6), deg(.22), deg(.12), I * .06);
+    this.knotA.forEach((q, i) => { const sh = i < VELA_SHRAPNEL.length; this.knots.set(i, at(q), deg(sh ? .7 : 4), I * (sh ? .025 : .015 * VELA_KNOT[i - VELA_SHRAPNEL.length][2])); });
+    this.fil.forEach((f, i) => f.set(this.filA[i].map(at), deg(.12), deg(.12), I * .12));
   },
   where() { return onSky(this.d); } }, o);
 
@@ -132,21 +168,44 @@ export const starlink = o => event({ name: 'Starlink train', t0: 18, t1: 22.5, b
     this.s.forEach((s, k) => { const q = p * 3.8 - k * .125; if (q < 0 || q > 1) return; const d = dirAE(210 + 110 * q, 20 + 34 * Math.sin(Math.PI * q)), pos = onSky(d); this.v.set(k, pos, deg(.18), vis * .9 * sunlitAt(d, 300)); if (k % 3 === 0) this.m.set(k, pos, deg(.4), I * .5); if (!this.p) this.p = pos; }); },
   where() { return this.p; } }, o);
 
-export const blackHoleBinary = o => event({ name: 'Black-hole X-ray binary', t0: 30, t1: 60, bands: ['xray', 'radio', 'vis'], freq: ['accretionXray', 'jetSynchrotron', 'companionStar'], note: 'Gas falling into a black hole flickers in X-rays (seen only from orbit); radio jets flare outward in cones along the spin axis.',
-  init() { this.d = dirAE(312, 48); this.v = new Em('vis', '#cfe0ff'); this.x = new Em('xray', null, 0, 'space'); this.halo = new Em('radio');
-    this.jet = Array.from({ length: 2 }, () => ({ ray: Array.from({ length: 8 }, () => new Rib('radio', null, 3)), mouth: new Rib('radio', null, 33), tip: new Em('radio') })); },
+// Microquasar SS 433 inside the W50 nebula (M11/T5; was the "black-hole X-ray binary"). Its jets — 0.26 c, precessing on
+// a 20° cone every 162.4 days around an axis 79° from the line of sight (Margon 1984, ARA&A 22, 507) — are far too small
+// to see: one precession turn of the corkscrew is ~1.3″ at 5.5 kpc (Blundell & Bowler 2004, ApJ 616, L159), and the
+// kinematic corkscrew mapped with the VLA spans arcseconds (Hjellming & Johnston 1981, ApJ 246, L141). What is large is
+// what they inflate: the W50 radio nebula, ~2° × 1° — a round shell ~1° across with two "ears" along the jet axis, the
+// eastern one longer (VLA 1.4 GHz: Dubner et al. 1998, AJ 116, 1842; LOFAR 140 MHz: Broderick et al. 2018, MNRAS 475,
+// 5360); X-ray lobes on the same axis ~0.25–0.9° from the star (ROSAT / ASCA: Safi-Harb & Ögelman 1997, ApJ 483, 868);
+// faint Hα filaments near the ears (Zealey, Dopita & Malin 1980, MNRAS 192, 731).
+// The corkscrew is drawn with the Hjellming & Johnston kinematic model (ballistic ejecta along the precessing jet;
+// light-travel delays left out) but magnified ~1500× (one real turn ≈ 1.3″ at 5.5 kpc, drawn 0.55°) so it reaches the ears, the scale at which the radio eye (~1° beam
+// at 150 MHz through its 100 m aperture) can show it at all, and with the precession compressed from 162 days to
+// MQ_PREC script-seconds: stylised and time-compressed. The star itself: the X-ray core flickers (thermal X-rays from
+// the hot base of the jets, Fe XXV / XXVI lines: Kotani et al. 1996, PASJ 48, 619); the A-type companion is a V ≈ 14 point.
+const MQ_PREC = 10, MQ_CONE = 20 * DEG, MQ_INC = 79 * DEG, MQ_PA = 25 * DEG;   // precession (script s), cone, axis–line-of-sight, axis tilt on the sky
+const MQ_TURN = .55, MQ_AGE = 1.7;                                    // drawn length of one precession turn (deg), ejecta age shown (turns)
+const w50R = a => .5 + (Math.cos(a) > 0 ? .55 : .4) * Math.exp(-((Math.sin(a) / .3) ** 2));   // shell radius (deg) at angle a from the jet axis
+export const microquasar = o => event({ name: 'Microquasar SS 433 & W50', t0: 30, t1: 60, bands: ['xray', 'radio', 'vis'], freq: ['jetBaseXray', 'w50Xray', 'jetSynchrotron', 'w50Radio', 'companionStar', 'w50Halpha'], tags: ['stylised', 'time-compressed'],
+  note: 'A star feeding a black hole or neutron star that fires two jets at a quarter of the speed of light, wobbling around every 162 days. The jets are far too small to see from here; what is big is the bubble they blew, the W50 nebula, 2° × 1° with two "ears" where the jets push out, X-ray lobes along the jets and faint red filaments. The corkscrew of the jets is magnified and its wobble sped up. X-rays only reach detectors in orbit.',
+  init() { this.d = dirAE(312, 48); this.v = new Em('vis', '#cfe0ff'); this.x = new Em('xray', null, 0, 'space'); this.core = new Em('radio');
+    this.fill = new Em('radio'); this.shell = new Rib('radio', null, 73); this.jet = [new Rib('radio', null, 33), new Rib('radio', null, 33)];
+    this.lobe = [new Rib('xray', null, 6, 0, 'space'), new Rib('xray', null, 6, 0, 'space')]; this.fil = [new Rib('vis', '#ff7a6a', 13), new Rib('vis', '#ff7a6a', 13)];
+    this.uv = basis(this.d); },
   update() { const { t, T } = S, I = env(t, this.t0, this.t1, 3); if (I <= 0) return;
-    const p = onSky(this.d), fl = .35 + .65 * Math.abs(Math.sin(T * 13) * Math.sin(T * 7.1)), [u, v] = basis(this.d), bl = (dir, f) => onSky(this.d.clone().lerp(dir, f));
-    this.v.set(p, deg(.15), I * .5); this.x.set(p, deg(1), I * fl);
-    this.halo.set(p, deg(2.4 + .4 * Math.sin(T * .9)), I * .16);                                                                 // radio bow around the core
-    for (let s = 0; s < 2; s++) { const sg = s ? -1 : 1, LEN = 6.5 + .6 * Math.sin(T * .6), mD = 1.6 + .35 * Math.sin(T * .8 + s);   // twin jets along the spin axis
-      const md = this.d.clone().addScaledVector(u, sg * LEN * DEG).addScaledVector(v, sg * LEN * .45 * DEG).normalize(), [mu, mv] = basis(md);
-      this.jet[s].ray[7].set([p, bl(md, .5), bl(md, 1)], deg(.2), deg(.09), I * .3 * fl, 1);                                       // jet spine
-      for (let i = 0; i < 7; i++) { const th = i / 7 * 6.283 + T * .9 + s * 1.3;                                                   // streamlines fanning to the mouth
-        const rd = md.clone().addScaledVector(mu, Math.cos(th) * mD * DEG).addScaledVector(mv, Math.sin(th) * mD * DEG).normalize();
-        this.jet[s].ray[i].set([p, bl(rd, .5), bl(rd, 1)], deg(.12), deg(.05), I * .13 * (.6 + fl * .4), 1); }
-      this.jet[s].mouth.set(ringPts(md, mD, 32), deg(.16), deg(.16), I * .22 * (.5 + fl * .5));                                    // the cone mouth
-      this.jet[s].tip.set(bl(md, 1), deg(1.2), I * .3 * fl); }                                                                     // jet head flash
+    const [u, v] = this.uv, ca = Math.cos(MQ_PA), sa = Math.sin(MQ_PA);
+    const P = (x, y) => tpt(this.d, u, v, x * ca - y * sa, x * sa + y * ca), A = (r, a) => P(r * Math.cos(a), r * Math.sin(a));   // x along the jet axis (east +), y across
+    const p = onSky(this.d), fl = .45 + .55 * Math.abs(Math.sin(T * 13) * Math.sin(T * 7.1));
+    this.v.set(p, deg(.15), I * .05);   // V ≈ 14: below the naked eye, like the pulsar's counterpart
+    this.x.set(p, deg(.6), I * .45 * fl); this.core.set(p, deg(.5), I * .4);
+    this.fill.set(p, deg(3.5), I * .1);                                                                          // W50: the shell ~1° across …
+    this.shell.set(Array.from({ length: 73 }, (_, i) => { const a = i / 72 * 6.283; return A(w50R(a), a); }), deg(.2), deg(.2), I * .6);   // … and its ears
+    for (let s = 0; s < 2; s++) { const sg = s ? -1 : 1, pts = [];                                                // the kinematic corkscrew, far end first
+      for (let k = 32; k >= 0; k--) { const age = k / 32 * MQ_AGE, ps = 6.283 * (t / MQ_PREC - age);           // ejected `age` turns ago, at that precession phase
+        const nx = Math.cos(MQ_CONE) * Math.sin(MQ_INC) + Math.sin(MQ_CONE) * Math.cos(ps) * Math.cos(MQ_INC), ny = Math.sin(MQ_CONE) * Math.sin(ps);
+        pts.push(P(sg * nx * age * MQ_TURN, sg * ny * age * MQ_TURN)); }
+      this.jet[s].set(pts, deg(.1), deg(.1), I * .5, 1);                                                          // brightest at the core, fading outward
+      this.lobe[s].set(linePts(P(sg * .25, 0), P(sg * (s ? .72 : 1.0), sg * .03), 6), deg(.22), deg(.32), I * .1);   // X-ray lobes
+      const a0 = s ? Math.PI : 0;
+      this.fil[s].set(Array.from({ length: 13 }, (_, i) => { const a = a0 + (i / 12 - .5) * .9; return A(w50R(a) * .96, a); }), deg(.08), deg(.08), I * .12); }   // Hα at the ears
   },
   where() { return onSky(this.d); } }, o);
 
@@ -240,8 +299,8 @@ const moonPhaseTex = (() => { let tx; return () => tx || (tx = canvasTex(256, (g
   g.globalCompositeOperation = 'destination-out'; g.fillStyle = 'rgba(0,0,0,.93)'; g.filter = 'blur(1.5px)'; g.beginPath();   // dark side keeps ~7 % (earthshine)
   for (let k = 0; k <= 48; k++) { const y = -r + 2 * r * k / 48; g.lineTo(c + ce * Math.sqrt(Math.max(0, r * r - y * y)), c + y); }   // terminator, top → bottom
   g.arc(c, c, r + 2, Math.PI / 2, Math.PI * 1.5); g.fill(); })); })();   // lit limb at +x: unlit = left of x = cos(E)·√(r² − y²)
-export const moonrise = o => event({ name: 'Waxing Moon', t0: 0, t1: 60, bands: ['vis', 'ir', 'gamma'], freq: ['sunlight', 'lunarThermal', 'lunarGamma'], tags: ['common'], note: 'A waxing Moon about 6½ days old, 41 % lit, already up in the south-west at sunset and sinking west until it sets. Reflected sunlight, lit limb toward the Sun, and a warm sunlit surface (IR); cosmic rays make the whole disc glow in gamma rays, seen only from orbit.',
-  init() { this.s = new THREE.Sprite(new THREE.SpriteMaterial({ map: moonPhaseTex(), depthWrite: false, fog: false })); this.s.renderOrder = 3; S.scene.add(visOnly(this.s)); this.h = new Em('vis', '#cfd6ff'); this.ir = new Em('ir'); this.g = new Em('gamma', null, 0, 'space'); },
+export const moonrise = o => event({ name: 'Waxing Moon', t0: 0, t1: 60, bands: ['vis', 'ir', 'gamma'], freq: ['sunlight', 'lunarThermal', 'lunarGamma', 'moonNIR', 'nirReflect', 'ohAirglow'], tags: ['common'], note: 'A waxing Moon about 6½ days old, 41 % lit, already up in the south-west at sunset and sinking west until it sets. Reflected sunlight, lit limb toward the Sun, and a warm sunlit surface (IR); cosmic rays make the whole disc glow in gamma rays, seen only from orbit. In near-IR night vision it is the main light: moonlit leaves and grass glow (the red edge), with the OH airglow of the night sky as a fainter fill — that airglow sky is drawn dark (stylised).',
+  init() { this.s = new THREE.Sprite(new THREE.SpriteMaterial({ map: moonPhaseTex(), depthWrite: false, fog: false })); this.s.renderOrder = 3; S.scene.add(visOnly(this.s)); this.h = new Em('vis', '#cfd6ff'); this.ir = new Em('ir'); this.ir.proc = 'lunarThermal'; this.g = new Em('gamma', null, 0, 'space'); },
   update() { const { t } = S, d = moonDir(), el = Math.asin(clamp(d.y, -1, 1)) / DEG, I = sm(0, 1.5, el); this.s.visible = S.on.vis && I > 0;
     if (I <= 0) { this.p = null; return; } this.p = onSky(d);
     const [u, v] = basis(d), sd = dirAE(SUN_AZ, sunEl()), sp = sd.addScaledVector(d, -sd.dot(d));                      // Sun's direction on the sky at the Moon
@@ -311,24 +370,26 @@ export const thunderstorm = o => event({ name: 'Distant thunderstorm', t0: 30, t
     this.clouds.forEach(c => { c.visible = on.vis && vis > 0; const b = .02 + flash * .7; c.material.color.setRGB(b, b, b * 1.15); c.material.opacity = vis * .75; });
   }, where() { return new V3(this.x, this.cy, this.z); } }, o);
 
-export const fastRadioBurst = o => event({ name: 'Fast radio burst', t0: 38, t1: 45, bands: ['radio'], freq: ['frb'], tags: ['rare'], note: 'A millisecond radio flash from a galaxy billions of light-years away. Plasma along the way disperses it: lower frequencies arrive later, a sweep drawn here as the widening rings.',
+export const fastRadioBurst = o => event({ name: 'Fast radio burst', t0: 38, t1: 45, bands: ['radio'], freq: ['frb'], tags: ['rare'], note: 'A millisecond radio flash from a galaxy billions of light-years away. Plasma along the way disperses it: lower frequencies arrive later, so the point lingers as the burst sweeps down the band (the old view draws the sweep as widening rings).',
   init() { this.d = dirAE(290, 34); this.e = new Em('radio'); this.r1 = new Rib('radio', null, 49); this.r2 = new Rib('radio', null, 49); },
   update() { const { t } = S; if (t < this.t0 || t > this.t0 + 6.2) return; const age = t - this.t0, I = 1 - age / 6.2;
     this.e.set(onSky(this.d), deg(3.2), I * 1.2); const sw = 1 - Math.exp(-age * .9);   // the dispersion sweep, eased so the rings stay inside the FOV cone (≤ ~25°)
-    this.r1.set(ringPts(this.d, 2.5 + 22.5 * sw), deg(.5), deg(.5), I); this.r2.set(ringPts(this.d, 1.2 + 15 * sw), deg(.35), deg(.35), I * .7); },
+    // the rings are the old view's symbol for the dispersion sweep; a dispersed burst is still one point (see = 0: the eye skips them)
+    this.r1.set(ringPts(this.d, 2.5 + 22.5 * sw), deg(.5), deg(.5), I, 0, 0); this.r2.set(ringPts(this.d, 1.2 + 15 * sw), deg(.35), deg(.35), I * .7, 0, 0); },
   where() { return onSky(this.d); } }, o);
 
-export const supernova = o => event({ name: 'Supernova', t0: 43, t1: 60, bands: ['uv', 'vis', 'xray', 'gamma', 'ir', 'radio'], freq: ['snUV', 'snOptical', 'snXray', 'snGamma', 'snDust', 'snRadio'], tags: ['rare'], note: 'Shock-breakout UV flash, gamma decay lines and an expanding X-ray shell (all seen only from orbit), then the visible peak, new dust (IR) and radio last.',
-  init() { this.d = dirAE(240, 30); this.v = new Em('vis', '#fff6dc'); this.u = new Em('uv', null, 0, 'space'); this.g = new Em('gamma', null, 0, 'space'); this.x = new Rib('xray', null, 49, 0, 'space'); this.i = new Em('ir'); this.r = new Em('radio'); },
+export const supernova = o => event({ name: 'Supernova', t0: 43, t1: 60, bands: ['uv', 'vis', 'xray', 'gamma', 'ir', 'radio'], freq: ['snUV', 'snOptical', 'snXray', 'snGamma', 'snDust', 'snRadio'], tags: ['rare', 'time-compressed'], note: 'Shock-breakout UV flash, gamma decay lines and X-rays from the shock hitting the gas the star shed before it died (all seen only from orbit), then the visible peak, new dust (IR) and radio last. Weeks to years squeezed into seconds; a supernova stays a point of light — its remnant takes centuries to grow to a visible size.',
+  init() { this.d = dirAE(240, 30); this.v = new Em('vis', '#fff6dc'); this.u = new Em('uv', null, 0, 'space'); this.g = new Em('gamma', null, 0, 'space'); this.x = new Em('xray', null, 0, 'space'); this.i = new Em('ir'); this.r = new Em('radio'); },
   update() { const { t } = S; if (t < 43) return; const p = onSky(this.d), L = sm(43, 45, t) * (1 - .7 * sm(48, 60, t));
     this.v.set(p, deg(.4 + L * .9), L * 1.6); this.u.set(p, deg(2.6), sm(43, 43.6, t) * (1 - sm(44, 48, t))); this.g.set(p, deg(1.4), .5 * env(t, 43.5, 47, .5));
-    if (t > 44) this.x.set(ringPts(this.d, .4 + (t - 44) * .5), deg(.35), deg(.35), .9 * (1 - sm(55, 60, t)));
+    if (t > 44) this.x.set(p, deg(.8), .9 * sm(44, 46, t) * (1 - sm(55, 60, t)));   // unresolved: the shock is light-days across, not degrees
     this.i.set(p, deg(2), sm(48, 54, t)); this.r.set(p, deg(1.8), sm(51, 57, t)); },
   where() { return onSky(this.d); } }, o);
 
-export const gammaRayBurst = o => event({ name: 'Gamma-ray burst', t0: 48, t1: 60, bands: ['gamma', 'xray', 'vis', 'radio'], freq: ['grbGamma', 'afterglowXray', 'afterglowOptical', 'afterglowRadio'], tags: ['rare'], note: 'A brief gamma flash (only satellites see it), followed by an afterglow at longer wavelengths; rarely the optical afterglow is bright enough for the naked eye.',
+export const gammaRayBurst = o => event({ name: 'Gamma-ray burst', t0: 48, t1: 60, bands: ['gamma', 'xray', 'vis', 'radio'], freq: ['grbGamma', 'afterglowXray', 'afterglowOptical', 'afterglowRadio'], tags: ['rare', 'time-compressed'], note: 'A brief gamma flash (only satellites see it), followed by an afterglow at longer wavelengths; rarely the optical afterglow is bright enough for the naked eye. The afterglow fades over days (radio over weeks), squeezed into seconds; it stays a point — the jet that makes it is far too distant to resolve.',
   init() { this.d = dirAE(322, 30); this.g = new Em('gamma', null, 0, 'space'); this.x = new Em('xray', null, 0, 'space'); this.v = new Em('vis', '#cfe0ff'); this.r = new Em('radio'); this.flash = document.getElementById('flash'); },
-  update() { const { t, T, on } = S, fl = on.gamma && S.detector === 'orbit' && t > 48 && t < 48.6 ? .45 * (1 - (t - 48) / .6) : 0;
+  // the full-screen hue-cycling flash is the old view's; the eye shows the burst as the point source it is
+  update() { const { t, T, on } = S, fl = !S.eye && on.gamma && S.detector === 'orbit' && t > 48 && t < 48.6 ? .45 * (1 - (t - 48) / .6) : 0;
     this.flash.style.opacity = fl; if (fl) this.flash.style.background = `hsl(${(T * 400) % 360},100%,55%)`;
     if (t < 48) return; const p = onSky(this.d);
     this.g.set(p, deg(4.5), env(t, 48, 50.5, .3)); this.x.set(p, deg(1.4), sm(48.5, 49.5, t) * (1 - sm(50, 58.5, t)));

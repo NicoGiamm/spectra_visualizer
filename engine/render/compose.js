@@ -8,7 +8,9 @@
 //   output 0  visible RGB                       (what the material draws today, minus the 12 % band overlay)
 //   output 1  (IR, UV, X-ray, coverage)         optical bands: fog, smoke, cloud hide them (X-ray sits here harmlessly:
 //                                               the air absorbs it within metres, long before any fog bank)
-//   output 2  output 1 × spectral position      (where in its band the light is: 0 long-wave … 1 short-wave)
+//   output 2  output 1 × spectral position      (where in its band the light is: 0 long-wave … 1 short-wave),
+//             except its IR channel: the near-IR (0.7–1.4 µm) luminance — output 1's IR channel is then thermal only
+//             (M11/T3: two detectors in one IR goggle, see "Near-IR" below)
 //   output 3  (radio, microwave, gamma, cov.)   long waves and gamma: they cross fog and cloud (0.01–0.1 g/cm² of water)
 //   output 4  output 3 × spectral position
 //
@@ -29,7 +31,7 @@
 //   * Air. Every ground-origin fragment is attenuated by exp(−α d) over its own line-of-sight distance d (from its depth),
 //     α per band from EXTINCTION (bands.js: microwave gas ~0.05 dB/km, IR 8–14 µm window, UV Rayleigh + aerosol) and,
 //     for X-ray / gamma, from the photon energy (XCOM_AIR): X-rays die within metres, terrestrial gamma within a few
-//     hundred metres. UV haze also glows: opaque fragments add the path radiance UV_PATH·uUVsky·(1 − e^(−α d)).
+//     hundred metres. UV haze also glows: opaque fragments add the path radiance UV_PATH·uUVsky·(1 − e^(−α d)) (UV_PATH in luminance units, bands.js).
 //     Sky sources ('high' / 'space') are left to the detector (Orbit / Ground, TRANSMIT). Visible keeps the scene fog.
 //     A scenario without air (createAtmosphere opts.air = false, M12/T5: the orbit) sets eyeAtm = 0 like ?eatm=0: no
 //     extinction and no UV haze between emitter and eye; the detector switch keeps its meaning (TRANSMIT).
@@ -77,6 +79,19 @@
 //      2004 (PASP 116:133): out = C · asinh(β I) / (β I), I = mean(C), clipped by the brightest channel so hues
 //      survive. Faint things stay linear, bright ones compress logarithmically — no band can wash out the others.
 //
+// Near-IR (M11/T3). Infrared is two worlds: thermal (8–14 µm, emission: warm is bright) and near-IR (0.7–1.4 µm,
+// what night-vision goggles see: reflected moonlight, twilight and airglow — leaves bright by the red edge — plus
+// lamps, IR illuminators and flames). Their radiances differ by ~5 orders of magnitude and no single detector sees
+// both, so the IR band is a fused goggle (bands.js NIR: image intensifier + thermal camera, as the ENVG): no 7th output —
+// output 1's IR channel carries thermal, output 2's IR channel (the position slot) the near-IR luminance.
+// Sources split their IR light by spectral position (smoothstep 3 µm → 1 µm: an 850 nm illuminator or the sodium
+// 819 nm line is near-IR, a 4 µm exhaust thermal); surfaces bring eyeNIR() (surface.js surfNIR: nirAlb × the Moon and
+// sky). Each channel has its own adaptation (state column 7 for near-IR): thermal the shared receptor model; near-IR the
+// same partial adaptation p (NIR.abc = false, decision on #67: a tube's automatic brightness control, p = 1, would hold
+// the screen's brightness but took half the combined image), floor NIR.floorLx; the darkness shows as photon grain: the near-IR photons are counted at the real near-IR radiance
+// (the scene-scale layer × surface.js uNirPhot, real / scene light), so a moonlit field scintillates. Thermal is blurred by diffraction at 10 µm (its position is now fixed at
+// the window centre), near-IR is sharp (0.42 · 0.8 µm / 7 mm ≈ 5e-5 rad, below a pixel). Near-IR is drawn in NIR.color
+// (a white-phosphor tube), thermal in the IR hue.
 // Within a band only one scalar gain is applied before the stretch, so the band's own brightness ratios are kept.
 // Sources are drawn at their physical intensity: GAIN (bands.js) is not applied while the eye is on (S.eye).
 // Pipeline: EyePass (MRT scene pass → reduce → adapt → combine) → NaN guard → bloom → FXAA → OutputPass, no tone mapping
@@ -89,7 +104,7 @@ import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 import { S } from '../core/state.js';
-import { BANDS, LREF, APERTURE, EXTINCTION, XCOM_AIR, UV_PATH } from '../core/bands.js';
+import { BANDS, LREF, APERTURE, EXTINCTION, XCOM_AIR, UV_PATH, NIR, EXTINCTION_NIR } from '../core/bands.js';
 import { applyVisMode } from './instrument.js';
 import { SURF_U, OVERLAY } from './surface.js';
 import { bandPos, posLambda, bandEdges } from '../core/spectrum.js';
@@ -106,6 +121,9 @@ export const EYE = { key: .05, p: .5, floorRel: .01, beta: 6, satVis: .7, tauUp:
 // radio = 100 MHz (the FM transmitters it mirrors), microwave = 20 GHz (the 10–37 GHz emissivities), X-ray: none
 const SURF_POS = { ir: bandPos({ lam: 10e-6 }), uv: bandPos({ lam: 365e-9 }), gamma: bandPos({ E: 1.46e6 }),
   radio: bandPos({ f: 100e6 }), micro: bandPos({ f: 20e9 }), xray: .5 };
+// near-IR (M11/T3): the surfaces' reflected near-IR at 0.8 µm (SPECTRUM.nirReflect); a source's near-IR share runs
+// from 0 at NIR.split[0] (3 µm) to 1 at NIR.split[1] (1 µm) of its spectral position
+const NIR_POS = bandPos({ lam: 800e-9 }), NIR_SPLIT = NIR.split.map(lam => bandPos({ lam }));
 const v3 = (a, b, c) => `vec3(${a.toFixed(4)}, ${b.toFixed(4)}, ${c.toFixed(4)})`;
 
 // ---------------------------------------------------------------- material patch (every material in the scene)
@@ -146,6 +164,8 @@ float eyeN(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3. - 2.*f);
 float eyeSpeckle(){ vec2 q = gl_FragCoord.xy/max(eyeSpk, 1.) + vec2(eyeTime*.11, eyeTime*.07);
   float a = eyeN(q) - .5, c = eyeN(q + vec2(31.7, 11.3)) - .5, d = eyeN(q*1.7 + vec2(5.1, 47.)) - .5, e = eyeN(q*1.7 + vec2(19.3, 3.9)) - .5;
   return ((a + .6*d)*(a + .6*d) + (c + .6*e)*(c + .6*e))/.1; }
+float eyeNirShare(float pos){ return smoothstep(${NIR_SPLIT[0].toFixed(4)}, ${NIR_SPLIT[1].toFixed(4)}, pos); }
+float eyeAttN(float d){ return exp(-${glf(EXTINCTION_NIR)}*d*eyeAtm); }                     // near-IR through the air
 float eyeUVpath(float d){ return eyeAtm*eyeUV*${glf(UV_PATH)}*(1. - exp(-${glf(EXTINCTION.uv)}*d)); }
 `;
 const ZERO = 'eyeO1 = vec4(0.); eyeO2 = vec4(0.); eyeO3 = vec4(0.); eyeO4 = vec4(0.); eyeO5 = vec4(0.);';
@@ -153,8 +173,10 @@ const SRC_MAIN = `
 uniform float uSpec, uOrigin;
 void main(){ ${ZERO} eyeMain_();
   if(uBand != 3){ float l = eyeL(gl_FragColor.rgb); gl_FragColor = vec4(0.);
-    float d = eyeDist();
-    if(uOrigin < .5) l *= eyeAtt(uBand, uSpec, d);                       // ground-origin light crosses the air to the eye
+    float d = eyeDist(), ln = 0.;
+    if(uBand == 2){ ln = l*eyeNirShare(uSpec); l -= ln;                     // IR: near-IR share → output 2, thermal → output 1
+      if(uOrigin < .5){ ln *= eyeAttN(d); l *= eyeAtt(2, uSpec, d); } }
+    else if(uOrigin < .5) l *= eyeAtt(uBand, uSpec, d);                  // ground-origin light crosses the air to the eye
     if(uBand == 0) l *= eyeSpeckle();                                      // coherent radio
     if(eyeP2 > .5){                                                       // second pass: in front of the frontmost opaque
       vec4 tz = texelFetch(eyeTZ, ivec2(gl_FragCoord.xy), 0);                //   surface → as is; behind it → × its T
@@ -164,12 +186,15 @@ void main(){ ${ZERO} eyeMain_();
     vec3 v = vec3(0.), w = vec3(0.);
     if(uBand == 2) v.r = l; else if(uBand == 4) v.g = l; else if(uBand == 5) v.b = l;
     else if(uBand == 0) w.r = l; else if(uBand == 1) w.g = l; else w.b = l;
-    eyeO1 = vec4(v, 1.); eyeO2 = vec4(v*uSpec, 1.); eyeO3 = vec4(w, 1.); eyeO4 = vec4(w*uSpec, 1.); }
+    eyeO1 = vec4(v, 1.); eyeO2 = vec4(ln, v.gb*uSpec, 1.); eyeO3 = vec4(w, 1.); eyeO4 = vec4(w*uSpec, 1.); }
   else if(eyeP2 > .5) discard; }`;
 // surfaces: their band emission (hook), crossed through the air; opaque ones add the UV haze in front of them and
 // write their transmission for the penetration pass
-// (a hook may #define EYE_SKY — the sky's own emission: no air in front of it — and its own spectral positions
-// EYE_POS_A = (IR, UV, gamma), EYE_POS_L = (radio, micro, X-ray))
+// (a hook may #define EYE_OWN_SPECKLE — it applies the radio speckle itself, to its coherent part only (transmitter
+// reflections; thermal emission and the mirrored synchrotron sky are incoherent: M11/T2);
+// it may #define EYE_SKY — the sky's own emission: no air in front of it — and its own spectral positions
+// EYE_POS_A = (IR, UV, gamma), EYE_POS_L = (radio, micro, X-ray); and #define EYE_NIR with float eyeNIR() — its
+// near-IR luminance (M11/T3; without it the surface is black in near-IR))
 const SURF_MAIN = opaque => `
 #ifndef EYE_POS_A
 #define EYE_POS_A ${v3(SURF_POS.ir, SURF_POS.uv, SURF_POS.gamma)}
@@ -178,23 +203,30 @@ const SURF_MAIN = opaque => `
 #define EYE_POS_L ${v3(SURF_POS.radio, SURF_POS.micro, SURF_POS.xray)}
 #endif
 void main(){ ${ZERO} eyeMain_(); eyeBands(eyeO1, eyeO3);
+#ifdef EYE_NIR
+  float eyeNv = eyeNIR();
+#else
+  float eyeNv = 0.;
+#endif
 #ifndef EYE_SKY
-  float d = eyeDist();
+  float d = eyeDist(); eyeNv *= eyeAttN(d);
   eyeO1.rgb *= vec3(eyeAtt(2, EYE_POS_A.x, d), eyeAtt(4, EYE_POS_A.y, d), eyeAtt(6, EYE_POS_A.z, d));
   eyeO3.rgb *= vec3(eyeAtt(0, EYE_POS_L.x, d), eyeAtt(1, EYE_POS_L.y, d), 1.);
+#ifndef EYE_OWN_SPECKLE
   eyeO3.r *= eyeSpeckle();                                                // coherent radio reflections
+#endif
   ${opaque ? 'eyeO1.g += eyeUVpath(d); eyeO5 = vec4(eyeTrans(), 1.);' : ''}
 #endif
   // hooks hand gamma in o1.b and X-ray in o3.b; the outputs keep gamma with the long waves (fog and cloud don't hide
   // it) and X-ray with the optical bands
   float hg = eyeO1.b; eyeO1.b = eyeO3.b; eyeO3.b = hg;
-  eyeO2 = vec4(eyeO1.rgb*vec3(EYE_POS_A.xy, EYE_POS_L.z), eyeO1.a);
+  eyeO2 = vec4(eyeNv, eyeO1.gb*vec2(EYE_POS_A.y, EYE_POS_L.z), eyeO1.a);   // IR slot: near-IR (M11/T3)
   eyeO4 = vec4(eyeO3.rgb*vec3(EYE_POS_L.xy, EYE_POS_A.z), eyeO3.a); }`;
 // everything else: an opaque prop is black in every band (it occludes), with the UV haze in front of it and T_PROP;
 // a transparent one writes nothing
 const PLAIN_MAIN = opaque => `
 void main(){ ${ZERO} eyeMain_();
-  ${opaque ? `float d = eyeDist(); eyeO1 = vec4(0., eyeUVpath(d), 0., 1.); eyeO2 = vec4(eyeO1.rgb*${v3(SURF_POS.ir, SURF_POS.uv, SURF_POS.gamma)}, 1.);
+  ${opaque ? `float d = eyeDist(); eyeO1 = vec4(0., eyeUVpath(d), 0., 1.); eyeO2 = vec4(0., eyeO1.g*${SURF_POS.uv.toFixed(4)}, 0., 1.);
   eyeO3 = vec4(0., 0., 0., 1.); eyeO4 = vec4(0., 0., 0., 1.); eyeO5 = vec4(${v3(...T_PROP)}, 1.);` : ''} }`;
 const MAIN_RE = /void\s+main\s*\(\s*(void)?\s*\)/;
 
@@ -237,12 +269,13 @@ void main(){ ivec2 uSrc = ivec2(uSrcF), o = ivec2(gl_FragCoord.xy)*4; float s = 
   gl_FragColor = vec4(s/max(n, 1.), m, a/max(n, 1.), 1.); }`;
 
 // 8×1 adaptation state: column b follows band b's 1×1 reduction, fast when it brightens, slow when it darkens
-const ADAPT_FS = `uniform sampler2D tPrev, tR0, tR1, tR2, tR3, tR4, tR5, tR6; uniform float uUp, uDown;
+// (columns 0–6 the bands in uBand order, 7 the near-IR channel of IR, M11/T3)
+const ADAPT_FS = `uniform sampler2D tPrev, tR0, tR1, tR2, tR3, tR4, tR5, tR6, tR7; uniform float uUp, uDown;
 vec4 cur(int b){ ivec2 z = ivec2(0); if(b == 0) return texelFetch(tR0, z, 0); if(b == 1) return texelFetch(tR1, z, 0);
   if(b == 2) return texelFetch(tR2, z, 0); if(b == 3) return texelFetch(tR3, z, 0); if(b == 4) return texelFetch(tR4, z, 0);
-  if(b == 5) return texelFetch(tR5, z, 0); return texelFetch(tR6, z, 0); }
+  if(b == 5) return texelFetch(tR5, z, 0); if(b == 6) return texelFetch(tR6, z, 0); return texelFetch(tR7, z, 0); }
 void main(){ int b = int(gl_FragCoord.x); vec4 p = texelFetch(tPrev, ivec2(b, 0), 0);
-  if(b > 6){ gl_FragColor = p; return; }
+  if(b > 7){ gl_FragColor = p; return; }
   vec4 c = cur(b); gl_FragColor = mix(p, c, c.b > p.b ? uUp : uDown); }`;
 
 // after the scene pass: (transmission of the frontmost opaque surface, its distance) per pixel, for the penetration pass;
@@ -267,6 +300,7 @@ void main(){ vec4 a = vec4(0.); float w = 0.; float R = ceil(3.*uSigma);
 
 const COMBINE_FS = COMMON + LUM + `uniform sampler2D tV, tB1, tS1, tB2, tS2, tA, tBl0, tBl1, tBl2, tBl4; uniform vec4 uBl; varying vec2 vUv;
 uniform vec2 uLogLam[7]; uniform float uK, uSeed, uCell;
+uniform vec3 uNirHue; uniform float uPosT, uPosN, uNirP, uNirRef, uNirFloor, uNirPhot;
 float hs(vec2 p, float k){ return fract(sin(dot(p + uSeed*vec2(91.7, 37.3) + k*vec2(13.1, 71.9), vec2(12.9898, 78.233)))*43758.5453); }
 // photons counted this frame at a pixel that expects N: Poisson by inversion (N ≤ 12) or its Gaussian limit
 float poisson(float N, vec2 p){
@@ -286,6 +320,10 @@ uniform vec3 uHue[7]; uniform float uOn[7], uLref[7], uW[7]; uniform float uKey,
 // for every band — the invisible bands then show at their raw level next to visible light
 float gain(int b){ float La = texelFetch(tA, ivec2(uAbs > .5 ? 3 : b, 0), 0).b;
   return uKey/(pow(uLref[b], 1. - uP)*pow(max(La, uFloorRel*uLref[b]), uP)); }
+// near-IR (M11/T3): its own adaptation state (column 7), with p = uNirP = EYE.p (NIR.abc = false; 1 would be a tube's
+// automatic brightness control) above its threshold uNirFloor (bands.js NIR)
+float gainN(){ float La = texelFetch(tA, ivec2(uAbs > .5 ? 3 : 7, 0), 0).b;
+  return uKey/(pow(uNirRef, 1. - uNirP)*pow(max(La, uNirFloor), uNirP)); }
 // band b's colour: its hue rotated around the grey axis by (position − .5)·uShift (Rodrigues), brightest channel 1
 vec3 bandC(int b, float l, float ls){
   if(l <= 0.) return vec3(0.);
@@ -297,14 +335,19 @@ void main(){
   vec4 b1 = clean(texture2D(tB1, vUv)), s1 = clean(texture2D(tS1, vUv)), b2 = clean(texture2D(tB2, vUv)), s2 = clean(texture2D(tS2, vUv));
   // diffraction-blurred bands (uBl: radio, micro, IR, UV) replace their sharp channel
   vec2 bR = uBl.x > .5 ? texture2D(tBl0, vUv).rg : vec2(b2.r, s2.r), bM = uBl.y > .5 ? texture2D(tBl1, vUv).rg : vec2(b2.g, s2.g);
-  vec2 bI = uBl.z > .5 ? texture2D(tBl2, vUv).rg : vec2(b1.r, s1.r), bU = uBl.w > .5 ? texture2D(tBl4, vUv).rg : vec2(b1.g, s1.g);
+  // IR: thermal (output 1, blurred at 10 µm, fixed position) and near-IR (output 2's IR slot, sharp) — M11/T3
+  float lT = uBl.z > .5 ? texture2D(tBl2, vUv).r : b1.r, lN = s1.r;
+  vec2 bI = vec2(lT, lT*uPosT), bU = uBl.w > .5 ? texture2D(tBl4, vUv).rg : vec2(b1.g, s1.g);
   // detection statistics: photon counting (smooth where N is large); radio speckle is applied per coherent emitter
   vec2 px = gl_FragCoord.xy;
   bM.x = photons(1, bM.x, bM.y, px); bI.x = photons(2, bI.x, bI.y, px + 1001.); bU.x = photons(4, bU.x, bU.y, px + 2011.);
   float lx = photons(5, b1.b, s1.b, px + 3007.), lg = photons(6, b2.b, s2.b, px + 4001.);
+  // the tube's grain: photocathode shot noise, counted at the real near-IR radiance (scene units × uNirPhot, surface.js)
+  lN = photons(2, lN*uNirPhot, lN*uNirPhot*uPosN, px + 5003.)/uNirPhot;
   v *= gain(3);
   vec3 cV = uOn[3]*uW[3]*mix(vec3(lum(v)), v, uSatVis), c0 = bandC(0, bR.x, bR.y), c1 = bandC(1, bM.x, bM.y), c2 = bandC(2, bI.x, bI.y),
        c4 = bandC(4, bU.x, bU.y), c5 = bandC(5, lx, s1.b), c6 = bandC(6, lg, s2.b);
+  c2 += uOn[2]*uW[2]*uNirHue*lN*gainN();                                   // near-IR joins the IR band (fused goggle)
   vec3 C = cV + c0 + c1 + c2 + c4 + c5 + c6;
   // the stretch is one scalar per pixel: k = asinh(βI)/(βI) · β/asinh(β) (I = 1 maps to 1), divided by the brightest
   // channel where a pixel saturates (keeps the hue) — so each band's share of the displayed pixel is lum(c_b)·k
@@ -341,7 +384,8 @@ function readAsync(gl, w, h) {
 const rtOpts = { type: THREE.HalfFloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false };
 // hue = the band colour scaled to a brightest channel of 1 (normalising to equal luminance instead multiplies a deep
 // red like IR's by ~3.7, so every IR pixel above ~0.1 clipped to flat red)
-const hueOf = id => { const c = new THREE.Color(BANDS.find(b => b.id === id).color); const m = Math.max(c.r, c.g, c.b); return new THREE.Vector3(c.r / m, c.g / m, c.b / m); };
+const hueOfC = col => { const c = new THREE.Color(col); const m = Math.max(c.r, c.g, c.b); return new THREE.Vector3(c.r / m, c.g / m, c.b / m); };
+const hueOf = id => hueOfC(BANDS.find(b => b.id === id).color);
 const PENETRATE = new Set(['radio', 'micro', 'gamma']);   // bands that cross matter (output 5 / penetration pass)
 const BLUR = ['radio', 'micro', 'ir', 'uv'];       // bands with an aperture (vis is sub-pixel and RGB: never blurred)
 const lin = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, type: THREE.HalfFloatType, depthBuffer: false };
@@ -362,7 +406,7 @@ class EyePass extends Pass {
       tDepth: { value: null }, tT: { value: null }, uGlass: { value: 0 }, uNear: { value: .2 }, uFar: { value: 4e4 }, uTanY: { value: 1 }, uAspect: { value: 1 } } }));
     this.reduceQ = new FullScreenQuad(new THREE.ShaderMaterial({ vertexShader: VS, fragmentShader: REDUCE_FS,
       uniforms: { tSrc: { value: null }, uSrcF: { value: new THREE.Vector2() }, uSel: { value: new THREE.Vector4() }, uFirst: { value: 1 } } }));
-    const au = { tPrev: { value: null }, uUp: { value: 1 }, uDown: { value: 1 } }; IDS.forEach((_, i) => au['tR' + i] = { value: null });
+    const au = { tPrev: { value: null }, uUp: { value: 1 }, uDown: { value: 1 }, tR7: { value: null } }; IDS.forEach((_, i) => au['tR' + i] = { value: null });
     this.adaptQ = new FullScreenQuad(new THREE.ShaderMaterial({ vertexShader: VS, fragmentShader: ADAPT_FS, uniforms: au }));
     this.adapt = [0, 1].map(() => new THREE.WebGLRenderTarget(8, 1, { ...rtOpts, type: THREE.FloatType }));
     this.combineQ = new FullScreenQuad(new THREE.ShaderMaterial({ vertexShader: VS, fragmentShader: COMBINE_FS, uniforms: {
@@ -372,7 +416,9 @@ class EyePass extends Pass {
       uW: { value: IDS.map(() => 1) }, uAbs: { value: 0 }, uShare: { value: 0 },
       tBl0: { value: null }, tBl1: { value: null }, tBl2: { value: null }, tBl4: { value: null }, uBl: { value: new THREE.Vector4() },
       uLogLam: { value: IDS.map(id => { const [lo, hi] = bandEdges(id); return new THREE.Vector2(Math.log(lo), Math.log(hi)); }) },
-      uK: { value: EYE.quanta }, uCell: { value: EYE.cell }, uSeed: { value: 0 } } }));
+      uK: { value: EYE.quanta }, uCell: { value: EYE.cell }, uSeed: { value: 0 },
+      uNirHue: { value: hueOfC(NIR.color) }, uPosT: { value: SURF_POS.ir }, uPosN: { value: NIR_POS },
+      uNirP: { value: NIR.abc ? 1 : EYE.p }, uNirRef: { value: LREF.ir }, uNirFloor: { value: 0 }, uNirPhot: { value: 1 } } }));
     this.downQ = new FullScreenQuad(new THREE.ShaderMaterial({ vertexShader: VS, fragmentShader: DOWN_FS,
       uniforms: { tL: { value: null }, tS: { value: null }, uSel: { value: new THREE.Vector4() }, uPx: { value: new THREE.Vector2() }, uB: { value: 1 } } }));
     this.gaussQ = new FullScreenQuad(new THREE.ShaderMaterial({ vertexShader: VS, fragmentShader: GAUSS_FS,
@@ -383,7 +429,8 @@ class EyePass extends Pass {
   sigmaPx(b) {
     const D = APERTURE[b]; if (!D) return 0;
     const sp = SPEC[b], wSurf = Math.max(0, S.act[b] - sp.w), w = sp.w + wSurf;
-    const pos = w > 1e-9 ? (sp.wp + wSurf * SURF_POS[b]) / w : SURF_POS[b];
+    // IR: only the thermal channel is blurred, at the 8–14 µm window (the near-IR channel is sharp, M11/T3)
+    const pos = b === 'ir' ? SURF_POS.ir : w > 1e-9 ? (sp.wp + wSurf * SURF_POS[b]) / w : SURF_POS[b];
     const radPx = THREE.MathUtils.degToRad(this.camera.fov) / this.camera.zoom / this.mrt.height;
     return Math.min(.42 * posLambda(b, pos) / D / radPx, this.mrt.height / 4);
   }
@@ -407,7 +454,7 @@ class EyePass extends Pass {
   }
   setSize(w, h) {
     this.mrt.setSize(w, h); this.tz.setSize(w, h);
-    for (const id of IDS) {
+    for (const id of [...IDS, 'nir']) {
       (this.chains[id] || []).forEach(r => r.dispose());
       const chain = []; let cw = w, ch = h;
       do { cw = Math.ceil(cw / 4); ch = Math.ceil(ch / 4); chain.push(new THREE.WebGLRenderTarget(cw, ch, rtOpts)); } while (cw > 1 || ch > 1);
@@ -451,16 +498,16 @@ class EyePass extends Pass {
     }
     renderer.setClearColor(cc, ca);
     const tex = this.mrt.texture, ru = this.reduceQ.material.uniforms;
-    for (const id of IDS) {
-      if (!S.on[id]) continue;
-      let src = { texture: tex[SLOT[id][0]], width: this.mrt.width, height: this.mrt.height }; ru.uFirst.value = 1; ru.uSel.value = SEL(id);
+    for (const id of [...IDS, 'nir']) {                                  // 'nir': the near-IR channel (output 2, IR slot)
+      const nir = id === 'nir'; if (!S.on[nir ? 'ir' : id]) continue;
+      let src = { texture: tex[nir ? 2 : SLOT[id][0]], width: this.mrt.width, height: this.mrt.height }; ru.uFirst.value = 1; ru.uSel.value = SEL(nir ? 'ir' : id);
       for (const rt of this.chains[id]) {
         ru.tSrc.value = src.texture; ru.uSrcF.value.set(src.width, src.height);
         renderer.setRenderTarget(rt); this.reduceQ.render(renderer); ru.uFirst.value = 0; src = rt;
       }
     }
     const au = this.adaptQ.material.uniforms, [prev, next] = this.adapt, step = dt || .016;
-    au.tPrev.value = prev.texture; IDS.forEach((id, i) => au['tR' + i].value = this.chains[id].at(-1).texture);
+    au.tPrev.value = prev.texture; IDS.forEach((id, i) => au['tR' + i].value = this.chains[id].at(-1).texture); au.tR7.value = this.chains.nir.at(-1).texture;
     au.uUp.value = this.first ? 1 : 1 - Math.exp(-step / EYE.tauUp); au.uDown.value = this.first ? 1 : 1 - Math.exp(-step / EYE.tauDown);
     this.first = false;
     renderer.setRenderTarget(next); this.adaptQ.render(renderer); this.adapt.reverse();
@@ -475,6 +522,8 @@ class EyePass extends Pass {
     cu.uBl.value.set(...bl.map(t => (t ? 1 : 0)));
     cu.uSeed.value = Math.random();                                      // visual-only noise seed (render rule 9)
 
+    // near-IR: the real/scene light ratio (surface.js) sets the photon count and the tube threshold in scene units
+    cu.uNirPhot.value = SURF_U.uNirPhot.value; cu.uNirFloor.value = NIR.floorLx / NIR.lux0 / SURF_U.uNirPhot.value;
     cu.uKey.value = EYE.key; cu.uP.value = EYE.p; cu.uFloorRel.value = EYE.floorRel; cu.uBeta.value = EYE.beta;
     renderer.setRenderTarget(this.renderToScreen ? null : writeBuffer); this.combineQ.render(renderer);
     if (this.ratio >= 0 && ++this.ratio === 1) this.ratioCheck(renderer, next);

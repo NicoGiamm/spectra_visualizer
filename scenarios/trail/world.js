@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { V3, clamp, lerp, sm, kf, R, noise2, fbm2, ridged2 } from 'spectra/core/util.js';
 import { S } from 'spectra/core/state.js';
-import { spectral, PRESET, mixSurf } from 'spectra/render/surface.js';
+import { spectral, PRESET, mixSurf, collectSurfD } from 'spectra/render/surface.js';
 import { SUN_AZ, sunEl } from 'spectra/world/atmosphere.js';
 import { dirAE } from 'spectra/core/geom.js';
 import { heightfield } from 'spectra/world/heightfield.js';
@@ -25,6 +25,14 @@ export const terrainMat = new THREE.MeshStandardMaterial({ vertexColors: true, r
 export const NEAR_ROCKS = [];   // rocks close to the trail that glow while cooling (IR)
 
 function terrain() {
+  // same classes as the colours: meadow -> dirt trail -> rock -> snow
+  const surfAt = collectSurfD((x, y, z, slope) => {
+    const nz = fbm2(x * .03, z * .03, 3), L = (a, b, k) => mixSurf([[a, 1 - k], [b, k]]);
+    let s = L(PRESET.meadow, PRESET.forest, sm(.44, .6, fbm2(x * .008, z * .008, 3)) * .5);
+    s = L(s, PRESET.dirt, sm(1.6, .7, Math.abs(x - trailX(z))) * (Math.hypot(x, z) < 200 ? 1 : 0));
+    s = L(s, PRESET.rock, clamp(sm(.18, .4, slope) + sm(200, 420, y) * .7));
+    return L(s, PRESET.snow, sm(360 + 90 * nz, 460 + 90 * nz, y) * (1 - sm(.5, .72, slope)));
+  });
   const C = { grass: [.03, .045, .014], dry: [.11, .085, .04], rock: [.085, .08, .075], snow: [.78, .8, .86], dirt: [.12, .085, .055] };
   const mix = (a, b, k) => a.map((v, i) => lerp(v, b[i], k));
   const g = heightfield({ heightAt, colorAt(x, y, z, slope) {
@@ -33,13 +41,8 @@ function terrain() {
     c = mix(c, C.dirt, sm(1.6, .7, Math.abs(x - trailX(z))) * (Math.hypot(x, z) < 200 ? 1 : 0));
     c = mix(c, C.rock, clamp(sm(.18, .4, slope) + sm(200, 420, y) * .7));
     return mix(c, C.snow, sm(360 + 90 * nz, 460 + 90 * nz, y) * (1 - sm(.5, .72, slope)));
-  }, surfAt(x, y, z, slope) {        // same classes as the colours: meadow -> dirt trail -> rock -> snow
-    const nz = fbm2(x * .03, z * .03, 3), L = (a, b, k) => mixSurf([[a, 1 - k], [b, k]]);
-    let s = L(PRESET.meadow, PRESET.forest, sm(.44, .6, fbm2(x * .008, z * .008, 3)) * .5);
-    s = L(s, PRESET.dirt, sm(1.6, .7, Math.abs(x - trailX(z))) * (Math.hypot(x, z) < 200 ? 1 : 0));
-    s = L(s, PRESET.rock, clamp(sm(.18, .4, slope) + sm(200, 420, y) * .7));
-    return L(s, PRESET.snow, sm(360 + 90 * nz, 460 + 90 * nz, y) * (1 - sm(.5, .72, slope)));
-  } });
+  }, surfAt });
+  surfAt.attach(g);                  // per-vertex reflection data (aSurfD)
   S.scene.add(spectral(new THREE.Mesh(g, terrainMat), 'attr', { lines: 'topo', mean: g.userData.surfMean, weight: 1.2,
     uniforms: { uAlpen: ALPEN.amount, uSunDir: ALPEN.dir, ...TRAIL_U }, extraDecl: TERRAIN_DECL,
     instrExtra: 'c += trailTerrain(W, N, 0.);',
@@ -53,7 +56,9 @@ function terrain() {
 //    lose the excess with tau ≈ 9 script-s;
 //  - the campfire heats the ground around the pit once it burns;
 //  - microwave coverage of the cell mast on the ridge and the TV (UHF) transmitter: a long-range field (the shared
-//    addTx field is tuned for routers at ~20 m) with radial dashes moving outward.
+//    addTx field is tuned for routers at ~20 m) with radial dashes moving outward. In the spectral eye (M11/T2) the
+//    ground reflects that coverage by its microwave reflectivity R = 1 − eMW (Kirchhoff, surface.js) — grass and rock
+//    scatter it diffusely at 0.7–2 GHz (h of cm against λ 15–40 cm) — and the dashes give way to their mean.
 export const TRAIL_U = {
   uAft: { value: dirAE(SUN_AZ - 10, 15) }, uSlopeK: { value: 1 }, uCamp: { value: new THREE.Vector4() },
   uMTx: { value: [new THREE.Vector4(), new THREE.Vector4()] },
@@ -71,8 +76,8 @@ vec3 trailTerrain(vec3 W, vec3 N, float inVis){
     float cov = 0.;
     for(int i = 0; i < 2; i++){ vec4 tx = uMTx[i]; if(tx.w <= 0.) continue;
       vec3 L = tx.xyz - W; float d = length(L); L /= max(d, 1e-3);
-      cov += tx.w*(.15 + .85*max(dot(N, L), 0.))/(1. + d*d/(380.*380.))*(.4 + .6*step(.55, fract(d/45. - uSurfTime*.7))); }
-    col += uSOnM*vec3(1., .5, .1)*cov*(1. - .6*inVis);
+      cov += tx.w*(.15 + .85*max(dot(N, L), 0.))/(1. + d*d/(380.*380.))*mix(.4 + .6*step(.55, fract(d/45. - uSurfTime*.7)), .67, eyeSmooth); }
+    col += uSOnM*vec3(1., .5, .1)*cov*(1. - .6*inVis)*mix(1., 1. - vSurfB.x, eyeSmooth);
   }
   return col;
 }`;

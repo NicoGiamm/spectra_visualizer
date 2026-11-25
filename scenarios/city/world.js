@@ -7,7 +7,8 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { V3, sm, R, noise2, hash2, PLAY } from 'spectra/core/util.js';
 import { S } from 'spectra/core/state.js';
 import { solid, visOnly } from 'spectra/render/instrument.js';
-import { spectral } from 'spectra/render/surface.js';
+import { spectral, spectralParts, surfD, PRESET } from 'spectra/render/surface.js';
+import { carGeo } from './street.js';
 import { dirAE } from 'spectra/core/geom.js';
 import { softTex } from 'spectra/render/textures.js';
 
@@ -75,24 +76,37 @@ const LIT = { extraDecl: LAMP_GLSL, visExtra: 'vec3 sl = diffuseColor.rgb*street
 // C.yzw = transmission [Tradio, Tmicro, Tgamma] for light from behind (spectral eye, M10/T6): ground [.05, 0, 0] as the
 // engine's TRANS.ground; metal is a conductor — radio and microwave do not cross it (Faraday), gamma at 1.46 MeV does:
 // thin steel (poles, rails, 2–3 mm, μ/ρ .052 cm²/g × 7.9 g/cm³) ≈ .9 → .8 for a tube; a car (two steel skins + seats) .7 STAND-IN
-const P = (T0, Teq, tau, eIR, eMW, uvAlb, gamma, rRadio, gloss = 0, tr = [.05, 0, 0]) => ({ A: [T0, Teq, tau ? 1 / tau : 0, eIR], B: [eMW, uvAlb, gamma, rRadio], C: [gloss, ...tr] });
+// rRadio (B.w) is the normal-incidence reflectance at 100 MHz and D = [h (m), nirAlb, R0opt, slope] the reflection data
+// (M11/T2; keys [P527], [P2040], [EL] and the model in surface.js's header)
+const P = (T0, Teq, tau, eIR, eMW, uvAlb, gamma, rRadio, gloss = 0, tr = [.05, 0, 0], D = undefined) => ({ A: [T0, Teq, tau ? 1 / tau : 0, eIR], B: [eMW, uvAlb, gamma, rRadio], C: [gloss, ...tr], D });
 // thin bare/galvanised metal: cools fast (little heat capacity per area), mirrors radio. eIR .3 — weathered galvanised
 // steel (new 0.05–0.1, weathered/oxidised 0.2–0.3) [EL], reads sky-cold; eMW .02 — a metal reflects (e ≈ 0) [UMF];
-// uvAlb .1 — STAND-IN; gamma .05 (steel: negligible activity) [UN]
-const METAL = P(22, 10, 8, .3, .02, .1, .05, .95, .7, [0, 0, .8]);
+// uvAlb .1 — STAND-IN; gamma .05 (steel: negligible activity) [UN]; rRadio 1 — a conductor [P2040 metal]; D: h .5 mm
+// (STAND-IN: smooth sheet and tube, a mirror at every radio / microwave λ), nirAlb .55 (galvanised steel .5–.6 [EL]),
+// R0opt .1 — weathered zinc is coated in ZnO, which absorbs below ~385 nm (band gap 3.3 eV), so it is no UV mirror
+// (STAND-IN, consistent with uvAlb), slope .05 (the poles' and rails' shape is in the mesh)
+const METAL = P(22, 10, 8, .3, .02, .1, .05, 1, .7, [0, 0, .8], [.0005, .55, .1, .05]);
 // car bodies: painted steel, glossy, recently driven ones still warm. eIR .9 — the paint layer is opaque at 8–14 µm
 // [EL]; eMW .1 — at mm–cm wavelengths a ~0.1 mm paint layer is transparent and the steel underneath reflects [UMF]
-// (STAND-IN slightly above bare metal for glass and tyres), so cars read microwave-cold; uvAlb .05 — STAND-IN; gamma .05 [UN]
-export const PAINT = P(27, 12, 14, .9, .1, .05, .05, .9, .4, [0, 0, .7]);
+// (STAND-IN slightly above bare metal for glass and tyres), so cars read microwave-cold; uvAlb .05 — STAND-IN; gamma .05 [UN];
+// rRadio 1 — the steel body under the paint [P2040 metal]; D: h .2 mm (clear-coated panel), nirAlb .4 (car paints
+// .2–.7 by colour — STAND-IN), R0opt .05 (clear coat n ~1.5), slope .25 — the curved panels of a body the mesh draws
+// as boxes (STAND-IN): a router's image spreads over the panel instead of a pinpoint
+export const PAINT = P(27, 12, 14, .9, .1, .05, .05, 1, .4, [0, 0, .7], [.0002, .4, .05, .25]);
 // road paint on asphalt: thermally the asphalt under it (μ ~1200) [Oke]; eIR .92 [EL]; eMW .88 as asphalt [UMF];
 // uvAlb .1 — white road paint is TiO2-pigmented and TiO2 (band gap ~3.0 eV) absorbs below ~410 nm, so it is only a
 // little brighter than asphalt in UV, not 'white' (rutile's absorption edge — why TiO2 is a sunscreen UV blocker);
-// gamma .3 as asphalt [RP112]
-const MARK = P(34, 16, 30, .92, .88, .1, .3, .5);
+// gamma .3 as asphalt [RP112]; rRadio .15 and h, R0opt, slope as the asphalt under it; nirAlb .7 — TiO2 paint is bright
+// in the near-IR (white paints .7–.85 [EL]), STAND-IN for worn road paint
+const MARK = P(34, 16, 30, .92, .88, .1, .3, .15, 0, undefined, [.002, .7, .04, .05]);
 // granite kerbstones: like the trail's rock (eIR .9 [Sal, EL], slow to cool, μ ~2200 [Oke]) and the most radioactive
 // stone in the street (K-40, U and Th series; granite typically 2-3x the gamma dose rate of concrete or brick) [UN, RP112];
-// eMW .88 [UMF]; uvAlb .12 — STAND-IN as the engine's rock
-const GRANITE = P(31, 15, 40, .9, .88, .12, 1, .5);
+// eMW .88 [UMF]; uvAlb .12 — STAND-IN as the engine's rock; rRadio .16 [Dan]; D: cut stone, h 2 mm and slope .05 as
+// paving, nirAlb .3 and R0opt .05 as the engine's rock
+const GRANITE = P(31, 15, 40, .9, .88, .12, 1, .16, 0, undefined, [.002, .3, .05, .05]);
+// sign boxes: painted metal with a warm LED driver inside — eIR .9 (paint [EL]), eMW .6 — STAND-IN (plastic face over
+// a metal box), rRadio 1 (metal box [P2040]), D as car paint
+const SIGN = P(30, 24, 30, .9, .6, .05, .05, 1, .3, undefined, PAINT.D);
 
 // windows on vertical faces (> 3.2 m) and shop fronts at street level. The plane coordinate seeds the cells,
 // so visible lit windows and IR heat leaks share one pattern without per-instance data.
@@ -150,6 +164,8 @@ function buildingMaterial() {
 // office block, …). Glass is opaque at 8–14 µm, so panes show their own (slightly warmed) temperature mixed with
 // the cold sky they mirror at grazing angles; the frames and lintels are thermal bridges that leak Tcore; the
 // walls leak a little of it; roofs over heated top floors stay warm (the HVAC exhausts are their own event).
+// Spectral eye (M11/T2): the panes mirror the 8–14 µm sky in their mirror direction (surface.js skyIRC: the cold zenith
+// for a pane seen from below, the warmer horizon; the street below the horizon at the wall's own temperature).
 const WIN_IR = `
 if(uSOnI > 0.){
   vec2 cell; vec3 wp = winParts(W, N, cell);
@@ -157,7 +173,9 @@ if(uSOnI > 0.){
   float cv = clamp(dot(normalize(cameraPosition - W), N), 0., 1.), eg = .84*(1. - .85*pow(1. - cv, 3.));
   float xw = clamp((uSurfA.w*Tw + (1. - uSurfA.w)*(-35.) + 4.)/44., 0., 1.);
   float xl = clamp((uSurfA.w*(Tw + .25*Tc) + (1. - uSurfA.w)*(-35.) + 4.)/44., 0., 1.);
-  float xp = clamp((eg*(Tw + .4*Tc*(.6 + .8*heat)) + (1. - eg)*(-35.) + 4.)/44., 0., 1.);
+  vec3 Rg = reflect(normalize(W - cameraPosition), N);
+  float Tsk = mix(-35., mix(Tw, skyIRC(Rg), upK(Rg)), eyeSmooth);
+  float xp = clamp((eg*(Tw + .4*Tc*(.6 + .8*heat)) + (1. - eg)*Tsk + 4.)/44., 0., 1.);
   float xr = clamp((Tw + Tc*(.7 + .6*heat) + 2. + 4.)/44., 0., 1.);
   float xf = clamp((Tw + 3. + .6*Tc + 4.)/44., 0., 1.);
   vec3 cw = thermal(xw)*(.04 + .5*xw*xw), cl = thermal(xl)*(.04 + .5*xl*xl), cp = thermal(xp)*(.04 + .5*xp*xp), cr = thermal(xr)*(.04 + .5*xr*xr), cf = thermal(xf)*(.04 + .5*xf*xf);
@@ -270,7 +288,7 @@ function streetProps(front, metal) {
     CAMS.push({ p: new V3(s.x + .5, 2.45, s.z - 1.9), n: new V3(1, 0, 0) }); }
   const signMat = new THREE.MeshBasicMaterial({ vertexColors: true, color: 0xffffff });
   // sign boxes: painted metal with a warm LED driver inside (spectral, so they read in every band, not as black voids)
-  S.scene.add(spectral(new THREE.Mesh(mergeGeometries(signG), signMat), P(30, 24, 30, .9, .6, .05, .05, .9, .3), { weight: 0 }));
+  S.scene.add(spectral(new THREE.Mesh(mergeGeometries(signG), signMat), SIGN, { weight: 0 }));
   SIGNS.mat = signMat;
   // rooftop HVAC units and their exhausts
   for (const r of ROOFS) {
@@ -381,10 +399,22 @@ function parkTrees() {
   S.scene.add(spectral(crowns, 'canopy', { weight: .3 }), spectral(trunks, 'wood', { weight: 0 }));
 }
 
-// parked cars along both kerbs of the canyon (one instanced draw, painted-metal surface)
+// parked cars along both kerbs of the canyon: street.js's car by parts (M11/T6) in one instanced draw. A parked car
+// has no running engine: the bonnet is plain cooling paint, the tyres and the tailpipe sit near the air's temperature
+// (STAND-IN, as street.js's cold bicycle tyres) — so the parts' surfaces are swapped per vertex and the meter mean redone
+const PARKED_SWAP = [[PRESET.engine, PAINT], [PRESET.tyre, { ...PRESET.tyre, A: [22, 14, 1 / 20, PRESET.tyre.A[3]] }],
+  [PRESET.exhaust, { ...PRESET.exhaust, A: [24, 12, 1 / 12, PRESET.exhaust.A[3]] }]];
+function parkedCarGeo() {
+  const g = carGeo(0xffffff), at = k => g.attributes['aSurf' + k], n = at('A').count, mean = { A: [0, 0, 0, 0], B: [0, 0, 0, 0], C: [0, 0, 0, 0], D: [0, 0, 0, 0] };
+  for (let i = 0; i < n; i++) {
+    const a = [0, 1, 2, 3].map(j => at('A').array[i * 4 + j]), sw = PARKED_SWAP.find(([p]) => p.A.every((v, j) => Math.abs(v - a[j]) < 1e-5));
+    if (sw) for (const k of 'ABCD') at(k).array.set(k === 'D' ? surfD(sw[1]) : sw[1][k], i * 4);
+    for (const k of 'ABCD') for (let j = 0; j < 4; j++) mean[k][j] += at(k).array[i * 4 + j] / n;
+  }
+  g.userData.mean = mean;
+  return g;
+}
 function parkedCars() {
-  const b = new THREE.BoxGeometry(1.75, .72, 4.3); b.translate(0, .6, 0);
-  const c = new THREE.BoxGeometry(1.55, .58, 2.2); c.translate(0, 1.25, -.2);
   const M = [], C = [], tmp = new THREE.Object3D();
   for (const side of [-1, 1]) for (let z = PARK_Z + 8; z < 210; z += 5.6 + R() * 3) {
     if (R() < .3 || (side < 0 && Math.abs(z - BUS.p.z) < 9)) continue;
@@ -393,9 +423,9 @@ function parkedCars() {
     C.push(new THREE.Color().setHSL(R(), .2 + R() * .3, .05 + R() * .14));
     PARKED.push({ p: new V3(side * PARK_X, 0, z), dir, k: R(), side });
   }
-  const mesh = new THREE.InstancedMesh(mergeGeometries([b, c]), new THREE.MeshStandardMaterial({ roughness: .35, metalness: .6 }), M.length);
+  const mesh = new THREE.InstancedMesh(parkedCarGeo(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .35, metalness: .6 }), M.length);
   M.forEach((m, i) => { mesh.setMatrixAt(i, m); mesh.setColorAt(i, C[i]); });
-  S.scene.add(spectral(mesh, PAINT, { weight: .05, ...LIT }));
+  S.scene.add(spectralParts(mesh, { weight: .05, ...LIT }));
 }
 
 export function build() {

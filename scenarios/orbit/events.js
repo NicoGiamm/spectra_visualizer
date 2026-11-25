@@ -7,7 +7,7 @@ import { V3, sm, env, clamp, hash2, R, DEG } from 'spectra/core/util.js';
 import { S } from 'spectra/core/state.js';
 import { event } from 'spectra/core/events.js';
 import { dirAE, D } from 'spectra/core/geom.js';
-import { Em, Rib } from 'spectra/render/sources.js';
+import { Em, Rib, BEAM } from 'spectra/render/sources.js';
 import { ENV } from 'spectra/world/atmosphere.js';
 import { N, RE, LIMB_A, T_SET, T_RISE, MIN_PER_UNIT, CROSS, EARTH_U, SHELL_U, sunDir, sunState, limbP, facing, sunlit, onEarth, drift } from './world.js';
 
@@ -17,7 +17,7 @@ const orbitOnly = () => S.detector !== 'ground';                // the Ground de
 export const dark = (t = S.t) => sm(T_SET - 1, T_SET + 1.5, t) * (1 - sm(T_RISE + 2, T_RISE + 7, t));
 
 // The Earth itself (world.js does the drawing: its surface hook and the edge-on air).
-export const earthBelow = () => event({ name: 'The Earth below', t0: 0, t1: 60, bands: ['vis', 'ir', 'micro', 'uv', 'radio'], freq: ['sunlight', 'solarUV', 'thermal290', 'cloudTopIR', 'earthMicrowave', 'earthRadio'], tags: ['common'],
+export const earthBelow = () => event({ name: 'The Earth below', t0: 0, t1: 60, bands: ['vis', 'ir', 'micro', 'uv', 'radio'], freq: ['sunlight', 'solarNIR', 'solarUV', 'thermal290', 'cloudTopIR', 'earthMicrowave', 'earthRadio'], tags: ['common'],
   note: `Seen from 420 km the Earth fills the lower half of the window and the ground streams by toward the horizon at 7.2 km/s. By day: blue ocean, brown land, white cloud, the Sun's glint on the sea, and a thin blue film of air along the curved limb. In thermal infrared the clear ocean and land glow at 10–30 °C while the cloud tops, 10 km up at −45 °C, are the dark parts; at night the land cools. In microwaves it flips: the sea is a poor emitter (half as bright as land at the same temperature), so the continents glow and the oceans are dark. In radio (100 MHz) the land glows at ~170–260 K of its own; the sea emits little (~30 K) but is a mirror that reflects the galactic radio sky, brighter still where it shows the Milky Way. The sunlit side also glows in near-UV, sunlight scattered by the air. Time-compressed: the whole 93-minute orbit passes in the 2 minutes, 46 s of orbit per second of playback.`,
   update() { const day = sm(-.3, .4, sunDir().dot(N.clone().negate()));
     S.act.vis += 3 * day + .2; S.act.ir += 2.2; S.act.micro += 1.2; S.act.uv += 1.5 * day; S.act.radio += .1; },
@@ -47,7 +47,7 @@ export const terminator = o => event({ name: 'Terminator pass', t0: 2, t1: 11, b
   where() { return this.p; } }, o);
 
 // Airglow: the night side's own light, seen edge-on as thin layers along the limb.
-export const airglow = () => event({ name: 'Airglow layers', t0: T_SET, t1: T_RISE + 7, bands: ['vis', 'ir', 'uv'], freq: ['o5577', 'o6300', 'ohMeinel', 'fuvNightglow'], tags: ['common'],
+export const airglow = () => event({ name: 'Airglow layers', t0: T_SET, t1: T_RISE + 7, bands: ['vis', 'ir', 'uv'], freq: ['o5577', 'o6300', 'ohAirglow', 'ohMeinel', 'fuvNightglow'], tags: ['common'],
   note: 'Above the night side the upper air glows by itself, from chemistry powered by the day\'s sunlight. Edge-on at the limb it becomes a thin band floating ~2.5° above the horizon: green oxygen at ~95 km, a faint red oxygen layer at ~250 km, and — brighter than both, in near-infrared — hydroxyl (OH) at ~87 km. Higher still, in the F region, recombining oxygen ions glow at 135.6 nm, far-UV, strongest in two arcs either side of the magnetic equator; that one is absorbed long before the ground. Astronauts photograph the green band on every night pass.',
   init() { this.fuv = [0, 1, 2, 3].map(() => new Rib('uv', null, 20, 0, 'high')); },
   update() { const I = env(S.t, this.t0, this.t1, 2) * dark(); SHELL_U.uAirglow.value = I; this.p = null; if (I <= .01) return;
@@ -60,9 +60,10 @@ export const airglow = () => event({ name: 'Airglow layers', t0: T_SET, t1: T_RI
 export { SHELL_U };
 
 // Night-side cities: the land's lights (drawn by the Earth's surface, uCity), sodium orange and LED white.
-export const cities = () => event({ name: 'Night-side cities', t0: T_SET - 2, t1: T_RISE + 7, bands: ['vis'], freq: ['na589', 'ledWhite'], tags: ['common'],
-  note: 'Once the ground under you is dark, the inhabited land lights up in strings and clusters: the orange of sodium street lamps, more and more the bluish white of LEDs. The brightest lights shine through thin cloud.',
-  update() { const I = env(S.t, this.t0, this.t1, 2); EARTH_U.uCity.value = S.on.vis ? I : 0; S.act.vis += I * dark() * .8; },
+export const cities = () => event({ name: 'Night-side cities', t0: T_SET - 2, t1: T_RISE + 7, bands: ['vis', 'ir'], freq: ['na589', 'na819', 'ledWhite'], tags: ['common'],
+  note: 'Once the ground under you is dark, the inhabited land lights up in strings and clusters: the orange of sodium street lamps, more and more the bluish white of LEDs. The brightest lights shine through thin cloud. In near-IR the sodium lamps stay bright (their 819 nm lines) while the LEDs nearly vanish.',
+  update() { const I = env(S.t, this.t0, this.t1, 2); EARTH_U.uCity.value = S.on.vis ? I : 0; EARTH_U.uCityN.value = S.on.ir ? I : 0;   // each band its own switch
+    S.act.vis += I * dark() * .8; S.act.ir += I * dark() * .5; },   // near-IR: sodium's 819 nm lines ≈ its visible (Elvidge 2010), LEDs ~5 %
   where: () => onEarth(dirAE(262, -12)) });
 
 // Thunderstorms seen from above: cloud tops lit from inside. Each cell streams through the view with the ground
@@ -141,10 +142,17 @@ export const limbGamma = () => event({ name: 'Gamma-ray limb', t0: 0, t1: 60, ba
 // and the sweeping beams of S-band radars (airports on land, ships at sea).
 export const radioLeak = () => event({ name: 'Radio from the ground', t0: 0, t1: 60, bands: ['radio', 'micro'], freq: ['fm', 'tvUHF', 'airportASR', 'sbandRadar'], tags: ['common', 'stylised'],
   note: 'Above about 10 MHz radio passes through the ionosphere, so every FM and TV transmitter below shines up into space too: the inhabited land glows in radio, day and night, with the speckle of coherent transmitters. AM and shortwave below the ionosphere\'s cut-off are reflected back down and stay hidden. Here and there an S-band radar sweeps its beam round — an airport\'s surveillance radar, a ship\'s navigation radar at sea — a microwave flash every turn, every ~2–5 s real (drawn slowed, under two a second of playback: real turns would strobe ~10–20 a second on this clock).',
+  // The eye (sources.js BEAM.sweep): an S-band surveillance radar's 1.4° fan (ASR-9 / ASR-11 class, ≈ 70 λ/D for a ~5 m
+  // reflector at 2.8 GHz), turning at the drawn rate; vertically a cosecant-squared beam (Skolnik, Introduction to Radar
+  // Systems, 3rd ed., ch. 9), full up to ~2° and falling as (sin 2° / sin el)² above it, el the station's elevation
+  // seen from the radar (facing() = its sine): only the radars near the limb point their beam at you, those below you
+  // send only their sidelobes up. Meters: the old intensity.
   init() { this.rad = Array.from({ length: 7 }, () => ({ ph: R(), sw: R(), e: new Em('micro') })); this.p = null; },
   update() { EARTH_U.uRadio.value = S.on.radio ? 1 : 0; S.act.radio += 1.2; const { T } = S; this.p = null;
     this.rad.forEach((r, i) => { const x = S.t / CROSS + r.ph, g = Math.floor(x), p = drift(x - g, (hash2(g, i + 40) - .5) * .6, .5); if (facing(p) < .05) return;
-      const sw = (T * 1.7 + r.sw) % 1; r.e.set(p, 4, (.25 + 1.1 * Math.exp(-sw * 12)) * (i % 3 ? 1 : .7)); if (!this.p) this.p = p; }); },
+      const sw = (T * 1.7 + r.sw) % 1, k = i % 3 ? 1 : .7, I = (.25 + 1.1 * Math.exp(-sw * 12)) * k;
+      const vert = Math.min(1, (Math.sin(2 * DEG) / Math.max(facing(p), Math.sin(2 * DEG))) ** 2);
+      r.e.set(p, 4, I, 1.35 * k * Math.max(1e-3, BEAM.sweep(2 * Math.PI * sw, 1.4 * DEG, 2 * Math.PI * 1.7) * vert) / I); if (!this.p) this.p = p; }); },
   where() { return this.p || BELOW(); } });
 
 // The stars with no air: they don't twinkle and the sky is black right down to the limb; the UV sky opens up.
@@ -156,7 +164,7 @@ export const starfield = () => event({ name: 'Stars without air', t0: 0, t1: 60,
   where: () => dirAE(285, 30).multiplyScalar(D) });
 
 // The cupola around you.
-export const cupola = () => event({ name: 'The cupola', t0: 0, t1: 60, bands: ['ir'], freq: ['thermal290'], tags: ['stylised'],
+export const cupola = () => event({ name: 'The cupola', t0: 0, t1: 60, bands: ['ir'], freq: ['thermal290', 'solarNIR'], tags: ['stylised'],
   note: 'You float in the ISS cupola, its seven windows looking down at the Earth. The aluminium frame is at cabin temperature, ~22 °C, and glows in thermal infrared like everything indoors. Stylised: the real windows are four panes of fused silica and borosilicate glass with a polycarbonate scratch pane, which block thermal infrared, most UV and all EUV and X-rays, and the metal hull shields radio — the spectral eye looks as if the window were open.',
   update() { S.act.ir += .6; },
   where: () => new V3(0, 0, 0).add(dirAE(240, 28).multiplyScalar(.8)) });

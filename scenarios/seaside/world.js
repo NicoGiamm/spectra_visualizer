@@ -7,7 +7,7 @@ import { S } from 'spectra/core/state.js';
 import { dirAE } from 'spectra/core/geom.js';
 import { SPECTRUM, wavelength } from 'spectra/core/spectrum.js';
 import { solid } from 'spectra/render/instrument.js';
-import { spectral, PRESET, mixSurf, surfaceUniforms, SURF_FRAG_DECL, SURF_VERT_DECL } from 'spectra/render/surface.js';
+import { spectral, PRESET, mixSurf, surfaceUniforms, collectSurfD, SURF_FRAG_DECL, SURF_VERT_DECL } from 'spectra/render/surface.js';
 import { heightfield } from 'spectra/world/heightfield.js';
 import { HOR, HEMI, SUN_AZ, sunEl, moonDir, moonlit, GAL_C } from 'spectra/world/atmosphere.js';
 
@@ -45,13 +45,37 @@ export function heightAt(x, z) {
 //     pale sand, between 0.017 vegetation and sand) [FG]; gamma .45 (dune sand under sparse grass) — STAND-IN
 //   granite: slow to cool (μ ~2200) [Oke], gamma reference = 1 (K-40, U, Th in feldspar and zircon) [UN]; eIR .9 [Sal, EL];
 //     eMW .88 [UMF]; uvAlb .12 — STAND-IN as the engine's rock
-//   sea: the engine's water preset (eMW .45 calm sea [Wilheit])
+//   sea: the engine's water preset (eMW .45 calm sea [Wilheit]) with sea water's radio reflectivity
+// rRadio (B.w) and the reflection data D = [h, nirAlb, R0opt, slope] (M11/T2; keys [P527], [EL] in surface.js):
+//   wet sand rRadio .8 — sand saturated with sea water, ε' ~25, σ ~1 S/m: between [P527] wet ground (.48) and sea water
+//     (.91), STAND-IN; D as the engine's wetSand (swash-smoothed, a water film)
+//   beach sand rRadio .07 [P527] very dry ground; D as the engine's sand
+//   dune rRadio .07 (dry sand under sparse grass) [P527]; nirAlb .4 — marram over pale sand, between green grass and
+//     sand [EL], STAND-IN; h .05 (the grass layer), slope .3 as the engine's meadow
+//   granite rRadio .16 [Dan]; D as the engine's rock
+//   sea rRadio .91 [P527] sea water (ε' 70, σ 5 S/m); h .005 — capillary / short gravity waves below the shader's own
+//     waves, STAND-IN; slope = the residual of Cox & Munk's total below the shader's own waves (SEA_WAVES, far field:
+//     the long waves only); nirAlb / R0opt as water
+// The sea's waves (M11/T6, one table, drawn by the sea shader's seaGeo): [kx, kz (rad/m), ω (rad/s), a (m)], each a
+// gradient a·k·cos(k·p + ωt); long waves out to 2.5 km (seaFd), short ones within 400 m (seaFd2) with a value-noise
+// ripple of rms gradient noise/√12 per axis (n2 taken as uniform on 0..1, STAND-IN). Their mean-square slope per axis
+// is Σ a²|k|²/4 (a sinusoid's (a|k|)²/2, split over two axes): long .0056, short + ripple .0043.
+// Cox & Munk 1954 (J. Opt. Soc. Am. 44:838): the clean sea's total mean-square slope σ² = .003 + .00512·U (U wind
+// speed, m/s, at 12.5 m), at 3 m/s (a light breeze, STAND-IN) .0184 → .0092 per axis. What the mesh's waves don't draw
+// is the residual √(.0092 − σ_waves²) per axis: 0 within ~30 m (the shader's waves already carry it all), .06 far out —
+// the width of the glitter lobes (near-IR and visible Moon glint, transmitter images) is 2 × that, ≥ .03 rad.
+const SEA_WAVES = { long: [[.06, .10, .9, .9], [-.09, .07, 1.1, .7], [.13, -.05, 1.3, .5]],
+  short: [[.55, .8, 2.6, .09], [-.9, .45, 3.1, .07], [.3, -1.1, 3.4, .05]], noise: .06, wind: 3 };
+const msSlope = ws => ws.reduce((a, [kx, kz, , amp]) => a + amp * amp * (kx * kx + kz * kz) / 4, 0);
+const CM_AXIS = (.003 + .00512 * SEA_WAVES.wind) / 2, WAVE_L = msSlope(SEA_WAVES.long), WAVE_S = msSlope(SEA_WAVES.short) + SEA_WAVES.noise ** 2 / 12;
+const gfl = x => (Number.isInteger(x) ? x.toFixed(1) : String(x));
+const waveSum = ws => ws.map(([kx, kz, w, a]) => `wave(p, vec2(${gfl(kx)}, ${gfl(kz)}), ${gfl(w)}, ${gfl(a)})`).join(' + ');
 export const SURF = {
-  wetSand: { A: [23, 16, 1 / 30, .96], B: [.6, .1, .55, .5], C: [.5, .05, 0, 0] },
-  sand:    { A: [35, 8, 1 / 22, .92], B: [.9, .24, .7, .3], C: [0, .05, 0, 0] },   // 35 °C at sunset, crosses the sea's 18 °C near t=22
-  dune:    { A: [27, 7, 1 / 10, .97], B: [.92, .05, .45, .2], C: [0, .05, 0, 0] },   // marram grass on the dunes
-  granite: { A: [31, 14, 1 / 45, .9], B: [.88, .12, 1, .5], C: [0, .05, 0, 0] },
-  sea:     PRESET.water,
+  wetSand: { A: [23, 16, 1 / 30, .96], B: [.6, .1, .55, .8], C: [.5, .05, 0, 0], D: PRESET.wetSand.D },
+  sand:    { A: [35, 8, 1 / 22, .92], B: [.9, .24, .7, .07], C: [0, .05, 0, 0], D: PRESET.sand.D },   // 35 °C at sunset, crosses the sea's 18 °C near t=22
+  dune:    { A: [27, 7, 1 / 10, .97], B: [.92, .05, .45, .07], C: [0, .05, 0, 0], D: [.05, .4, .04, .3] },   // marram grass on the dunes
+  granite: { A: [31, 14, 1 / 45, .9], B: [.88, .12, 1, .16], C: [0, .05, 0, 0], D: PRESET.rock.D },
+  sea:     { ...PRESET.water, B: [PRESET.water.B[0], PRESET.water.B[1], PRESET.water.B[2], .91], D: [.005, .02, .02, Math.sqrt(Math.max(CM_AXIS - WAVE_L, 0))] },
 };
 
 export const sandMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .97, metalness: 0 });
@@ -62,7 +86,7 @@ export const SEA = { mat: null };
 export const ENVSEA = {
   sunDir: { value: new V3() }, sunI: { value: 0 }, moonDir: { value: new V3() }, moonI: { value: 0 },
   hor: { value: new THREE.Color() }, sky: { value: new THREE.Color() },
-  radP: { value: new V3() }, radA: { value: 0 }, radI: { value: 0 },          // ship X-band radar: position, beam bearing, power
+  radP: { value: new V3() }, radA: { value: 0 }, radI: { value: 0 }, radB: { value: new THREE.Vector2(1.1 * Math.PI / 180, 2.4 / 60) },          // ship X-band radar: position, beam bearing, power
   fire: { value: new THREE.Vector4(0, 0, 0, 0) },                              // bonfire: position, heat
   mist: { value: 0 }, airT: { value: 20 }, uvGlit: { value: 0 }, bio: { value: 0 },
   rs: { value: Array.from({ length: 3 }, () => new THREE.Vector4()) },        // sky radio sources mirrored by the sea: dir, strength
@@ -78,20 +102,37 @@ const PULSAR_D = dirAE(242, 52);   // must match sky.pulsar()'s spin axis
 const LLOYD_LAMBDA = [wavelength(SPECTRUM.lloydFringe), wavelength(SPECTRUM.lloydFringe100)];   // m: 1.5, 3
 const tide = t => .5 - .5 * Math.cos(Math.PI * t / 60);           // m, a flood tide of 1 m over the evening (time-compressed)
 export const airTemp = t => 12 + 10 * Math.exp(-t / 20);         // °C, falls through the evening
-// Radar echo of a surface at W: a bright line where the beam is now, then a fading wake as the antenna turns on
-// (the persistence of a PPI display, drawn onto the coast it maps). Faces turned toward the antenna return most, faces
-// turned away return nothing (no terrain occlusion is traced). Range: a ship's X-band radar paints high coast out to
-// 20+ nmi, so the fade only trims the far hills.
+// Radar echo of a surface at W. Old view: a bright line where the beam is now, then a fading wake as the antenna turns
+// on (the persistence of a PPI display, drawn onto the coast it maps). Spectral eye (M11/T6): what a microwave camera
+// would record — the coast scatters the beam only while it is lit, so the paint is the ship's real beam (sources.js
+// BEAM.sweep: the 1.1° Gaussian dish lobe averaged over the arc it sweeps in one frame, −30 dB sidelobe floor between;
+// uRadB = (hpbw, arc per frame), set by the ship event): a thin wedge sweeping round, no wake. Its peak scale 1.3 is
+// the old line + wake at the beam (.8 + .5), so a full-frame dwell keeps the old meaning of uRadI. Faces turned toward
+// the antenna return most, faces turned away return nothing (no terrain occlusion is traced). Range: a ship's X-band
+// radar paints high coast out to 20+ nmi, so the fade only trims the far hills.
 const RADAR_GLSL = `
-uniform vec3 uRadP; uniform float uRadA, uRadI;
+uniform vec3 uRadP; uniform float uRadA, uRadI; uniform vec2 uRadB;
+float radErf(float x){ float a = abs(x), t = 1./(1. + .3275911*a);          // Abramowitz & Stegun 7.1.26, as BEAM.sweep
+  return sign(x)*(1. - ((((1.061405429*t - 1.453152027)*t + 1.421413741)*t - .284496736)*t + .254829592)*t*exp(-a*a)); }
+float radarSweep(float o){ float sg = uRadB.x/2.3548200, k = sg*1.4142136, a = max(1e-6, uRadB.y);
+  return max(.001, sg*1.2533141*(radErf(o/k) - radErf((o - a)/k))/a); }
 float radarEcho(vec3 W, vec3 N){
   if(uRadI <= 0.) return 0.;
   vec3 L = uRadP - W; float r = length(L); L /= r;
   float b = atan(-L.z, -L.x), dA = mod(uRadA - b, 6.2831853);              // how far the antenna has turned since it lit W
-  return uRadI*(.5*exp(-dA/.9) + .8*exp(-dA/.04))*smoothstep(0., .25, dot(N, L) + .1)*(1. - smoothstep(4500., 9000., r));
+  float o = dA > 3.1415927 ? dA - 6.2831853 : dA;                          // wrapped to (−π, π], as BEAM.sweep's off
+  float e = mix(.5*exp(-dA/.9) + .8*exp(-dA/.04), 1.3*radarSweep(o), eyeSmooth);
+  return uRadI*e*smoothstep(0., .25, dot(N, L) + .1)*(1. - smoothstep(4500., 9000., r));
 }`;
 
 function terrain() {
+  // wet sand -> dry sand -> dune grass -> granite promontories
+  const surfAt = collectSurfD((x, y, z, slope) => {
+    const d = z - coastZ(x), nz = fbm2(x * .05, z * .05, 3), L = (a, b, k) => mixSurf([[a, 1 - k], [b, k]]);
+    let s = L(SURF.wetSand, SURF.sand, sm(1, 7, d));
+    s = L(s, SURF.dune, sm(30, 90, d) * (.5 + .5 * nz));
+    return L(s, SURF.granite, clamp(sm(.15, .35, slope) + sm(12, 34, y) * .8));
+  });
   const C = { sand: [.2, .16, .11], wet: [.06, .05, .042], dune: [.07, .075, .035], rock: [.07, .065, .06] };
   const mix = (a, b, k) => a.map((v, i) => lerp(v, b[i], k));
   const g = heightfield({ heightAt, colorAt(x, y, z, slope) {
@@ -99,13 +140,9 @@ function terrain() {
     let c = mix(C.wet, C.sand, sm(1, 7, d));
     c = mix(c, C.dune, sm(30, 90, d) * (.5 + .5 * nz));
     return mix(c, C.rock, clamp(sm(.15, .35, slope) + sm(12, 34, y) * .8));
-  }, surfAt(x, y, z, slope) {        // wet sand -> dry sand -> dune grass -> granite promontories
-    const d = z - coastZ(x), nz = fbm2(x * .05, z * .05, 3), L = (a, b, k) => mixSurf([[a, 1 - k], [b, k]]);
-    let s = L(SURF.wetSand, SURF.sand, sm(1, 7, d));
-    s = L(s, SURF.dune, sm(30, 90, d) * (.5 + .5 * nz));
-    return L(s, SURF.granite, clamp(sm(.15, .35, slope) + sm(12, 34, y) * .8));
-  }, meanRadius: 250 });
-  const uniforms = { uRadP: ENVSEA.radP, uRadA: ENVSEA.radA, uRadI: ENVSEA.radI, uFire: ENVSEA.fire, uHor: ENVSEA.hor, uSky: ENVSEA.sky,
+  }, surfAt, meanRadius: 250 });
+  surfAt.attach(g);                  // per-vertex reflection data (aSurfD)
+  const uniforms = { uRadP: ENVSEA.radP, uRadA: ENVSEA.radA, uRadI: ENVSEA.radI, uRadB: ENVSEA.radB, uFire: ENVSEA.fire, uHor: ENVSEA.hor, uSky: ENVSEA.sky,
     uSunDir: ENVSEA.sunDir, uSunI: ENVSEA.sunI, uMoonDir: ENVSEA.moonDir, uMoonI: ENVSEA.moonI };
   const extraDecl = RADAR_GLSL + `uniform vec4 uFire; uniform vec3 uHor, uSky, uSunDir, uMoonDir; uniform float uSunI, uMoonI;
   vec3 coastExtra(vec3 W, vec3 N, float dist, float inVis){
@@ -143,6 +180,11 @@ uniform float uSunI, uMoonI, uBio, uMist, uAirT, uUVglit; uniform vec3 uHor, uSk
 // Lloyd's-mirror response at sin(elevation) s, 200 MHz in .x and 100 MHz in .y, normalised to 0..1 (0 below the horizon)
 vec2 lloyd(float s){ return s > 0. ? .5 - .5*cos(uLloyd*s) : vec2(0.); }
 vec2 wave(vec2 p, vec2 k, float w, float a){ float ph = dot(k,p) + w*uSurfTime; return a*k*cos(ph); }   // gradient of a*sin
+float seaFd(float d){ return 1. - smoothstep(150., 2500., d); }   // the long waves fade out with distance
+float seaFd2(float d){ return 1. - smoothstep(30., 400., d); }    // the short waves and the ripple
+// the residual rms slope per axis that the drawn waves leave of Cox & Munk's total (SEA_WAVES above)
+float seaSlope(float d){ float a = seaFd(d), b = seaFd2(d);
+  return sqrt(max(${CM_AXIS.toFixed(6)} - a*a*${WAVE_L.toFixed(6)} - b*b*${WAVE_S.toFixed(6)}, 0.)); }
 float skyT(float y){ float e = 1. - pow(.7, 1./max(y, .04)); return mix(-60., uAirT, e); }                // 8–14 µm sky brightness temp: zenith window transmittance ~.7 (ε ≈ .3, Idso 1981)
 vec3 seaBands(vec3 W, vec3 N, vec3 V, vec3 Rf, float dist, float foam, float inVis){
   vec3 col = vec3(0.); float cosv = clamp(dot(-V, N), 0., 1.), gz = pow(1. - cosv, 5.);
@@ -155,10 +197,15 @@ vec3 seaBands(vec3 W, vec3 N, vec3 V, vec3 Rf, float dist, float foam, float inV
   }
   if(uSOnM > 0.){                                   // MICROWAVE: calm sea e≈0.45 (cold), foam e≈0.9 (warm lines)
     float e = mix(.45*(1. - .55*pow(1. - cosv, 3.)), .92, foam);
-    float Tb = e*(T + 273.) + (1. - e)*mix(110., 8., pow(clamp(Rf.y, 0., 1.), .3)), x = clamp((Tb - 120.)/180., 0., 1.);
+    float Tsk = mix(110., 8., pow(clamp(Rf.y, 0., 1.), .3));
+    // eye (M11/T2): the sky the sea mirrors is the band sky (surface.js skyMicroK), specular where the small-scale
+    // waves are smooth at 1.5 cm (grazing), the cos-weighted hemisphere (27 K) elsewhere
+    if(eyeSmooth > .5) Tsk = mix(27., skyMicroK(Rf), cohK(uSurfD.x, cosv, .015));
+    float Tb = e*(T + 273.) + (1. - e)*Tsk, x = clamp((Tb - 120.)/180., 0., 1.);
     float cs = max(.4, dist*.012); vec2 g = floor(W.xz/cs);
     float sp = mix(step(.88 - .3*x, h21(g + floor(uSurfTime*10.)))*(1. - inVis), 0., eyeSmooth);   // eye: none (decoration; the emission is the Tb wash)
     col += uSOnM*mix(vec3(1.,.42,0.), vec3(1.,.85,.2), h21(g*1.7))*(x*x*.22 + sp*x*x*.5);
+    if(eyeSmooth > .5) col += uSOnM*vec3(1.,.6,.1)*microTx(W, N, V, mix(uSurfB.x, .92, foam), uSurfD.x, uSurfD.w)*.35;   // eye: transmitters mirrored by the sea
     // radar sea clutter: the sea returns far less than the cliffs at grazing incidence (sigma0 tens of dB below land)
     // and only within a few km of the antenna
     float cl = radarEcho(W, vec3(0.,1.,0.))*exp(-length(W - uRadP)/1800.)*mix(step(.55, h21(floor(W.xz*.05) + floor(uSurfTime*12.))), .45, eyeSmooth);   // eye: expected value
@@ -166,6 +213,10 @@ vec3 seaBands(vec3 W, vec3 N, vec3 V, vec3 Rf, float dist, float foam, float inV
   }
   if(uSOnR > 0.){                                   // RADIO: transmitters paint the water; the sea mirrors the radio sky
     col += uSOnR*uRadioDiffuse*vec3(1.,.31,.85)*.9*txField(uTxR, W, N, 700., 9.)*1.1;
+    // eye (M11/T2): sea water (R0 .91) at λ 3 m is a mirror — Kirchhoff brightness with the mirrored synchrotron sky and
+    // the coast transmitters' images (surface.js radioRefl); the discrete sky sources' images and the cliff antenna's
+    // lobes below (Lloyd's mirror) are the same mirror seen through that antenna
+    if(eyeSmooth > .5) col += uSOnR*radioRefl(W, N, V, T, uSurfB.w, uSurfD.x, uSurfD.w);
     // Sea interferometer: each source's mirror image is as bright as the cliff antenna's fringe at the source's
     // elevation; below it, a column at the source's azimuth maps the antenna's lobe pattern against the elevation the
     // flat sea reflects there (depression = elevation), so the image slides through the lobes as the source moves.
@@ -176,11 +227,17 @@ vec3 seaBands(vec3 W, vec3 N, vec3 V, vec3 Rf, float dist, float foam, float inV
       float fr = .6*Fs.x + .4*Fs.y;                 // what the cliff antenna records from this source now
       float az = pow(max(dot(normalize(R0.xz), normalize(s.xz)), 0.), 900.)*exp(-abs(R0.y - s.y)*3.);
       img += uRS[i].w*((pow(max(dot(R0, s), 0.), 3000.)*2.5 + pow(max(dot(Rf, s), 0.), 160.)*.7)*(.1 + .9*fr) + az*lobes*.7); }
-    col += uSOnR*vec3(1.,.31,.85)*img;
+    col += uSOnR*vec3(1.,.31,.85)*img*surfSpk;
   }
   if(uSOnU > 0.){                                   // ULTRAVIOLET: sun glitter only while the low sun still has UV; foam reflects some
     float s = max(dot(Rf, uSunDir), 0.);
-    col += uSOnU*vec3(.62,.3,1.)*(uUVglit*(pow(s, 500.)*5. + pow(s, 40.)*.3) + uUVsky*(.06 + .4*foam)*.5);
+    float sky = uUVsky*(.06 + .4*foam)*.5;
+    // eye (M11/T2): the water mirrors the UV skylight by Fresnel (R0 .02 at 365 nm, → 1 at grazing: the far sea is as
+    // bright as the sky); the rest is the diffuse albedo — water body ~.04 (below [WHO]'s < .1), foam .25 [WHO] —
+    // in the surfaces' units (white Lambertian = 1.3·uUVsky, surface.js)
+    if(eyeSmooth > .5){ float F = fresnelS(uSurfD.z, cosv)*(1. - foam);
+      sky = uUVsky*1.3*(F + (1. - F)*mix(.04, .25, foam)*(.35 + .65*max(N.y, 0.))); }
+    col += uSOnU*vec3(.62,.3,1.)*(uUVglit*(pow(s, 500.)*5. + pow(s, 40.)*.3) + sky);
   }
   if(uSOnG > 0.){                                   // GAMMA: water shields the seabed — almost silent
     vec3 gc = floor(W*2.2); float h = h21(gc.xz + floor(uSurfTime*16.)*3.17);
@@ -192,19 +249,19 @@ vec3 seaBands(vec3 W, vec3 N, vec3 V, vec3 Rf, float dist, float foam, float inV
 function seaMaterial(instr) {
   const u = { ...surfaceUniforms(SURF.sea), uHor: ENVSEA.hor, uSky: ENVSEA.sky, uDeep: { value: new THREE.Color(.004, .008, .014) },
     uSunDir: ENVSEA.sunDir, uSunI: ENVSEA.sunI, uMoonDir: ENVSEA.moonDir, uMoonI: ENVSEA.moonI, uBio: ENVSEA.bio, uMist: ENVSEA.mist,
-    uAirT: ENVSEA.airT, uUVglit: ENVSEA.uvGlit, uRS: ENVSEA.rs, uLloyd: ENVSEA.lloyd, uRadP: ENVSEA.radP, uRadA: ENVSEA.radA, uRadI: ENVSEA.radI };
+    uAirT: ENVSEA.airT, uUVglit: ENVSEA.uvGlit, uRS: ENVSEA.rs, uLloyd: ENVSEA.lloyd, uRadP: ENVSEA.radP, uRadA: ENVSEA.radA, uRadI: ENVSEA.radI, uRadB: ENVSEA.radB };
   return new THREE.ShaderMaterial({ uniforms: u,
     vertexShader: SURF_VERT_DECL + `void main(){ vec4 w = modelMatrix*vec4(position,1.); vSurfW = w.xyz; vSurfN = vec3(0., 1., 0.); gl_Position = projectionMatrix*viewMatrix*w; }`,
     fragmentShader: SURF_FRAG_DECL + SEA_GLSL + `
     // the sea's geometry at this pixel: waves, reflection, surf (shared by main and the spectral eye's hook)
     void seaGeo(out vec3 W, out float dist, out vec3 V, out vec3 N, out vec3 Rf, out vec2 p, out float fd, out float crest, out float wash, out float foam){
       W = vSurfW; vec3 toP = W - cameraPosition; dist = length(toP); V = toP/dist;
-      fd = 1. - smoothstep(150., 2500., dist); float fd2 = 1. - smoothstep(30., 400., dist);
+      fd = seaFd(dist); float fd2 = seaFd2(dist);
       p = W.xz; vec2 g = vec2(0.);
-      g += wave(p, vec2(.06,.10), .9, .9) + wave(p, vec2(-.09,.07), 1.1, .7) + wave(p, vec2(.13,-.05), 1.3, .5);
+      g += ${waveSum(SEA_WAVES.long)};
       g *= fd;
-      g += fd2*(wave(p, vec2(.55,.8), 2.6, .09) + wave(p, vec2(-.9,.45), 3.1, .07) + wave(p, vec2(.3,-1.1), 3.4, .05)
-             + .06*vec2(n2(p*1.3+uSurfTime*.6)-.5, n2(p*1.3-uSurfTime*.5+7.)-.5));
+      g += fd2*(${waveSum(SEA_WAVES.short)}
+             + ${gfl(SEA_WAVES.noise)}*vec2(n2(p*1.3+uSurfTime*.6)-.5, n2(p*1.3-uSurfTime*.5+7.)-.5));
       N = normalize(vec3(-g.x, 1., -g.y)); Rf = reflect(V, N);
       Rf.y = abs(Rf.y);
       // surf: breaking lines rolling in toward the beach, and the wash at the edge
@@ -225,8 +282,12 @@ function seaMaterial(instr) {
       vec3 skyc = mix(uHor, uSky, smoothstep(0., .35, Rf.y));
       vec3 col = mix(uDeep, skyc, fres);
       float s = max(dot(Rf, uSunDir), 0.), m = max(dot(Rf, uMoonDir), 0.);
-      col += vec3(1., .5, .28)*uSunI*(pow(s, 900.)*14. + pow(s, 60.)*.35);              // sun glitter path
-      col += vec3(.75,.82,1.)*uMoonI*(pow(m, 1200.)*6. + pow(m, 90.)*.12);              // moon glitter path
+      col += vec3(1., .5, .28)*uSunI*(pow(s, 900.)*14. + pow(s, 60.)*.35);              // sun glitter path (stylised: the setting Sun's own look)
+      // moon glitter path (M11/T6): the same water as the near-IR glint (SEA_EYE eyeNIR) — Fresnel × the Moon's
+      // irradiance spread flux-conserving over the residual-slope lobe, L = F·E·exp(−(1 − R·M)/s²)/(2π s²), E the scene's
+      // moon light (atmosphere.js moonLight: colour 0x9fb4ff, intensity moonlit()·.5)
+      float sg = max(2.*seaSlope(dist), .03);
+      col += vec3(.62,.71,1.)*.5*uMoonI*fres*exp(-(1. - m)/(sg*sg))/(6.2832*sg*sg);
       col = mix(col, uSky*1.6 + uHor*.6, foam*.55);
       float bio = (crest*smoothstep(.45, .8, n2(p*.35 + uSurfTime*.2)) + wash*.12*n2(p*2. + uSurfTime))*fd;   // patchy, only where waves break
       col += vec3(.1,.55,1.)*uBio*bio*(.6 + .4*n2(p*3. + uSurfTime*2.))*1.2;            // bioluminescent surf
@@ -244,13 +305,34 @@ const SEA_EYE = `
 float eyeSeaL(float r, float m, float i, float u, float g, vec3 W, vec3 N, vec3 V, vec3 Rf, float dist, float foam){
   eyeMR = r; eyeMM = m; eyeMI = i; eyeMU = u; eyeMG = g; eyeSmooth = 1.; return eyeL(seaBands(W, N, V, Rf, dist, foam, 0.)); }
 vec3 eyeTrans(){ return uSurfC.yzw; }
+#define EYE_OWN_SPECKLE
 void eyeBands(out vec4 o1, out vec4 o3){
+  surfSpk = eyeSpeckle();   // coherent radio only (the images below and the transmitters), not the Kirchhoff glow
   vec3 W, V, N, Rf; vec2 p; float dist, fd, crest, wash, foam;
   seaGeo(W, dist, V, N, Rf, p, fd, crest, wash, foam);
   o1 = vec4(eyeSeaL(0., 0., 1., 0., 0., W, N, V, Rf, dist, foam), eyeSeaL(0., 0., 0., 1., 0., W, N, V, Rf, dist, foam),
             eyeSeaL(0., 0., 0., 0., 1., W, N, V, Rf, dist, foam), 1.);
   o3 = vec4(eyeSeaL(1., 0., 0., 0., 0., W, N, V, Rf, dist, foam), eyeSeaL(0., 1., 0., 0., 0., W, N, V, Rf, dist, foam), 0., 1.);
-  eyeMR = eyeMM = eyeMI = eyeMU = eyeMG = 1.; eyeSmooth = 0.; }`;
+  eyeMR = eyeMM = eyeMI = eyeMU = eyeMG = 1.; eyeSmooth = 0.; surfSpk = 1.; }
+// near-IR (the night-vision channel, M11/T6; units and sky as engine/render/surface.js surfNIR / atmosphere.js skyNIR):
+// water absorbs the near-IR within centimetres, so the sea is a dark mirror — Fresnel (R0opt .02, Hale & Querry 1973;
+// → 1 at grazing) of the near-IR sky in the mirror direction, plus the Moon's glitter path: the Moon's irradiance
+// spread over a lobe of width s = 2 × the residual slope (seaSlope: Cox & Munk's total less the shader's own waves,
+// which already tilt Rf), flux-conserving, L = F·E·exp(−(1 − R·M)/s²)/(2π s²) — the uniforms carry E/π, so the code
+// divides by 2 s² (surfaces' units, surface.js NEAR-IR: white Lambertian = E/π); below the mirror the
+// water body's own albedo .02 (D.y). Foam and the swash: whitecap reflectance falls ~40–50 % from the visible to
+// 0.85 µm (Frouin, Schwindling & Deschamps 1996, JGR 101:14361) → .3 STAND-IN. Sea mist: droplets scatter the
+// near-IR as they scatter light (Mie, size ≫ λ) — albedo .5 STAND-IN, lit by sky and Moon.
+#define EYE_NIR
+float eyeNIR(){
+  vec3 W, V, N, Rf; vec2 p; float dist, fd, crest, wash, foam;
+  seaGeo(W, dist, V, N, Rf, p, fd, crest, wash, foam);
+  vec3 M = uNirMoon.xyz; float cosv = clamp(dot(-V, N), 0., 1.), F = fresnelS(uSurfD.z, cosv), s = max(2.*seaSlope(dist), .03);
+  float Eh = uNirSky + uNirMoon.w*max(M.y, 0.);                                   // irradiance on a level surface (/π)
+  float glint = uNirMoon.w*step(0., M.y)*exp(-(1. - dot(Rf, M))/(s*s))/(2.*s*s);
+  float L = mix(F*(NIR_SKY_SHOWN*skyNIR(Rf, uNirSky, uNirGlow) + glint) + (1. - F)*uSurfD.y*Eh, .3*Eh, foam);
+  L = mix(L, .5*Eh, uMist*(1. - exp(-dist/700.)));
+  return uSOnI_*L; }`;
 
 function sea() {
   const mat = seaMaterial(false);

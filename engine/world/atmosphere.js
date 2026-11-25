@@ -70,6 +70,59 @@ export const moonlit = () => moonFlux() * sm(8, 13, -sunEl());
 export const GAL_C = dirAE(215, 20);                            // galactic centre ahead-left
 export const GAL_N = new V3().crossVectors(GAL_C, dirAE(250, 80)).normalize();   // band arching overhead
 
+// --- band skies: ONE table (M11/T6) --------------------------------------------------------------------------
+// The sky's brightness per band in a direction d, used by the night sky's eye hook below (what the sky looks like)
+// and by every surface's reflection (engine/render/surface.js, scenarios' custom surfaces: what a surface mirrors).
+// Sources and STAND-INs in the night sky hook's comment (createAtmosphere); the constants live here once and are
+// injected into GLSL (BAND_SKY_GLSL; the including shader declares uniform vec3 uGalN, uGalC).
+//   radio  T_b (K) at 100 MHz = scale·(cold + plane·exp(−g²/width)·(1 + core·c)·mottle) — Haslam 408 MHz × (408/100)^2.55
+//   micro  T_b (K) = CMB·e^(−τ) + air·(1 − e^(−τ)), τ = tau0 / sin el (el ≥ elMin); with rain on the path (skyMicroWet)
+//          the rain's attenuation A (dB) = A_zenith / sin el turns it toward the rain's mean radiating temperature:
+//          T_b·10^(−A/10) + rainTm·(1 − 10^(−A/10)), rainTm 275 K (ITU-R P.618 §3.3 / P.1853: Tsky = Tm(1 − 10^(−A/10)),
+//          Tm ≈ 275 K). A_zenith is the night sky's uRainDB, 0 unless a scenario's rain sets it (the storm); the
+//          surfaces keep mirroring the dry sky (STAND-IN: under rain overhead their reflection is too cold)
+//   ir     T (°C) = mix(cold, warm, 1 − trans^(1/sin el)) — the 8–14 µm window, Idso 1981
+//   nir    radiance = the near-IR sky irradiance / π (surface.js nirLight, scene units) × a direction shape: uniform in
+//          twilight (STAND-IN: the real twilight sky brightens toward the Sun's azimuth), the van Rhijn factor of a thin
+//          emitting shell for the OH airglow (h 87 km, R 6371 km: zenith 1 → horizon 6.1; Meinel 1950, Roach & Gordon
+//          1973 The Light of the Night Sky §4), seen through the extinction T = 10^(−0.4·k·X), k 0.1 mag per airmass near
+//          0.85 µm with the Kasten & Young 1989 airmass (as surface.js NIR_LIGHT's Moon), the light scattered out of the
+//          line of sight replaced by light scattered in from the rest of the sky (single-scattering fill, STAND-IN: the
+//          sky's mean 1.72): V·T + (1 − T)·1.72 — the observed airglow brightening that peaks ~5–10° above the horizon
+//          (×2 the mean) and eases off at it — normalised by its cos-weighted hemisphere mean (1.638, numerical) so a white
+//          Lambertian surface under it reads E/π, as under a three.js hemisphere light (the uniform-sky convention of surface.js)
+//   means  the cos-weighted hemisphere means of the same formulas, for diffuse reflection: radio ≈ 2600 K, microwave 27 K,
+//          IR −28 °C (numerical integration, M11/T2)
+export const BAND_SKY = {
+  radio: { scale: 36, cold: 17, plane: 230, width: .06, core: 2.5, mean: 2600 },
+  micro: { cmb: 2.725, air: 270, tau0: .05, elMin: .02, mean: 27, rainTm: 275 },
+  ir: { cold: -60, warm: 10, trans: .7, elMin: .04, mean: -28 },
+  nir: { shellK: (6371 / (6371 + 87)) ** 2, extK: .1, fill: 1.72, mean: 1.638 },
+};
+const gf = x => (Number.isInteger(x) ? x.toFixed(1) : String(x));
+const { radio: BR, micro: BM, ir: BI, nir: BN } = BAND_SKY;
+export const NIR_SKY_SHOWN = 0;   // see the note above NIR_SKY
+export const BAND_SKY_GLSL = `
+float skyRadioM(vec3 d, float mottle){ float g = dot(d, uGalN), core = pow(max(dot(d, uGalC), 0.), 5.);
+  return ${gf(BR.scale)}*(${gf(BR.cold)} + ${gf(BR.plane)}*exp(-g*g/${gf(BR.width)})*(1. + ${gf(BR.core)}*core)*mottle); }
+float skyRadioK(vec3 d){ return skyRadioM(d, 1.); }
+float skyMicroK(vec3 d){ float t = ${gf(BM.tau0)}/max(d.y, ${gf(BM.elMin)}); return ${gf(BM.cmb)}*exp(-t) + ${gf(BM.air)}*(1. - exp(-t)); }
+float skyMicroWet(vec3 d, float dB){ float tr = pow(10., -.1*dB/max(d.y, ${gf(BM.elMin)})); return skyMicroK(d)*tr + ${gf(BM.rainTm)}*(1. - tr); }
+float skyIRC(vec3 d){ return mix(${gf(BI.cold)}, ${gf(BI.warm)}, 1. - pow(${gf(BI.trans)}, 1./max(d.y, ${gf(BI.elMin)}))); }
+float skyNIR(vec3 d, float L, float glow){ float y = clamp(d.y, 0., 1.), s2 = 1. - y*y, e = degrees(asin(y));
+  float X = 1./(y + .50572*pow(e + 6.07995, -1.6364));                     // Kasten & Young 1989 airmass
+  float T = pow(10., -.4*${gf(BN.extK)}*X), V = inversesqrt(1. - ${BN.shellK.toFixed(6)}*s2);
+  return L*mix(1., (V*T + (1. - T)*${gf(BN.fill)})/${gf(BN.mean)}, glow); }
+const float SKY_RADIO_MEAN = ${gf(BR.mean)}, SKY_MICRO_MEAN = ${gf(BM.mean)}, SKY_IR_MEAN = ${gf(BI.mean)};
+const float NIR_SKY_SHOWN = ${gf(NIR_SKY_SHOWN)};
+`;
+// NIR_SKY_SHOWN — whether the near-IR sky's own glow is drawn (and mirrored by the sea): 0, a stylised choice (user
+// decision, M11 #67). Physically the OH-airglow sky is the brightest thing in night-vision goggles, but drawn it washed
+// the combined night view into a pale haze (IR 34–73 % of the image); the sky still lights the ground in near-IR.
+// the near-IR sky for the eye (M11/T3/T6): L = the sky's near-IR irradiance in scene units, glow = the OH airglow's share
+// of it (0 in twilight → 1 in full night) — both written by surface.js nirLight() each frame; on = the IR band is on
+export const NIR_SKY = { L: { value: 0 }, glow: { value: 0 }, on: { value: 0 } };
+
 // [t, colour...] keyframes; magenta/violet on purpose, the sun stays small
 export const HEMI = [[0, [.5, .36, .58], [.19, .11, .12]], [10, [.3, .19, .36], [.1, .06, .07]], [16, [.11, .08, .18], [.032, .02, .03]], [24, [.022, .026, .055], [.008, .008, .01]], [60, [.018, .022, .045], [.006, .006, .008]]];
 export const HOR = [[0, [.5, .26, .3]], [8, [.44, .17, .26]], [14, [.22, .09, .18]], [22, [.03, .028, .06]], [60, [.011, .015, .028]]];
@@ -93,10 +146,11 @@ export function createAtmosphere(opts = {}) {
   sky.material.fragmentShader = 'uniform float uFade;\n' + sky.material.fragmentShader.replace('gl_FragColor = vec4( retColor, 1.0 );', 'gl_FragColor = vec4( retColor * uFade, 1.0 );');
 
   const nightMat = new THREE.ShaderMaterial({
-    uniforms: { uTime: TIME, uStars: { value: 0 }, uMW: { value: 0 }, uCMB: { value: 0 }, uAir: { value: 0 }, uNoAir: { value: AIR ? 0 : 1 }, uGeo: { value: 1 }, uGlow: { value: new THREE.Color(0, 0, 0) }, uGalN: { value: GAL_N }, uGalC: { value: GAL_C } },
+    uniforms: { uTime: TIME, uStars: { value: 0 }, uMW: { value: 0 }, uCMB: { value: 0 }, uAir: { value: 0 }, uNoAir: { value: AIR ? 0 : 1 }, uGeo: { value: 1 }, uRainDB: { value: 0 }, uGlow: { value: new THREE.Color(0, 0, 0) }, uGalN: { value: GAL_N }, uGalC: { value: GAL_C },
+      uNirL: NIR_SKY.L, uNirGlow: NIR_SKY.glow, uNirOn: NIR_SKY.on },
     vertexShader: `varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
     fragmentShader: COMMON + `
-    varying vec3 vDir; uniform float uTime, uStars, uMW, uCMB, uAir, uNoAir, uGeo; uniform vec3 uGalN, uGalC, uGlow;
+    varying vec3 vDir; uniform float uTime, uStars, uMW, uCMB, uAir, uNoAir, uGeo, uRainDB, uNirL, uNirGlow, uNirOn; uniform vec3 uGalN, uGalC, uGlow;
     float h31(vec3 p){ p = fract(p*.3183099+.1); p *= 17.; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
     float n3(vec3 x){ vec3 i=floor(x), f=fract(x); f=f*f*(3.-2.*f);
       return mix(mix(mix(h31(i),h31(i+vec3(1,0,0)),f.x), mix(h31(i+vec3(0,1,0)),h31(i+vec3(1,1,0)),f.x),f.y),
@@ -146,6 +200,8 @@ export function createAtmosphere(opts = {}) {
   //   micro  T_b = 2.725 K·e^(−τ) + 270 K·(1 − e^(−τ)), τ = .05 / sin(el) at ~20 GHz, near the 22 GHz water line (ITU-R P.676) —
   //          the CMB (2.725 K, Fixsen 2009) behind the atmosphere — through the surfaces' microwave wash: a dark sky with
   //          a glowing horizon; the CMB itself is ~100× fainter than the 280 K ground and stays invisible. 'skyMicrowave'.
+  //          Rain overhead (uRainDB, the rain's zenith attenuation in dB, set by a scenario's rain event, else 0) warms
+  //          the whole sky toward ~275 K (skyMicroWet, BAND_SKY). 'rainMicro'.
   //   ir     8–14 µm window sky: zenith window transmittance ~.7 (effective emissivity ~.3 for moderate humidity,
   //          Idso 1981), e = 1 − .7^(1/sin el), T = mix(−60 °C, 10 °C, e) (as the seaside's skyT; air 10 °C STAND-IN):
   //          zenith ≈ −40 °C, warm only near the horizon. 'skyThermalIR'.
@@ -159,6 +215,11 @@ export function createAtmosphere(opts = {}) {
   //   gamma  diffuse Galactic gamma rays above 100 MeV, ~1e-3 photons cm⁻² s⁻¹ sr⁻¹ in the inner plane (Fermi-LAT,
   //          Ackermann 2012) → ~6e-6 per frame per sr through the pupil: L ≈ 2.3e-9 toward the inner Galaxy. 'gammaDiffuse'.
   //          Both are honestly near-black: a human-sized eye almost never catches one.
+  //   nir    (the night-vision channel of IR, EYE_NIR) the twilight sky, then the OH Meinel airglow brightening toward
+  //          the horizon (van Rhijn), at the near-IR sky irradiance of surface.js nirLight (Brown 1952 twilight ×
+  //          .4 near-IR/visible; airglow ×3.5 the visible night sky in 0.6–0.9 µm, Benn & Ellison 1998) — skyNIR in
+  //          BAND_SKY; the uniform is E/π (a uniform sky's radiance). Not drawn (NIR_SKY_SHOWN). 'ohAirglow'.
+  // The formulas and constants are BAND_SKY / BAND_SKY_GLSL above, shared with the surfaces' reflections.
   // X-ray / gamma come from space: absorbed in Ground mode. The UV airglow amplitude is a STAND-IN (faint).
   // No air (opts.air false, M12/T5): microwave = the CMB alone (2.725 K: black), IR = the ~3 K sky (black), and UV =
   //          geocoronal Lyman-α, sunlight resonantly scattered by exospheric hydrogen over the whole sky: ~2 kR on the
@@ -170,14 +231,17 @@ export function createAtmosphere(opts = {}) {
 #define EYE_SKY
 #define EYE_POS_A vec3(${pos(10e-6).toFixed(4)}, ${pos(340e-9).toFixed(4)}, ${pos(0, 1e8).toFixed(4)})
 #define EYE_POS_L vec3(${bandPos({ f: 100e6 }).toFixed(4)}, ${bandPos({ f: 20e9 }).toFixed(4)}, ${bandPos(SPECTRUM.cxb).toFixed(4)})
+${BAND_SKY_GLSL}
+#define EYE_NIR
+float eyeNIR(){ vec3 d = normalize(vDir); return NIR_SKY_SHOWN*uNirOn*skyNIR(d, uNirL, uNirGlow)*smoothstep(-.03, 0., d.y); }   // full brightness down to the horizon (skyNIR has its own horizon shape)
 void eyeBands(out vec4 o1, out vec4 o3){
   vec3 d = normalize(vDir); float above = uNoAir > .5 ? 1. : smoothstep(-.03, .12, d.y), sel = max(d.y, .02);
-  float g = dot(d, uGalN), core = pow(max(dot(d, uGalC), 0.), 5.);
-  float Tr = 36.*(17. + 230.*exp(-g*g/.06)*(1. + 2.5*core)*(.8 + .4*fbm3(d*4.)));
-  float r = .006*Tr/1000.;
-  float tau = .05/sel, Tm = 2.725*exp(-tau) + 270.*(1. - exp(-tau)), xm = clamp((Tm - 120.)/180., 0., 1.);
+  float g = dot(d, uGalN);
+  float r = .006*skyRadioM(d, .8 + .4*fbm3(d*4.))/1000.;
+  float Tm = skyMicroWet(d, uRainDB), xm = clamp((Tm - 120.)/180., 0., 1.);
   float m = eyeL(vec3(1., .6, .1))*xm*xm*.12;
-  float e = 1. - pow(.7, 1./max(sel, .04)), Ti = mix(-60., 10., e), xi = clamp((Ti + 4.)/44., 0., 1.);
+  float Ti = skyIRC(d), xi = clamp((Ti + 4.)/44., 0., 1.);
+  float core = pow(max(dot(d, uGalC), 0.), 5.);
   float i = eyeL(thermal(xi))*(.04 + .5*xi*xi);
   float u = 2e-4*(1. + 3.*pow(1. - sel, 5.));
   float space = 1. - eyeGround, x = space*1.1e-9, gm = space*2.3e-9*(.1 + exp(-g*g/.008)*(1. + 3.*core)/4.);

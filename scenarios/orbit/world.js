@@ -87,10 +87,19 @@ export function onEarth(dir, h = 0) {
 //          plus what leaks up from transmitters over the inhabited land (uRadio, the radio-leak event; amplitude
 //          STAND-IN, chosen to stand well above the thermal glow, as man-made noise does at VHF)
 //   X-ray, gamma: none from the surface here (the limb gamma is an event)
+//   near-IR (the night-vision channel, render rule 7; EYE_NIR) the visible picture's sunlight (the same lit × terminator
+//          factor, the Sun's own spectrum: near-IR/visible 1, surface.js NIR_LIGHT twK) on near-IR albedos — ocean .02
+//          (Fresnel, the water absorbs: Hale & Querry 1973), vegetated land .35 and dry land .3 (the red edge: [EL],
+//          surface.js REFL meadow / forest / dirt), cloud tops .7 (water clouds scatter about as in the visible,
+//          slightly less: King et al. 1992, IEEE TGRS 30:2, MODIS 0.86 µm channel) — plus the sun glint on the sea
+//          (Fresnel, as in the visible); the air column toward the limb scatters ~(480/850)⁴ ≈ .1 of the visible's
+//          Rayleigh blue. Night: the cities' high-pressure sodium lamps put about as much light into 0.7–1 µm (the
+//          819 nm Na doublet and the pressure-broadened wings) as into the visible, white LEDs ~5 % (Elvidge et al.
+//          2010, Sensors 10:3961, lamp spectral library) — STAND-IN ratios read off those spectra
 // Night-side city lights are part of the surface (uCity, set by the cities event), on the same land mask.
 // Opaque in every band (eyeTrans 0): nothing crosses the planet.
-export const EARTH_U = { uSun: { value: new V3() }, uRot: { value: 0 }, uC: { value: C }, uCity: { value: 0 }, uRadio: { value: 0 }, uGalN: { value: GAL_N }, uGalC: { value: GAL_C } };
-const EARTH_GLSL = COMMON + `uniform vec3 uSun, uC, uGalN, uGalC; uniform float uRot, uCity, uRadio; varying vec3 vW;
+export const EARTH_U = { uSun: { value: new V3() }, uRot: { value: 0 }, uC: { value: C }, uCity: { value: 0 }, uCityN: { value: 0 }, uRadio: { value: 0 }, uGalN: { value: GAL_N }, uGalC: { value: GAL_C } };
+const EARTH_GLSL = COMMON + `uniform vec3 uSun, uC, uGalN, uGalC; uniform float uRot, uCity, uCityN, uRadio; varying vec3 vW;
 float eh3(vec3 p){ p = fract(p*.3183099 + .1); p *= 17.; return fract(p.x*p.y*p.z*(p.x + p.y + p.z)); }
 float en3(vec3 x){ vec3 i = floor(x), f = fract(x); f = f*f*(3. - 2.*f);
   return mix(mix(mix(eh3(i), eh3(i + vec3(1,0,0)), f.x), mix(eh3(i + vec3(0,1,0)), eh3(i + vec3(1,1,0)), f.x), f.y),
@@ -130,7 +139,20 @@ void eyeBands(out vec4 o1, out vec4 o3){ vec3 n, q; float land, cloud, mu; earth
   vec3 Rf = reflect(normalize(vW - cameraPosition), n); float g = dot(Rf, uGalN), core = pow(max(dot(Rf, uGalC), 0.), 5.);
   float Tsky = 36.*(17. + 230.*exp(-g*g/.06)*(1. + 2.5*core));                           // atmosphere.js's radio sky, smooth part
   float r = .006*mix(29. + .9*Tsky, 232. + .2*Tsky, land)/1000. + uRadio*.25*smoothstep(.0, .5, towns(q, land));
-  o1 = vec4(i, u, 0., 1.); o3 = vec4(r, m, 0., 1.); }`;
+  o1 = vec4(i, u, 0., 1.); o3 = vec4(r, m, 0., 1.); }
+#define EYE_NIR
+float eyeNIR(){ vec3 n, q; float land, cloud, mu; earthAt(n, q, land, cloud, mu);
+  vec3 V = normalize(cameraPosition - vW);
+  float alb = mix(mix(.02, mix(.3, .35, smoothstep(.4, .7, efbm(q*11.))), land), .7, cloud);
+  float lit = smoothstep(-.03, .2, mu), dusk = exp(-mu*mu/.006), L = alb*lit*(1. - .1*dusk);   // reddened dusk light keeps its near-IR
+  float g = max(dot(reflect(-V, n), uSun), 0.);
+  L += pow(g, 250.)*(1. - land)*(1. - cloud)*lit*3.;
+  float rim = pow(1. - clamp(dot(n, V), 0., 1.), 3.);
+  L = mix(L, .1*.4*lit, rim*.6);                                                           // the visible rim's (.25,.45,1) ≈ .4 luminance × .1
+  float tw = towns(q, land), spark = smoothstep(.55, .95, en3(q*1500.))*smoothstep(.35, .8, en3(q*260. + 5.));
+  float na = step(.7, en3(q*60.));                                                          // as the visible: 0 sodium, 1 LED
+  L += mix(.62, .05*.86, na)*tw*spark*(1. - smoothstep(-.1, .04, mu))*(1. - .7*cloud)*uCityN*4.;   // (uCityN: the IR band's own switch) sodium (1,.55,.2) ≈ .62 luminance × 1; LED ≈ .86 × .05
+  return L; }`;
 function earth() {
   const m = new THREE.ShaderMaterial({ uniforms: EARTH_U, fragmentShader: EARTH_GLSL + EARTH_FS,
     vertexShader: 'varying vec3 vW; void main(){ vec4 w = modelMatrix*vec4(position, 1.); vW = w.xyz; gl_Position = projectionMatrix*viewMatrix*w; }' });
@@ -143,8 +165,13 @@ function earth() {
 // A transparent shell up to 300 km: for each line of sight, the tangent height h of its closest approach to the
 // Earth. Visible light: the sunlit air (Rayleigh blue, scale height ~8 km), the twilight band at the terminator
 // (red low, blue above), and at night the airglow layers seen edge-on — green O I 557.7 nm at ~95 km, faint red
-// O I 630 nm at ~250 km (uAirglow, set by the airglow event). Eye bands: the sunlit limb in near-IR and near-UV
-// (scattered sunlight), the OH Meinel layer at ~87 km in near-IR (uAirglow).
+// O I 630 nm at ~250 km (uAirglow, set by the airglow event). Eye bands: the sunlit limb in near-UV (scattered
+// sunlight); in near-IR (EYE_NIR, the night-vision channel — not the thermal channel, M11/T3) the sunlit limb's
+// Rayleigh light at ~(480/850)⁴ ≈ .1 of the visible blue, the reddened twilight band about as bright as its visible red
+// (STAND-IN), and the OH Meinel layer at ~87 km (uAirglow), brighter in near-IR than the green line (Meinel 1950):
+// what an intensifier tube sees of it is the 0.7–0.9 µm bands (SPECTRUM.ohAirglow, 850 nm); the 1.6 µm bands
+// (SPECTRUM.ohMeinel) are past a GaAs photocathode's cut-off and are listed by the event, not drawn. Drawn edge-on from orbit: the user's choice not to draw the near-IR sky (NIR_SKY_SHOWN) is about
+// the dome over a ground observer; this layer is the airglow event's own feature. Thermal: the thin air adds nothing.
 export const SHELL_U = { uSun: { value: new V3() }, uC: { value: C }, uAirglow: { value: 0 } };
 const SHELL_GLSL = `uniform vec3 uSun, uC; uniform float uAirglow; varying vec3 vW;
 // tangent height (units of 10 km) of the line of sight through this fragment, and sun elevation there (cos)
@@ -160,10 +187,14 @@ void main(){ float lit, h = shellH(lit), disc = h < 0. ? .25 : 1.; h = max(h, 0.
   col += uAirglow*dark*(vec3(.25, 1., .35)*exp(-((h - 9.5)/.55)*((h - 9.5)/.55))*.5 + vec3(1., .2, .12)*exp(-((h - 25.)/2.)*((h - 25.)/2.))*.02)*disc;
   gl_FragColor = vec4(col, 1.); }`;
 const SHELL_EYE = `void eyeBands(out vec4 o1, out vec4 o3){ float lit, h = shellH(lit), disc = h < 0. ? .25 : 1.; h = max(h, 0.);
-  float day = smoothstep(-.12, .2, lit), dark = 1. - smoothstep(-.2, .02, lit);
-  float ir = day*exp(-h/1.2)*.25*disc + uAirglow*dark*exp(-((h - 8.7)/.6)*((h - 8.7)/.6))*.9*disc;
+  float day = smoothstep(-.12, .2, lit);
   float uv = day*exp(-h/1.)*.35*disc;
-  o1 = vec4(ir, uv, 0., 1.); o3 = vec4(0., 0., 0., 1.); }`;
+  o1 = vec4(0., uv, 0., 1.); o3 = vec4(0., 0., 0., 1.); }
+#define EYE_NIR
+float eyeNIR(){ float lit, h = shellH(lit), disc = h < 0. ? .25 : 1.; h = max(h, 0.);
+  float day = smoothstep(-.12, .2, lit), tw = exp(-lit*lit/.012), dark = 1. - smoothstep(-.2, .02, lit);
+  return (.1*.5*day*exp(-h/.8) + (exp(-h/.35) + .4*.6*exp(-h/.9))*tw                       // visible lum .5 (blue) × .1; the red band ≈ its red channel
+    + uAirglow*dark*exp(-((h - 8.7)/.6)*((h - 8.7)/.6))*.9)*disc; }`;
 function shell() {
   const m = new THREE.ShaderMaterial({ uniforms: SHELL_U, fragmentShader: SHELL_GLSL + SHELL_FS, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
     vertexShader: 'varying vec3 vW; void main(){ vec4 w = modelMatrix*vec4(position, 1.); vW = w.xyz; gl_Position = projectionMatrix*viewMatrix*w; }' });
@@ -177,8 +208,12 @@ function shell() {
 // and six mullions between the side windows; you look out of the aft one. Aluminium at cabin temperature (~22 °C):
 // it glows in thermal IR like everything indoors. Its few cm of metal block radio and microwave and pass part of the
 // gamma rays (1 MeV through ~5 cm Al: e^(−0.061·2.7·5) ≈ 0.44, NIST XCOM).
+// Near-IR: grey anodised / painted aluminium reflects about as in the visible (a flat spectrum, STAND-IN), so the frame's
+// near-IR is its own visible shading (sunlight, earthshine): the luminance of the material's colour (EYE_NIR).
 export const FRAME_EYE = `vec3 eyeTrans(){ return vec3(0., 0., .44); }
-void eyeBands(out vec4 o1, out vec4 o3){ o1 = vec4(.1207, 0., 0., 1.); o3 = vec4(0., .04, 0., 1.); }`;   // IR: eyeL(thermal(xi))·(.04 + .5 xi²) at xi = (22 + 4)/44, precomputed (a standard material has no thermal())
+void eyeBands(out vec4 o1, out vec4 o3){ o1 = vec4(.1207, 0., 0., 1.); o3 = vec4(0., .04, 0., 1.); }   // IR: eyeL(thermal(xi))·(.04 + .5 xi²) at xi = (22 + 4)/44, precomputed (a standard material has no thermal())
+#define EYE_NIR
+float eyeNIR(){ return dot(gl_FragColor.rgb, vec3(.2126, .7152, .0722)); }`;
 const cupDir = (a, psi) => N.clone().multiplyScalar(Math.cos(a)).addScaledVector(F, Math.sin(a) * Math.cos(psi)).addScaledVector(E1, Math.sin(a) * Math.sin(psi));
 function cupola() {
   const r = .8, tube = (pts, rad, closed) => new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, closed), pts.length * 3, rad, 6, closed);

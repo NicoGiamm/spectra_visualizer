@@ -5,11 +5,11 @@ import { V3, DEG, lerp, sm, env, R } from 'spectra/core/util.js';
 import { S } from 'spectra/core/state.js';
 import { event } from 'spectra/core/events.js';
 import { deg, dirAE, skyP, onSky } from 'spectra/core/geom.js';
-import { Em, Rib, EmField } from 'spectra/render/sources.js';
+import { Em, Rib, EmField, BEAM } from 'spectra/render/sources.js';
 import { solid } from 'spectra/render/instrument.js';
 import { SUN_AZ, sunEl } from 'spectra/world/atmosphere.js';
 import { coastZ, heightAt, SEA, STAND, ENVSEA, COAST_STATION, CLIFF_ANT } from './world.js';
-import { spectralGroup, addTx } from 'spectra/render/surface.js';
+import { spectralGroup, spectralParts, partsGeometry, addTx } from 'spectra/render/surface.js';
 
 // The last sliver of Sun flashes green as it drops under a sharp sea horizon (sunEl crosses 0 at t≈7.3).
 export const greenFlash = () => event({ name: 'Green flash', t0: 6.4, t1: 8.6, bands: ['vis'], freq: ['greenFlash'], tags: ['rare'], note: 'Refraction splits the last sliver of the Sun over a clean sea horizon: a second of emerald.',
@@ -44,13 +44,19 @@ export const gulls = () => event({ name: 'Gulls heading home', t0: 0, t1: 20, ba
 // lens panels 72° apart turning once per 10 s, so each panel's beam passes you 2 s after the other, then 8 s dark.
 // The old 285–325 kHz marine radiobeacons are mostly retired; lights now announce themselves as AIS aids to
 // navigation (message 21 on VHF AIS 1/2, ITU-R M.1371-5; nominal reporting interval 3 min, IMO MSC.1/Circ.1473; IALA G1062).
-// An AIS packet (26.7 ms, ITU-R M.1371-5) drawn as a short run of radio dashes travelling from the sender to the coast
-// station's AIS base-station mast: a constant-width point-to-point link, so the dashes keep their aspect (uLen).
+// An AIS packet (26.7 ms, ITU-R M.1371-5) drawn as a short pulse travelling from the sender to the coast station's AIS
+// base-station mast (the eye: a smooth luminous segment; the old view: a run of radio dashes at a constant width, so
+// they keep their aspect, uLen).
 // The travel is slowed down for the eye (radio crosses the bay in ~10 µs): the events carry 'time-compressed'.
 const packet = (rib, a, b, f, len, w, I) => {
   const L = a.distanceTo(b), u1 = Math.min(1, f * (1 + len / L)), u0 = Math.max(0, u1 - len / L);
   if (u1 > u0) rib.set([a.clone().lerp(b, u0), a.clone().lerp(b, u1)], w, w, I);
 };
+// Ship radar beams in azimuth (the eye, sources.js BEAM.sweep): θ3dB ≈ 70 λ/D — X-band 9.4 GHz from a ~2 m (6.5 ft)
+// slotted array ≈ 1.1°, S-band 3.05 GHz from a ~3.7 m (12 ft) array ≈ 1.9° (typical SOLAS array lengths, STAND-IN);
+// rotation rates are the event's own (2.4 and 2.1 rad/s). The old view keeps its widened cos^16 / cos^8 look.
+const XB_HPBW = 1.1 * DEG, XB_W = 2.4, SB_HPBW = 1.9 * DEG, SB_W = 2.1;
+const xband = off => BEAM.sweep(off, XB_HPBW, XB_W);
 const FL_PERIOD = 10, FL_GAP = 2, FL_HALF = .15;   // s, s, rad (half-width of a beam: ~0.5 s flash)
 const ATON_EVERY = 6;                            // s between drawn AIS bursts (real: ~180 s, time-compressed)
 export const lighthouse = () => event({ name: 'Lighthouse', t0: 9, t1: 60, bands: ['vis', 'radio'], freq: ['incandescent', 'aisAtoN'], tags: ['time-compressed'],
@@ -110,18 +116,19 @@ export const ship = () => event({ name: 'Container ship', t0: 4, t1: 52, bands: 
     const nav = sm(9, 14, t), I = env(t, this.t0, this.t1, 1.5);
     this.p = at(-85, 40); this.mast.set(at(-85, 44), 26, nav * I); this.side.set(at(-80, 24), 18, nav * I * .8); this.stern.set(at(-108, 14), 14, nav * I * .6);
     this.deck.forEach((e, k) => e.set(at(-60 + k * 45, 22), 14, nav * I * .5));
-    const ra = T * 2.4, face = Math.max(0, Math.cos(ra - Math.atan2(c.z - pos.z, c.x - pos.x))) ** 16;   // radar crackles brightest as its antenna sweeps past you
-    this.radar.set(at(-85, 34), 60 + 120 * face, I * (.2 + .9 * face));
-    ENVSEA.radP.value.copy(at(-85, 34)); ENVSEA.radA.value = ra; ENVSEA.radI.value = I * 3;   // the same sweep echoes off the headlands and the sea (surface shaders read this)
-    const sa = T * 2.1 + 1.7, sface = Math.max(0, Math.cos(sa - Math.atan2(c.z - pos.z, c.x - pos.x))) ** 8;   // S-band: wider beam, own rotation
-    this.sband.set(at(-85, 29), 50 + 90 * sface, I * (.15 + .6 * sface));
+    const ra = T * XB_W, toC = Math.atan2(c.z - pos.z, c.x - pos.x), face = Math.max(0, Math.cos(ra - toC)) ** 16;   // old view: radar crackles brightest as its antenna sweeps past you
+    // the eye: a steady-sized antenna whose real 1.1° beam flashes once per turn as it crosses you (−30 dB sidelobes between)
+    this.radar.set(at(-85, 34), S.eye ? 60 : 60 + 120 * face, I * (.2 + .9 * face), 1.1 * xband(ra - toC) / (.2 + .9 * face));    ENVSEA.radP.value.copy(at(-85, 34)); ENVSEA.radA.value = ra; ENVSEA.radI.value = I * 3; ENVSEA.radB.value.set(XB_HPBW, XB_W / 60);   // the same sweep echoes off the headlands and the sea (surface shaders read this)
+    const sa = T * SB_W + 1.7, sface = Math.max(0, Math.cos(sa - toC)) ** 8;   // S-band: wider beam, own rotation
+    this.sband.set(at(-85, 29), S.eye ? 50 : 50 + 90 * sface, I * (.15 + .6 * sface), .75 * BEAM.sweep(sa - toC, SB_HPBW, SB_W) / (.15 + .6 * sface));
     this.sbandTx = { p: at(-85, 29), power: I * 25 * sface };
     this.phones.forEach((e, k) => {                                              // crew on deck: LTE ping every ~3 s, Bluetooth blips between
       const lt = ((T + k * 1.1) % 3) / 3, bt = ((T * 1.3 + k * .7) % 1.5) / 1.5;
       const b = lt < .06 ? 1 - lt / .06 : bt < .04 ? .35 * (1 - bt / .04) : 0;
       if (b > 0) e.set(at(-70 + k * 55, 13), 16, I * .5 * b); });
     const ping = (t % 3) / 3; this.ais.set(at(-85, 44), 220, ping < .2 ? I * (1 - ping / .2) : 0);
-    this.radarTx = { p: at(-85, 34), power: I * 40 * face };   // the sweep reaches the beach (range scaled up: X-band is strong)
+    // the sweep reaches the beach (range scaled up: X-band is strong); the eye: the real beam's dwell share, as the drawn antenna
+    this.radarTx = { p: at(-85, 34), power: I * 40 * (S.eye ? xband(ra - toC) : face), meter: I * 40 * face };   // meters: unchanged
     this.aisTx = { p: at(-85, 44), power: ping < .2 ? I * 3 * (1 - ping / .2) : 0 };
     if (ping < .2) packet(this.pk, at(-85, 44), this.st, ping / .2, 260, 16, I * .9 * (1 - .5 * ping / .2));
     this.funnel.set([at(-95, 30), at(-100, 60), at(-108, 95)], 10, 26, I * .5); this.hot.set(at(-95, 31), 18, I * .45); },
@@ -240,8 +247,9 @@ export const buoys = () => event({ name: 'Channel buoys (IALA A)', t0: 9, t1: 60
       else { this.tmp.position.set(b.p.x, y, b.p.z); this.tmp.rotation.set(...tilt); this.tmp.updateMatrix(); this.mesh.setMatrixAt(i, this.tmp.matrix); }
       const s = b.p.distanceTo(STAND) / 1000; if (I > 0) this.L.set(i, new V3(b.p.x, y + 5.2, b.p.z), 22 * s, I * lit(T, b.ch, b.ph) * 1.2);
       if (b.racon && ENVSEA.radI.value > 0) {   // the ship's sweep reaches it: reply (same widened beam as the drawn radar)
-        const rp = ENVSEA.radP.value, face = Math.max(0, Math.cos(ENVSEA.radA.value - Math.atan2(b.p.z - rp.z, b.p.x - rp.x))) ** 16;
-        this.rc.set(new V3(b.p.x, y + 5, b.p.z), 30 + 60 * face, ENVSEA.radI.value / 3 * face * .9); } });
+        const rp = ENVSEA.radP.value, off = ENVSEA.radA.value - Math.atan2(b.p.z - rp.z, b.p.x - rp.x), face = Math.max(0, Math.cos(off)) ** 16;
+        // the eye: it answers while the real 1.1° beam is on it (its own antenna is omnidirectional in azimuth)
+        this.rc.set(new V3(b.p.x, y + 5, b.p.z), S.eye ? 30 : 30 + 60 * face, ENVSEA.radI.value / 3 * face * .9, xband(off) / face); } });
     this.mesh.instanceMatrix.needsUpdate = true; },
   where() { return this.bu[0].p.clone().add(new V3(0, 6, 0)); } });
 
@@ -278,8 +286,9 @@ export const windFarm = () => event({ name: 'Offshore wind farm', t0: 0, t1: 60,
       if (u.edge && night > 0) this.red.set(k, u.p.clone().add(new V3(0, HUB + 4.5, 0)), 34, night * red * .7)
         .set(this.tu.length + k, u.p.clone().add(new V3(0, (HUB + 3.5) / 2, 0)), 16, night * red * .22);   // 32 cd vs 2000 cd: far dimmer, same flash
       if (u.corner && night > 0) this.yel.set(k, u.p.clone().add(new V3(0, 18, 0)), 24, night * yel * .6);
-      if (rI > 0) { const face = Math.max(0, Math.cos(ENVSEA.radA.value - Math.atan2(u.p.z - rp.z, u.p.x - rp.x))) ** 8, dop = .6 + .4 * Math.abs(Math.sin(spin * 3));
-        this.clu.set(k, hub, 90 + 120 * face, rI * (.06 + .6 * face) * dop); } });
+      if (rI > 0) { const off = ENVSEA.radA.value - Math.atan2(u.p.z - rp.z, u.p.x - rp.x), face = Math.max(0, Math.cos(off)) ** 8, dop = .6 + .4 * Math.abs(Math.sin(spin * 3));
+        // the eye: lit by the real 1.1° beam as it passes (scattered in all directions, so toward you too)
+        this.clu.set(k, hub, S.eye ? 90 : 90 + 120 * face, rI * (.06 + .6 * face) * dop, .66 * xband(off) / (.06 + .6 * face)); } });
     this.bl.instanceMatrix.needsUpdate = true; },
   where() { return WF_C.clone().add(new V3(0, HUB, 0)); } });
 
@@ -288,33 +297,61 @@ export const windFarm = () => event({ name: 'Offshore wind farm', t0: 0, t1: 60,
 // ping LTE and one streams music to a Bluetooth speaker (continuous 2.4 GHz traffic), screens lit now and then.
 const FIRE = (() => { const x = -14, z = -9; return new V3(x, heightAt(x, z), z); })();
 const PEOPLE = 5;
+// A person by parts, facing +z: clothes (coat, between skin and air), bare face, neck and hands (skin, ~33 °C), hair
+// (insulating, as fur). Standing, or sitting on the sand with the knees up and the arms round them.
+function personGeo(sit) {
+  const jacket = 0x3a2e2a, jeans = 0x1c2230, skin = 0x8a6a58, hair = 0x1a120c, P = [];
+  const L = (from, to, r0, r1, surf, col) => P.push({ from, to, r0, r1, surf, col });
+  const B = (s, at, surf, col) => P.push({ g: PSPH, s, at, surf, col });
+  const hip = sit ? .14 : .9, sh = sit ? .72 : 1.42, head = sit ? .92 : 1.62;
+  B([.17, (sh - hip) / 2 + .04, .12], [0, (sh + hip) / 2, 0], 'coat', jacket);                 // torso
+  L([0, sh, 0], [0, sh + .1, 0], .05, .05, 'skin', skin);                                        // neck
+  B([.095, .12, .105], [0, head, .01], 'skin', skin);                                            // face / head
+  B([.1, .08, .11], [0, head + .05, -.015], 'fur', hair);                                       // hair
+  for (const x of [-.1, .1]) {
+    if (sit) {
+      L([x, hip, 0], [x * 1.2, .42, .38], .075, .065, 'coat', jeans); L([x * 1.2, .42, .38], [x * 1.2, .05, .52], .06, .05, 'coat', jeans);   // thigh, shin
+      L([x * 2, sh - .04, 0], [x * 1.6, .45, .3], .05, .045, 'coat', jacket); B([.045, .045, .045], [x * 1.1, .44, .4], 'skin', skin);   // arm round the knees, hand
+    } else {
+      L([x, hip, 0], [x * 1.1, .47, .02], .08, .065, 'coat', jeans); L([x * 1.1, .47, .02], [x * 1.1, .06, 0], .06, .05, 'coat', jeans);   // thigh, shin
+      L([x * 2.2, sh - .04, 0], [x * 2.4, 1.05, .1], .05, .045, 'coat', jacket); L([x * 2.4, 1.05, .1], [x * 2.2, .86, .22], .045, .04, 'coat', jacket);   // arm, forearm
+      B([.045, .05, .045], [x * 2.1, .82, .26], 'skin', skin);                                    // hand
+    }
+    P.push({ g: new THREE.BoxGeometry(.1, .08, .25), at: [x * (sit ? 1.2 : 1.1), .04, sit ? .58 : .06], surf: 'coat', col: 0x141414 });   // shoe
+  }
+  return partsGeometry(P);
+}
+const PSPH = new THREE.SphereGeometry(1, 10, 7);
 export const bonfire = () => event({ name: 'Beach bonfire', t0: 28, t1: 60, bands: ['vis', 'ir', 'micro'], freq: ['flame', 'thermal1200', 'groundHeat', 'thermal310', 'lte', 'bluetoothA2DP', 'ledWhite'],
   note: 'Friends light a driftwood fire on the sand: flame light by eye, a blazing hot core in infrared and warm sand spreading around the pit. The people are warm silhouettes on a thermal camera; their phones ping the network and one plays music to a Bluetooth speaker.',
   init() {
     const parts = []; for (let k = 0; k < 6; k++) { const l = new THREE.CylinderGeometry(.08, .11, 1.3, 6); l.rotateX(Math.PI / 2 - .55); l.rotateY(k * 1.05); l.translate(FIRE.x, FIRE.y + .25, FIRE.z); parts.push(l); }
     this.wood = solid(new THREE.Mesh(mergeGeometries(parts.map(g => g.toNonIndexed())), new THREE.MeshStandardMaterial({ color: 0x1a120c, roughness: .95 })));
     S.scene.add(this.wood); this.wood.visible = false;   // the friends carry the driftwood in
-    const torso = new THREE.BoxGeometry(.42, .62, .26); torso.translate(0, 1.1, 0); const head = new THREE.SphereGeometry(.12, 8, 6); head.translate(0, 1.55, 0);
-    const legs = new THREE.BoxGeometry(.34, .8, .22); legs.translate(0, .4, 0);
-    const pm = new THREE.InstancedMesh(mergeGeometries([torso, head, legs].map(g => g.toNonIndexed())), new THREE.MeshStandardMaterial({ color: 0x0c0a09, roughness: .9 }), PEOPLE);
+    // the friends by parts (M11/T4, engine/render/surface.js partsGeometry): standing and sitting on the sand, facing
+    // the fire (+z), one instanced draw per pose
+    const mk = sit => new THREE.InstancedMesh(personGeo(sit), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .9 }), PEOPLE);
+    const pm = mk(false), ps = mk(true);
     this.pp = Array.from({ length: PEOPLE }, (_, k) => { const a = k * 1.256 + .4 + R() * .5, r = 1.9 + R() * .6, x = FIRE.x + Math.cos(a) * r, z = FIRE.z + Math.sin(a) * r, sit = k % 2 === 1;
       return { p: new V3(x, heightAt(x, z), z), a, sit, ph: R() * 6 }; });
-    const o = new THREE.Object3D(); this.pp.forEach((q, k) => { o.position.copy(q.p); if (q.sit) o.position.y -= .45; o.rotation.set(0, -q.a - Math.PI / 2, 0); o.scale.set(1, q.sit ? .72 : 1, 1); o.updateMatrix(); pm.setMatrixAt(k, o.matrix); });
-    this.pm = spectralGroup(pm, 'body', { weight: 0 }); S.scene.add(pm); pm.visible = false;   // warm surface (M10/T9); metered by the sources
+    const o = new THREE.Object3D(), none = new THREE.Matrix4().makeScale(0, 0, 0);
+    this.pp.forEach((q, k) => { o.position.copy(q.p); o.rotation.set(0, -q.a - Math.PI / 2, 0); o.updateMatrix(); (q.sit ? ps : pm).setMatrixAt(k, o.matrix); (q.sit ? pm : ps).setMatrixAt(k, none); });
+    for (const m of [pm, ps]) { m.frustumCulled = false; S.scene.add(spectralParts(m, { weight: 0 })); m.visible = false; }   // warm faces, cooler clothes (M11/T4); metered by the sources
+    this.pm = pm; this.ps = ps;
     this.light = new THREE.PointLight(0xff7a2a, 0, 45, 1.7); this.light.position.copy(FIRE).add(new V3(0, .9, 0)); S.scene.add(this.light);
     this.fl = [['#ff5a14', 1.6], ['#ff9a2a', 1.1], ['#ffe9a0', .6]].map(([c, s]) => ({ e: new Em('vis', c), s }));
     this.emb = new EmField('vis', 10, '#ffb050'); this.hot = new Em('ir');
     this.body = new EmField('ir', PEOPLE * 2, null, 1); this.scr = new EmField('vis', PEOPLE, '#cfe0ff'); this.ph = new EmField('micro', PEOPLE + 1);
   },
   update() { const { t, T } = S, I = env(t, 28, 60, 1.5), lit = sm(31, 33, t), f = .85 + .15 * Math.sin(T * 23) * Math.sin(T * 7.3);
-    this.pm.visible = this.wood.visible = I > 0; ENVSEA.fire.value.set(FIRE.x, FIRE.y, FIRE.z, sm(31, 44, t)); this.light.intensity = S.on.vis ? lit * 30 * f : 0; if (I <= 0) return;
+    this.pm.visible = this.ps.visible = this.wood.visible = I > 0; ENVSEA.fire.value.set(FIRE.x, FIRE.y, FIRE.z, sm(31, 44, t)); this.light.intensity = S.on.vis ? lit * 30 * f : 0; if (I <= 0) return;
     if (lit > 0) {
       this.fl.forEach((q, i) => q.e.set(FIRE.clone().add(new V3(Math.sin(T * 9 + i) * .05, .4 + i * .2, 0)), q.s * f, lit));
       for (let k = 0; k < 10; k++) { const a = (T * .6 + k / 10) % 1; this.emb.set(k, FIRE.clone().add(new V3(Math.sin(k * 3 + T) * .5 * a, .5 + a * 4, Math.cos(k * 2 + T) * .4 * a)), .06, lit * (1 - a) * .5); }
       this.hot.set(FIRE.clone().add(new V3(0, .6, 0)), 4, lit * f); S.act.ir += sm(31, 44, t) * .2; }   // + the warming sand (surface shader)
-    this.pp.forEach((q, k) => { const y = q.p.y - (q.sit ? .45 : 0), s = q.sit ? .72 : 1;
-      this.body.set(k * 2, new V3(q.p.x, y + 1.1 * s, q.p.z), .9 * s, I * .55); this.body.set(k * 2 + 1, new V3(q.p.x, y + 1.55 * s, q.p.z), .42, I * .6);
-      const hand = new V3(q.p.x - Math.cos(q.a) * .3, y + 1.15 * s, q.p.z - Math.sin(q.a) * .3);
+    this.pp.forEach((q, k) => { const y = q.p.y, tc = q.sit ? .5 : 1.12, hd = q.sit ? .92 : 1.6;   // torso and head heights of the pose
+      this.body.set(k * 2, new V3(q.p.x, y + tc, q.p.z), q.sit ? .7 : .9, I * .55, 0); this.body.set(k * 2 + 1, new V3(q.p.x, y + hd, q.p.z), .42, I * .6, 0);   // body heat: metered; the eye sees the people's parts (see 0, M11/T6)
+      const hand = new V3(q.p.x - Math.cos(q.a) * .3, y + (q.sit ? .45 : 1.0), q.p.z - Math.sin(q.a) * .3);
       if (Math.sin(T * .3 + q.ph) > .55) this.scr.set(k, hand, .3, I * .6);                              // someone checks their phone
       const lt = ((t + k * .7) % 3) / 3; if (lt < .08) this.ph.set(k, hand, .8, I * .6 * (1 - lt / .08)); });   // LTE ping
     const sp = this.pp[0].p, bt = (T * 3) % 1; this.ph.set(PEOPLE, new V3(sp.x + .4, sp.y + .2, sp.z), .5, I * (bt < .5 ? .3 : .15)); },   // A2DP stream: steady 2.4 GHz traffic

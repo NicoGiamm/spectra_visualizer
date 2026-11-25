@@ -9,7 +9,7 @@ import { V3, DEG, clamp, lerp, sm, env, kf, R } from 'spectra/core/util.js';
 import { S } from 'spectra/core/state.js';
 import { event } from 'spectra/core/events.js';
 import { deg, skyP } from 'spectra/core/geom.js';
-import { Em, Rib, EmField } from 'spectra/render/sources.js';
+import { Em, Rib, EmField, BEAM, toViewer } from 'spectra/render/sources.js';
 import { visOnly } from 'spectra/render/instrument.js';
 import { addTx } from 'spectra/render/surface.js';
 import { cloudTex, softTex } from 'spectra/render/textures.js';
@@ -109,7 +109,8 @@ export const lightning = () => event({ name: 'Close lightning', t0: 3, t1: 56, b
           // VLF/LF sferic: the return stroke's current radiates; it travels thousands of km in the Earth–ionosphere waveguide —
           // drawn as a ring spreading outward, vastly slowed (really ~300 km per ms)
           const r = 20 + (a - LEAD) * 2600, ring = Array.from({ length: 33 }, (_, i) => { const q = i / 32 * Math.PI * 2; return new V3(s.g.x + Math.cos(q) * r, s.g.y + 3, s.g.z + Math.sin(q) * r); });
-          P.ring.set(ring, 8 + r * .02, 8 + r * .02, .7 * fade); P.sf.set(s.g.clone().add(new V3(0, 40, 0)), clamp(s.d * .08, 60, 600), .9 * fade);
+          // (the ring is the old view's: a guided wave in the air is nothing a camera images — the eye sees the channel radiate, sf)
+          P.ring.set(ring, 8 + r * .02, 8 + r * .02, .7 * fade, 0, 0); P.sf.set(s.g.clone().add(new V3(0, 40, 0)), clamp(s.d * .08, 60, 600), .9 * fade);
         }
         flash = Math.max(flash, b * clamp(1.6 - s.d / 3500, .35, 1.6)); at = s.top;
         if (!this.p) this.p = s.g.clone().add(new V3(0, Math.min(120, s.d * .15), 0));
@@ -156,9 +157,11 @@ export const tgf = () => event({ name: 'Terrestrial gamma-ray flash', t0: SPECIA
   update() { const s = this.s, a = S.t - s.t; this.p = null; if (a < 0 || a > .08) return;
     const k = 1 - a / .08, src = s.c, R0 = 1200;   // inside the cloud, ~3.9 km up, as the leader starts
     this.c.set(src, 260, 6 * k); this.p = src;
+    // the rays and the footprint ring are the old view's: gamma rays crossing clear air are not scattered toward you, so
+    // the eye sees only the source (render rule 6) — metered, not seen
     this.lines.forEach((L, i) => { const q = i / 5 * Math.PI * 2 + .3, end = new V3(s.g.x + Math.cos(q) * R0, s.g.y + 2, s.g.z + Math.sin(q) * R0);
-      L.set(Array.from({ length: 8 }, (_, j) => src.clone().lerp(end, j / 7)), 25, 40, 2 * k); });
-    this.ring.set(Array.from({ length: 33 }, (_, i) => { const q = i / 32 * Math.PI * 2; return new V3(s.g.x + Math.cos(q) * R0, s.g.y + 2, s.g.z + Math.sin(q) * R0); }), 40, 40, 1.5 * k); },
+      L.set(Array.from({ length: 8 }, (_, j) => src.clone().lerp(end, j / 7)), 25, 40, 2 * k, 0, 0); });
+    this.ring.set(Array.from({ length: 33 }, (_, i) => { const q = i / 32 * Math.PI * 2; return new V3(s.g.x + Math.cos(q) * R0, s.g.y + 2, s.g.z + Math.sin(q) * R0); }), 40, 40, 1.5 * k, 0, 0); },
   where() { return this.p; } });
 
 // ---------------------------------------------------------------- whistlers
@@ -170,17 +173,26 @@ export const whistlers = () => event({ name: 'Whistlers', t0: 32, t1: 60, bands:
       const p = (a - 1) / 2.4, head = 48 - 34 * p,   // ribbon top = head + 9.9 ≤ 58°: inside FOV_SKY (el ≤ 60)
          I = .75 * Math.sin(Math.PI * p) * sm(30, 40, S.t);
       const pts = Array.from({ length: 10 }, (_, i) => { const el = head + i * 1.1; return skyP(318 - 5 * Math.sin(el * .07), el); });
-      this.r.set(pts, deg(.9), deg(.3), I); this.e.set(pts[0], deg(2.2), I); this.p = pts[0]; } },
+      // the sliding streak draws the falling tone (frequency against time) as motion: the old view's. The eye has one
+      // compact glow where the wave leaves the ionosphere, fixed, brightening and fading with the whistle (render rule 6)
+      this.r.set(pts, deg(.9), deg(.3), I, 0, 0);
+      if (S.eye) this.e.set(skyP(316, 40), deg(2.2), I); else this.e.set(pts[0], deg(2.2), I);
+      this.p = pts[0]; } },
   where() { return this.p; } });
 
 // ---------------------------------------------------------------- weather radar
+// The eye (sources.js BEAM.sweep): the WSR-88D's 8.53 m dish at 2.85 GHz has a 0.925° beam (NOAA ROC, NEXRAD
+// Technical Information; ≈ 70 λ/D = 0.86°, Skolnik), drawn turning once every 8 s: a short flash once per turn as it passes
+// you, −30 dB sidelobes in between. The old view keeps its broad stylised lobe; the meters keep the old intensity.
+const NEX_HPBW = .925 * DEG, NEX_W = 2 * Math.PI / 8;
 export const radar = () => event({ name: 'Weather radar (NEXRAD)', t0: 0, t1: 60, bands: ['micro'], freq: ['nexrad'], tags: ['stylised'],
   note: 'A WSR-88D Doppler radar under its dome 2 km to the south-west sweeps 10-cm (2.8 GHz) pulses around the horizon. Each time the beam passes you it flashes; where it crosses the rain the drops scatter it back to the radar (and a little toward you), which is how forecasters see the storm\'s hook and hail core. The sweep is drawn turning once every 8 s (a real one takes ~10–20 s per turn at low tilt; not compressed with the storm); the beam is drawn only where rain scatters it.',
   init() { this.d = SPOTS.radar; this.lobe = new Em('micro'); this.side = new Em('micro'); this.beam = new Rib('micro', null, 12); },
   update() { const { t, T } = S, d = this.d, phi = (T / 8) % 1 * Math.PI * 2;
     const dang = (x, y) => Math.abs(((x - y) % (2 * Math.PI) + 3 * Math.PI) % (2 * Math.PI) - Math.PI);
     const toCam = Math.atan2(-d.z, -d.x), core = new V3(STORM.coreX, 0, STORM.frontZ(t) - 1500), toCore = Math.atan2(core.z - d.z, core.x - d.x), dc = Math.hypot(core.x - d.x, core.z - d.z);
-    this.lobe.set(d, 70, 1.6 * Math.exp(-((dang(phi, toCam) / .07) ** 2))); this.side.set(d, 16, .12);   // main lobe passing you / sidelobes
+    const lobe = Math.max(1e-4, 1.6 * Math.exp(-((dang(phi, toCam) / .07) ** 2)));
+    this.lobe.set(d, 70, lobe, 1.6 * BEAM.sweep(phi - toViewer(d).az, NEX_HPBW, NEX_W) / lobe); this.side.set(d, 16, .12, 0);   // main lobe passing you / sidelobes (in the eye: BEAM.sweep's floor)
     const hit = Math.exp(-((dang(phi, toCore) / .4) ** 2)) * sm(0, 6, t + 6) * (1 - sm(50, 60, t));
     if (hit > .02) { const dir = new V3(Math.cos(phi), 0, Math.sin(phi)), pts = [];
       for (let i = 0; i < 12; i++) { const r = Math.max(200, dc - 2600) + i / 11 * 5200; pts.push(d.clone().addScaledVector(dir, r).add(new V3(0, r * .0087, 0))); }   // 0.5° tilt
@@ -193,15 +205,23 @@ export const rain = () => event({ name: 'Rain shafts', t0: 3, t1: 50, bands: ['v
   init() {
     this.c = Array.from({ length: 12 }, () => { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: softTex(), transparent: true, depthWrite: false, fog: false })); S.scene.add(visOnly(s));
       return { s, ox: R() * 3400, x: STORM.coreX + (R() - .5) * 3400, w: 700 + R() * 600 }; });
-    this.mw = new EmField('micro', 12); this.sky = new Em('micro');
+    this.mw = this.c.map(() => new Rib('micro', null, 3)); this.sky = new Em('micro');
   },
   update() { const { t, camera } = S, I = env(t, this.t0, this.t1, 3), [lit] = kf(LIT, t), f = STORM.flash; this.p = null;
     this.c.forEach((o, i) => { const z = STORM.frontZ(t) - o.ox, vis = I * (1 - sm(-400, -80, z)) * sm(-12000, -9000, z);
       o.s.visible = S.on.vis && vis > .01; if (vis <= .01) return;
       o.s.position.set(o.x, 750, z); o.s.scale.set(o.w, 1700, 1); o.s.material.opacity = vis * .5;
       const b = .75 + f * 2.2; o.s.material.color.setRGB(lit[0] * b, lit[1] * b, lit[2] * b * 1.1);
-      this.mw.set(i, o.s.position, o.w * .9, vis * .25); if (!this.p) this.p = o.s.position; });
-    const over = rainHere(t); if (over > .01) this.sky.set(camera.position.clone().add(new V3(0, 700, -500)), 1800, over * .35);
+      // the shaft's microwave emission: a column from the cloud base (~1.6 km) to the ground, as wide as the curtain
+      this.mw[i].set([0, .5, 1].map(k => new V3(o.x, 1600 - 1700 * k, z)), o.w * .9, o.w * .9, vis * .5); if (!this.p) this.p = o.s.position; });
+    // the warm sky overhead: rain on every line of sight warms the whole microwave sky toward the rain's ~275 K
+    // (ITU-R P.618: Tsky = Tm(1 − 10^(−A/10))), drawn by the band sky (atmosphere.js skyMicroWet) from the rain's zenith
+    // attenuation: heavy convective rain, ~50 mm/h at the core, attenuates ~5.7 dB/km at 20 GHz (ITU-R P.838-3:
+    // k .0916, α 1.057, horizontal) through a ~4 km rain height (ITU-R P.839: 0 °C isotherm + .36 km, mid-latitude
+    // summer) → ~23 dB, which saturates (T ≈ Tm); 10 mm/h at the edges gives ~4 dB, ~170 K. The rain rate across the
+    // core is STAND-IN (rainHere 0…1 × 23 dB). The old view keeps its one big glow; in the eye that glow is metered only
+    const over = rainHere(t); if (ENV.nightMat) ENV.nightMat.uniforms.uRainDB.value = 23 * over;
+    if (over > .01) this.sky.set(camera.position.clone().add(new V3(0, 700, -500)), 1800, over * .35, 0);
     S.act.vis += .25 * I * (1 - sm(10, 18, t)); },
   where() { return this.p; } });
 
@@ -247,7 +267,7 @@ export const farmhouse = () => event({ name: 'Farmhouse', t0: 0, t1: 60, bands: 
     SPOTS.farmWin.color.setRGB(.03 + 1.5 * lit, .02 + .8 * lit, .005 + .3 * lit);
     this.w.forEach((e, i) => e.set(SPOTS.farmWins[i], 2.4, lit * .5));
     if (!on) { const k = Math.floor(T * .4) % 3; this.lan.set(SPOTS.farmWins[k], 1.4, .35 * sm(SPECIAL.line + 1.2, SPECIAL.line + 2.5, t)); }
-    if (on) this.wifi.set(SPOTS.farmRoof, 4, .8); },
+    if (on) this.wifi.set(SPOTS.farmRoof, 4, .8, BEAM.dipole(Math.sin(toViewer(SPOTS.farmRoof).el))); },   // the router's vertical dipole (sources.js BEAM.dipole)
   where() { return SPOTS.farmRoof; } });
 
 // ---------------------------------------------------------------- after the storm

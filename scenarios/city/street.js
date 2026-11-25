@@ -6,10 +6,74 @@ import { V3, sm, env, R, hash2 } from 'spectra/core/util.js';
 import { S } from 'spectra/core/state.js';
 import { event } from 'spectra/core/events.js';
 import { Em, Rib, EmField } from 'spectra/render/sources.js';
-import { solid } from 'spectra/render/instrument.js';
-import { spectral } from 'spectra/render/surface.js';
+import { spectralParts, partsGeometry, PRESET } from 'spectra/render/surface.js';
 import { inWin, burst } from './events.js';
 import { FACE_X, PARK_Z, KERBS, BAR, SIGNS, LAMPS, PAINT } from './world.js';
+
+// ---------------------------------------------------------------- bodies by parts (M11/T4)
+// People and vehicles built from parts, each with its own surface (engine/render/surface.js partsGeometry): bare faces
+// and hands warm (skin), clothes between skin and air (coat), hair insulating (fur); running tyres, the panel over an
+// engine and the tailpipe hot, window glass cold (it mirrors the sky at 8–14 µm), painted steel (PAINT) cooling.
+// Exported for the crowd and scooters (rf.js) and the police car (life.js). Local frame: forward is +z.
+const SPH = new THREE.SphereGeometry(1, 10, 7), BOX = new THREE.BoxGeometry(1, 1, 1);
+const box = (s, at, surf, col) => ({ g: BOX, s, at, surf, col });
+const wheel = (r, w, at, surf = 'tyre', col = 0x101010) => ({ g: new THREE.CylinderGeometry(r, r, w, 14), rot: [0, 0, Math.PI / 2], at, surf, col });
+const rim = (r, at, surf) => ({ g: new THREE.TorusGeometry(r, .025, 5, 18), rot: [0, Math.PI / 2, 0], at, surf, col: 0x101010 });
+// the tyres of a bicycle or a scooter's front wheel roll lightly loaded: at the air's temperature — STAND-IN (the tyre
+// row of surface.js, cooling as the street does, 22 → 14 °C)
+const COLD_TYRE = { ...PRESET.tyre, A: [22, 14, 1 / 20, PRESET.tyre.A[3]] };
+const V = (...a) => new THREE.Vector3(...a), mid = (a, b) => a.clone().add(b).multiplyScalar(.5);
+// a person: hip [y, z], torso lean (z offset of the shoulders), feet / hands [[y, z] left, [y, z] right]
+function person({ hip, lean = 0, feet, hands, top = 0x2e3440, legs = 0x1c2230 }) {
+  const P = [], skin = 0x8a6a58, L = (a, b, r0, r1, surf, col) => P.push({ from: a.toArray(), to: b.toArray(), r0, r1, surf, col });
+  const H = V(0, hip[0], hip[1]), Sh = H.clone().add(V(0, .52, lean)), Hd = Sh.clone().add(V(0, .2, lean * .3));
+  P.push({ g: SPH, s: [.17, .3, .12], rot: [Math.atan2(lean, .52), 0, 0], at: mid(H, Sh).toArray(), surf: 'coat', col: top });   // torso
+  L(Sh, Sh.clone().add(V(0, .1, lean * .1)), .05, .05, 'skin', skin);                                                       // neck
+  P.push({ g: SPH, s: [.095, .12, .105], at: Hd.toArray(), surf: 'skin', col: skin },                                         // face / head
+    { g: SPH, s: [.1, .075, .11], at: Hd.clone().add(V(0, .055, -.02)).toArray(), surf: 'fur', col: 0x1a120c });           // hair
+  [-1, 1].forEach((sd, i) => {
+    const hp = H.clone().add(V(sd * .1, 0, 0)), ft = V(sd * .11, feet[i][0], feet[i][1]), kn = mid(hp, ft).add(V(0, 0, .1));
+    L(hp, kn, .08, .065, 'coat', legs); L(kn, ft, .06, .05, 'coat', legs);
+    P.push(box([.1, .08, .25], ft.clone().add(V(0, -.02, .06)).toArray(), 'coat', 0x141414));                                  // shoe
+    const sh = Sh.clone().add(V(sd * .21, -.04, 0)), hd = V(sd * .22, hands[i][0], hands[i][1]), el = mid(sh, hd).add(V(sd * .03, -.04, -.06));
+    L(sh, el, .05, .045, 'coat', top); L(el, hd, .045, .04, 'coat', top);
+    P.push({ g: SPH, s: [.045, .05, .045], at: hd.toArray(), surf: 'skin', col: skin });                                       // hand
+  });
+  return P;
+}
+// a pedestrian in mid-stride (no walk cycle: they glide, too far to tell at most distances)
+export const walkerGeo = () => partsGeometry(person({ hip: [.93, 0], feet: [[.06, .3], [.06, -.25]], hands: [[.88, -.18], [.88, .2]] }));
+// a cyclist on a city bike: steel frame (PAINT), tyres at the air's temperature
+export const cyclistGeo = () => partsGeometry([
+  ...person({ hip: [1.0, -.28], lean: .32, feet: [[.32, .06], [.62, -.08]], hands: [[1.06, .42], [1.06, .42]], top: 0x3a4a3a }),
+  rim(.34, [0, .34, .52], COLD_TYRE), rim(.34, [0, .34, -.52], COLD_TYRE),
+  ...[[[0, .34, -.52], [0, .48, 0]], [[0, .48, 0], [0, .95, -.3]], [[0, .48, 0], [0, .92, .38]], [[0, .92, .38], [0, .34, .52]], [[0, .95, -.3], [0, .34, -.52]], [[0, .92, .38], [0, 1.06, .42]]]
+    .map(([a, b]) => ({ from: a, to: b, r0: .02, surf: PAINT, col: 0x30343a })),
+  box([.5, .03, .03], [0, 1.06, .42], PAINT, 0x202020), box([.12, .05, .24], [0, .97, -.3], 'coat', 0x101010),   // bars, saddle
+]);
+// a rider standing on an e-scooter: the rear hub motor runs warm (the tyre row, STAND-IN), the front wheel at air T
+export const scooterGeo = () => partsGeometry([
+  ...person({ hip: [1.08, -.05], lean: .08, feet: [[.18, .12], [.18, -.2]], hands: [[1.1, .42], [1.1, .42]], top: 0x40302a }),
+  box([.16, .05, .9], [0, .12, 0], PAINT, 0x1a1a1a), { from: [0, .12, .42], to: [0, 1.08, .4], r0: .025, surf: PAINT, col: 0x202020 },
+  box([.45, .03, .03], [0, 1.1, .4], PAINT, 0x202020), wheel(.1, .05, [0, .1, .45], COLD_TYRE), wheel(.1, .05, [0, .1, -.45], 'tyre'),
+]);
+// a car: painted steel body, the bonnet over the running engine hot, glass cabin, four running tyres, a tailpipe
+export const carGeo = (col = 0x101418, bar = false) => partsGeometry([
+  ...(bar ? [box([1.1, .12, .25], [0, 1.59, -.3], PAINT, 0x1a2040)] : []),   // a police light bar
+  box([1.8, .62, 4.4], [0, .62, 0], PAINT, col), box([1.7, .05, 1.25], [0, .94, 1.5], 'engine', col),
+  box([1.55, .55, 2.2], [0, 1.2, -.25], 'glass', 0x0c1218), box([1.5, .06, 1.75], [0, 1.5, -.3], PAINT, col),
+  ...[[.82, 1.35], [-.82, 1.35], [.82, -1.35], [-.82, -1.35]].map(([x, z]) => wheel(.33, .22, [x, .33, z])),
+  { g: new THREE.CylinderGeometry(.035, .035, .25, 6), rot: [Math.PI / 2, 0, 0], at: [.5, .28, -2.25], surf: 'exhaust', col: 0x303030 },
+]);
+// a 12 m city bus (the lit window band and the windscreens are a separate glass draw, busWindows): diesel with the hot
+// rear engine cover and exhaust stack, or battery-electric with the roof pack (its warmth is the event's source)
+const busGeo = diesel => partsGeometry([
+  box([2.55, 2.85, 12], [0, 1.78, 0], PAINT, 0x2c3a44), box([2.6, .35, .15], [0, .55, 6.03], PAINT, 0x15181c), box([2.6, .35, .15], [0, .55, -6.03], PAINT, 0x15181c),
+  ...[[1.12, 3.6], [-1.12, 3.6], [1.12, -2.9], [-1.12, -2.9]].map(([x, z]) => wheel(.5, .32, [x, .5, z])),
+  ...(diesel ? [box([2.2, 1, .06], [0, 1.0, -6.02], 'engine', 0x22282c), { from: [1.0, 3.1, -5.4], to: [1.0, 3.75, -5.4], r0: .07, surf: 'exhaust', col: 0x303030 }]
+    : [box([2.1, .3, 4.5], [0, 3.35, 1], PAINT, 0x3a4650)]),
+]);
+const busWindows = () => partsGeometry([box([2.6, .95, 11], [0, 2.25, -.2], 'glass', 0xd4dce6), box([2.3, 1.5, .06], [0, 2.0, 6.02], 'glass', 0xb8c4d0), box([2.2, .8, .06], [0, 2.45, -6.02], 'glass', 0x9aa4b0)]);
 
 // ---------------------------------------------------------------- buses
 // One old diesel and two battery-electric buses on the outer lanes. The lesson is in IR: only the diesel carries a
@@ -18,12 +82,12 @@ export const buses = () => event({ name: 'Buses: diesel & electric', t0: 0, t1: 
   init() {
     this.b = [{ x: -5.3, dir: 1, z0: .12, v: 4.5, diesel: true }, { x: 5.3, dir: -1, z0: .58, v: 4.2, diesel: false }, { x: -5.3, dir: 1, z0: .78, v: 4.8, diesel: false }];
     const n = this.b.length;
-    const body = new THREE.BoxGeometry(2.55, 2.9, 12); body.translate(0, 1.75, 0);
-    const band = new THREE.BoxGeometry(2.6, .95, 11); band.translate(0, 2.25, -.2);
-    this.body = new THREE.InstancedMesh(body, new THREE.MeshStandardMaterial({ color: 0x2c3a44, roughness: .5, metalness: .3 }), n);
-    this.win = new THREE.InstancedMesh(band, new THREE.MeshBasicMaterial({ color: 0xd4dce6 }), n);
-    for (const m of [this.body, this.win]) { m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.frustumCulled = false; }
-    S.scene.add(spectral(this.body, PAINT, { weight: 0 }), solid(this.win));
+    // bodies by parts (M11/T4): one instanced draw for the diesel, one for the electric buses, one for all windows
+    const bm = () => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .5, metalness: .3 }), nd = this.b.filter(b => b.diesel).length;
+    this.bodies = [new THREE.InstancedMesh(busGeo(true), bm(), nd), new THREE.InstancedMesh(busGeo(false), bm(), n - nd)];
+    let k = [0, 0]; this.b.forEach(b => { b.m = b.diesel ? 0 : 1; b.k = k[b.m]++; });
+    this.win = new THREE.InstancedMesh(busWindows(), new THREE.MeshBasicMaterial({ vertexColors: true }), n);   // lit from inside; glass in IR
+    for (const m of [...this.bodies, this.win]) { m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.frustumCulled = false; S.scene.add(spectralParts(m, { weight: 0 })); }
     this.G = new THREE.Object3D(); this.hidden = new THREE.Matrix4().makeScale(0, 0, 0);
     this.hl = new EmField('vis', n * 2, '#fff4dc'); this.tl = new EmField('vis', n * 2, '#ff2a1a'); this.dest = new EmField('vis', n, '#ffb030');
     this.hot = new EmField('ir', n, null, 1); this.ex = this.b.map(() => new Rib('ir', null, 4, 1)); this.rt = new EmField('micro', n);
@@ -33,7 +97,7 @@ export const buses = () => event({ name: 'Buses: diesel & electric', t0: 0, t1: 
       const z = Z0 + ((b.z0 * L + b.dir * b.v * t * 2) % L + L) % L, fade = sm(Z0, Z0 + 150, z) * (1 - sm(Z0 + L - 150, Z0 + L, z));
       this.G.position.set(b.x, 0, z); this.G.rotation.y = b.dir > 0 ? 0 : Math.PI; this.G.updateMatrix();
       const show = fade > .01 && inWin(this);
-      this.body.setMatrixAt(i, show ? this.G.matrix : this.hidden); this.win.setMatrixAt(i, show ? this.G.matrix : this.hidden);
+      this.bodies[b.m].setMatrixAt(b.k, show ? this.G.matrix : this.hidden); this.win.setMatrixAt(i, show ? this.G.matrix : this.hidden);
       if (!show) return;
       const fw = new V3(0, 0, b.dir), face = fw.dot(cam.clone().sub(this.G.position).normalize());
       const front = this.G.position.clone().addScaledVector(fw, 6.05), back = this.G.position.clone().addScaledVector(fw, -6.05);
@@ -44,11 +108,11 @@ export const buses = () => event({ name: 'Buses: diesel & electric', t0: 0, t1: 
       if (b.diesel) {
         const st = back.clone().addScaledVector(fw, .6).setY(3.3);
         this.ex[i].set([st, st.clone().add(new V3(0, .7, 0)), st.clone().addScaledVector(fw, -1.6).setY(4.6)], .35, 1.1, .55 * fade, 1);
-        this.hot.set(i, back.clone().addScaledVector(fw, 1.5).setY(1), 2.2, .45 * fade);
+        this.hot.set(i, back.clone().addScaledVector(fw, 1.5).setY(1), 2.2, .45 * fade, 0);   // the parts engine cover is the emitter in the eye (render rule 3)
       } else this.hot.set(i, this.G.position.clone().setY(3.35), 3, .16 * fade);   // roof battery pack, barely warm
       this.rt.set(i, this.G.position.clone().setY(2.9), 1.2, (.25 + .6 * burst(t, 1.7 + i * .4, i * 3.1, .3)) * fade);
     });
-    this.body.instanceMatrix.needsUpdate = this.win.instanceMatrix.needsUpdate = true; },
+    for (const m of [...this.bodies, this.win]) m.instanceMatrix.needsUpdate = true; },
   where: () => null });
 
 // ---------------------------------------------------------------- cyclists
@@ -56,13 +120,19 @@ export const cyclists = () => event({ name: 'Cyclists', t0: 0, t1: 60, bands: ['
   init() {
     this.c = Array.from({ length: 12 }, () => { const s = R() < .5 ? 1 : -1; return { x: s * (6.15 + R() * .4), dir: -s, z0: R(), v: 4 + R() * 2.5, flash: R() < .35, ph: R() * 6 }; });
     this.f = new EmField('vis', this.c.length, '#f4f6ff'); this.r = new EmField('vis', this.c.length, '#ff2418'); this.b = new EmField('ir', this.c.length, null, 1);
+    this.m = new THREE.InstancedMesh(cyclistGeo(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .7 }), this.c.length);   // riders and bikes by parts (M11/T4): one draw
+    this.m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); this.m.frustumCulled = false; S.scene.add(spectralParts(this.m, { weight: 0 }));
+    this.O = new THREE.Object3D(); this.hidden = new THREE.Matrix4().makeScale(0, 0, 0);
   },
-  update() { const { t, T } = S, cam = S.camera.position, lights = sm(7, 11, t); if (!inWin(this)) return;
+  update() { const { t, T } = S, cam = S.camera.position, lights = sm(7, 11, t);
+    this.c.forEach((_, k) => this.m.setMatrixAt(k, this.hidden)); this.m.instanceMatrix.needsUpdate = true;
+    if (!inWin(this)) return;
     this.c.forEach((c, k) => {
       const z = -220 + ((c.z0 * 520 + c.dir * c.v * t * 1.6) % 520 + 520) % 520;
       if (Math.abs(z - cam.z) > 150) return;
+      this.O.position.set(c.x, 0, z); this.O.rotation.set(0, c.dir > 0 ? 0 : Math.PI, 0); this.O.updateMatrix(); this.m.setMatrixAt(k, this.O.matrix);
       const p = new V3(c.x, 1.1, z), fw = new V3(0, 0, c.dir), face = fw.dot(cam.clone().sub(p).normalize());
-      this.b.set(k, p, 1.2, .38);
+      this.b.set(k, p, 1.2, .38, 0);   // parts rider: metered, not seen in the eye (render rule 3)
       const fl = c.flash ? (Math.sin(T * 12 + c.ph) > 0 ? 1 : .1) : 1;
       this.f.set(k, p.clone().addScaledVector(fw, .9).setY(.95), .5, lights * fl * Math.max(0, face) ** .5);
       this.r.set(k, p.clone().addScaledVector(fw, -.8).setY(.8), .35, lights * Math.max(0, -face) ** .5 * .9);

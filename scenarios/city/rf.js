@@ -7,12 +7,12 @@ import { V3, sm, R, hash2 } from 'spectra/core/util.js';
 import { dirAE } from 'spectra/core/geom.js';
 import { S } from 'spectra/core/state.js';
 import { event } from 'spectra/core/events.js';
-import { Em, Rib, EmField } from 'spectra/render/sources.js';
-import { solid } from 'spectra/render/instrument.js';
+import { Em, Rib, EmField, BEAM, toViewer } from 'spectra/render/sources.js';
 import { bounce, along } from 'spectra/world/bounce.js';
-import { addTx, addHits } from 'spectra/render/surface.js';
+import { addTx, addHits, spectralParts, partsGeometry } from 'spectra/render/surface.js';
+import { walkerGeo, scooterGeo } from './street.js';
 import { burst, inWin, litNow } from './events.js';
-import { SIDEWALK_X, FACE_X, PARK_Z, TRAM_Z, WINDOWS, PARKED, BUS, FM, MAST, PYLONS, POWER_Z, PYLON_H, FLATS, BOXES, SIGNS, ROOFS } from './world.js';
+import { SIDEWALK_X, FACE_X, PARK_Z, TRAM_Z, WINDOWS, PARKED, BUS, FM, MAST, PYLONS, POWER_Z, PYLON_H, FLATS, BOXES, SIGNS, ROOFS, PAINT } from './world.js';
 
 // ---------------------------------------------------------------- 4.1 the crowd
 
@@ -20,16 +20,26 @@ export const crowd = () => event({ name: 'Pedestrians & phones', t0: 4, t1: 60, 
   init() {
     this.p = Array.from({ length: 110 }, () => ({ x: (R() < .5 ? 1 : -1) * SIDEWALK_X + (R() - .5) * 3, z0: -30 + R() * 280, dir: R() < .5 ? -1 : 1, v: .5 + R() * 1.2, per: 2.5 + R() * 5.5, ph: R() * 11, bper: 5 + R() * 13, bph: R() * 17 }));
     this.b = new EmField('ir', this.p.length, null, 1); this.d = new EmField('micro', this.p.length);
+    // the walkers by parts (M11/T4, street.js walkerGeo): warm faces and hands, clothes cooler — one instanced draw;
+    // clothes tinted per walker by index (not R: the seeded stream stays as it was)
+    this.m = new THREE.InstancedMesh(walkerGeo(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .85 }), this.p.length);
+    this.p.forEach((_, k) => this.m.setColorAt(k, new THREE.Color().setHSL(hash2(k, 3), .25, .45 + .5 * hash2(k, 4)).multiplyScalar(1.6)));
+    this.m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); this.m.frustumCulled = false; S.scene.add(spectralParts(this.m, { weight: 0 }));
+    this.O = new THREE.Object3D(); this.hidden = new THREE.Matrix4().makeScale(0, 0, 0);
   },
-  update() { const { t } = S, cam = S.camera.position; if (!inWin(this)) return;
+  update() { const { t } = S, cam = S.camera.position;
+    this.p.forEach((_, k) => this.m.setMatrixAt(k, this.hidden)); this.m.instanceMatrix.needsUpdate = true;
+    if (!inWin(this)) return;
     this.p.forEach((q, k) => {
       // walkers loop along their 280 m stretch of sidewalk (z −30…250) and fade in/out over the last 12 m at each
       // end, instead of drifting up to ~150 m past the canyon by the end of the walk
       const span = 280, u = (((q.z0 + 30 + q.dir * q.v * t * 1.5) % span) + span) % span, z = u - 30;
       if (Math.abs(z - cam.z) > 140) return;
       const edge = sm(0, 12, u) * sm(0, 12, span - u); if (edge <= 0) return;
+      if (Math.hypot(q.x - cam.x, z - cam.z) > 4) {   // nobody walks through the viewer: a walker within 4 m is not drawn
+        this.O.position.set(q.x, .03, z); this.O.rotation.set(0, q.dir > 0 ? 0 : Math.PI, 0); this.O.scale.setScalar(.92 + .16 * hash2(k, 5)); this.O.updateMatrix(); this.m.setMatrixAt(k, this.O.matrix); }
       const pos = new V3(q.x, 1.05, z);
-      this.b.set(k, pos, 1.3, .4 * edge);
+      this.b.set(k, pos, 1.3, .4 * edge, 0);   // body heat: metered; the eye sees the walker's parts (see 0, M11/T6)
       const ping = burst(t, q.per, q.ph, .2) + .4 * burst(t, q.bper, q.bph, .12);
       if (ping > .02) this.d.set(k, pos.clone().setY(1.35), .8, ping * .75 * edge);
     }); },
@@ -40,13 +50,19 @@ export const scooters = () => event({ name: 'E-scooters', t0: 6, t1: 56, bands: 
   init() {
     this.s = Array.from({ length: 5 }, () => ({ x: (R() < .5 ? 1 : -1) * (SIDEWALK_X - 1.6) + (R() - .5) * 2, z0: R() * 400, dir: R() < .5 ? -1 : 1, v: 6.5 + R() * 3.5, per: 2.6 + R() * 3, ph: R() * 7 }));
     this.b = new EmField('ir', this.s.length, null, 1); this.m = new EmField('micro', this.s.length);
+    this.g = new THREE.InstancedMesh(scooterGeo(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .7 }), this.s.length);   // riders by parts (M11/T4): one draw
+    this.g.instanceMatrix.setUsage(THREE.DynamicDrawUsage); this.g.frustumCulled = false; S.scene.add(spectralParts(this.g, { weight: 0 }));
+    this.O = new THREE.Object3D(); this.hidden = new THREE.Matrix4().makeScale(0, 0, 0);
   },
-  update() { const { t } = S, cam = S.camera.position; if (!inWin(this)) return;
+  update() { const { t } = S, cam = S.camera.position;
+    this.s.forEach((_, k) => this.g.setMatrixAt(k, this.hidden)); this.g.instanceMatrix.needsUpdate = true;
+    if (!inWin(this)) return;
     this.s.forEach((q, k) => {
       const z = (((q.z0 + q.dir * q.v * t + 80) % 400) + 400) % 400 - 80;   // loop the visible stretch
       if (Math.abs(z - cam.z) > 160) return;
+      if (Math.hypot(q.x - cam.x, z - cam.z) > 4) { this.O.position.set(q.x, .03, z); this.O.rotation.set(0, q.dir > 0 ? 0 : Math.PI, 0); this.O.updateMatrix(); this.g.setMatrixAt(k, this.O.matrix); }
       const pos = new V3(q.x, .8, z);
-      this.b.set(k, pos, 1.5, .5);
+      this.b.set(k, pos, 1.5, .5, 0);   // rider + hub motor: metered; the eye sees the parts (see 0, M11/T6)
       const b = burst(t, q.per, q.ph, .22);
       if (b > .02) this.m.set(k, pos.clone().setY(1.15), .9, b * .7);
     }); },
@@ -144,7 +160,7 @@ function onCanyon(cam, p) {
 
 export const haze = () => event({ name: 'Street-canyon RF haze', t0: 0, t1: 60, bands: ['micro'], freq: ['wifi24', 'wifi5', 'lte'], tags: ['stylised'], note: 'The canyon itself is a cloud of microwave: a fine crackle fills the street between the facades below the roofs, denser where more access points are live nearby. Walk into the park and it thins out — you feel yourself leaving the RF zone. Stylised: it maps the field density of the routers around you; the field itself is not a visible thing.',
   init() {
-    // fixed patches in the canyon volume (hash-placed, no R): small (the micro shader draws 26 cells across a quad,
+    // fixed patches in the canyon volume (hash-placed, no R): small (the old view's micro shader draws 26 cells across a quad,
     // so a 1–2 m patch gives 4–8 cm cells, not the 10–21 cm blocks of the old 2.5–5.5 m ones), and below 9 m so the
     // top stays under the lowest street-front roof (12 m, world.js buildings()); onCanyon() hides what the eye would
     // see against the sky or the park.
@@ -171,12 +187,21 @@ export const haze = () => event({ name: 'Street-canyon RF haze', t0: 0, t1: 60, 
 
 // ---------------------------------------------------------------- 4.4 true radio
 
-export const tram = () => event({ name: 'Tram: pantograph arcing', t0: 11, t1: 58, bands: ['radio', 'vis', 'uv'], freq: ['arcRF', 'arcLight', 'arcUV'], note: 'The cross-street tram drags its pantograph along the contact wire and now and then it loses contact for an instant: a spark — broadband radio crackle, a blue-white flash (nitrogen and copper lines) and the copper UV line at 324.7 nm. On a dry summer wire the sparks are intermittent, bunched where the pantograph crosses wire joints and section insulators; near-continuous arcing only happens on an iced or worn wire.',
+export const tram = () => event({ name: 'Tram: pantograph arcing', t0: 11, t1: 58, bands: ['radio', 'vis', 'uv', 'ir'], freq: ['arcRF', 'arcLight', 'arcUV', 'batteryWarm'], note: 'The cross-street tram drags its pantograph along the contact wire and now and then it loses contact for an instant: a spark — broadband radio crackle, a blue-white flash (nitrogen and copper lines) and the copper UV line at 324.7 nm. On a dry summer wire the sparks are intermittent, bunched where the pantograph crosses wire joints and section insulators; near-continuous arcing only happens on an iced or worn wire.',
   init() {
-    const g = new THREE.BoxGeometry(13, 3.1, 2.8); g.translate(0, 1.55, 0);
-    this.body = solid(new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: 0x2a3038, roughness: .5, metalness: .45 })));
-    const w = new THREE.BoxGeometry(12.2, .9, 2.86); w.translate(0, 2.05, 0);           // lit passenger windows
-    this.body.add(solid(new THREE.Mesh(w, new THREE.MeshBasicMaterial({ color: 0xd8c9a0 }))));
+    // by parts (M11/T4): painted steel body, bogies with warm traction motors (the engine row, STAND-IN for a motor
+    // housing after a run), the pantograph frame; the lit windows and the cab windscreens are a glass draw (cold in IR)
+    const box = (s, at, surf, col) => ({ g: new THREE.BoxGeometry(...s), at, surf, col });
+    const body = partsGeometry([
+      box([13, 2.6, 2.65], [0, 1.85, 0], PAINT, 0x2a3038), box([13.1, .25, 2.7], [0, .6, 0], PAINT, 0x15181c),
+      ...[-4.2, 4.2].map(x => box([2.2, .5, 2.2], [x, .3, 0], 'engine', 0x15181c)),
+      box([2, .25, 1.6], [0, 3.27, 0], PAINT, 0x30343a),
+      ...[[[-.8, 3.4, 0], [.2, 4.8, 0]], [[.2, 4.8, 0], [-.4, 6.05, 0]]].map(([a, b]) => ({ from: a, to: b, r0: .04, surf: PAINT, col: 0x202020 })),
+      box([.3, .05, 1.6], [-.4, 6.08, 0], PAINT, 0x202020),
+    ]);
+    this.body = spectralParts(new THREE.Mesh(body, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .5, metalness: .45 })), { weight: 0 });
+    const w = partsGeometry([box([12.2, .9, 2.7], [0, 2.05, 0], 'glass', 0xd8c9a0), ...[-6.52, 6.52].map(x => box([.06, 1.2, 2.3], [x, 2.15, 0], 'glass', 0xb0a888))]);   // lit passenger windows, cab windscreens
+    this.body.add(spectralParts(new THREE.Mesh(w, new THREE.MeshBasicMaterial({ vertexColors: true })), { weight: 0 }));
     this.body.visible = false; S.scene.add(this.body);
     this.fl = new Em('vis', '#cfe6ff'); this.uv = new Em('uv'); this.ar = new Rib('radio', null, 6, 0); this.p = null;
   },
@@ -226,6 +251,8 @@ export const fmMast = () => event({ name: 'FM & DAB on the hill', t0: 0, t1: 60,
     const live = .55 + .45 * sm(0, 8, t);
     // FM and the DAB+ multiplex (continuous OFDM) both broadcast steadily from the same antennas: one steady glow
     // (a second always-on quad would cost a draw call over the M4 baseline)
-    this.tx.set(FM.top.clone().setY(FM.top.y - 28), 130, live * .65);
+    // the eye: the stacked FM/DAB bays' elevation beam toward you (sources.js BEAM.array, 4 bays ~1 λ apart, STAND-IN)
+    const ant = FM.top.clone().setY(FM.top.y - 28);
+    this.tx.set(ant, 130, live * .65, BEAM.array(toViewer(ant).el, 4));
     this.red.set(FM.top, 30, T % 2.2 < .6 ? 1.2 : .05); },
   where() { return FM.top; } });

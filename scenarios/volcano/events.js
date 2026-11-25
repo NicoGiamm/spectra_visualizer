@@ -4,9 +4,9 @@ import { V3, DEG, lerp, clamp, sm, env, R } from 'spectra/core/util.js';
 import { S } from 'spectra/core/state.js';
 import { event } from 'spectra/core/events.js';
 import { skyP, deg, FOV_SKY } from 'spectra/core/geom.js';
-import { Em, Rib, EmField } from 'spectra/render/sources.js';
+import { Em, Rib, EmField, BEAM, toViewer } from 'spectra/render/sources.js';
 import { solid } from 'spectra/render/instrument.js';
-import { spectralGroup } from 'spectra/render/surface.js';
+import { spectralGroup, SURF_U } from 'spectra/render/surface.js';
 import { COMMON } from 'spectra/render/shaders.js';
 import { ENV, night, sunEl } from 'spectra/world/atmosphere.js';
 import { CRATER, LAKE_Y, SPOTS, heightAt, downhill } from './world.js';
@@ -16,6 +16,20 @@ import { CRATER, LAKE_Y, SPOTS, heightAt, downhill } from './world.js';
 const C2 = 1.4388e-2, T_LAVA = 1423;
 const planckRel = (lam, T) => (Math.exp(C2 / (lam * T_LAVA)) - 1) / (Math.exp(C2 / (lam * T)) - 1);
 const visRel = T => planckRel(650e-9, T), irRel = T => planckRel(10e-6, T);   // 10 µm: what a thermal camera sees
+// near-IR (the night-vision channel, render rule 7): the channel is calibrated so that direct sunlight's near-IR /
+// visible = 1 (surface.js NIR_LIGHT twK), so a source's near-IR = its visible luminance × R_BAND(T), how much redder
+// than the Sun it is band for band: R_BAND = [∫B_T·S / ∫B_5800·S] / [∫B_T·V / ∫B_5800·V], S = a GaAs photocathode
+// counting photons flat over 0.6–0.9 µm (photon weight B·λ), V = CIE photopic V(λ) by its Gaussian approximation
+// 1.019·e^(−285.4 (λ/µm − 0.559)²) (an approximation, good to a few % of the integral). Molten basalt at 1150 °C
+// (1423 K; Kīlauea 1140–1170 °C, Helz & Thornber 1987, Bull. Volcanol. 49:651 — SPECTRUM.lavaGlow) gives ≈ 32
+// (1323 K ≈ 46, 1473 K ≈ 28); a crust at ≤ 900 K gives < 1e-3 of the molten value there: only the cracks and fresh
+// lava show
+const planckL = (lam, T) => lam ** -5 / (Math.exp(C2 / (lam * T)) - 1);
+const bandInt = (w, T, a, b, n = 300) => { let s = 0; const h = (b - a) / n; for (let i = 0; i < n; i++) { const l = a + (i + .5) * h; s += w(l) * planckL(l, T); } return s * h; };
+const S_GAAS = l => l, V_CIE = l => 1.019 * Math.exp(-285.4 * (l * 1e6 - .559) ** 2);
+const rBand = T => (bandInt(S_GAAS, T, .6e-6, .9e-6) / bandInt(S_GAAS, 5800, .6e-6, .9e-6)) / (bandInt(V_CIE, T, .38e-6, .78e-6) / bandInt(V_CIE, 5800, .38e-6, .78e-6));
+const NIR_VIS = rBand(T_LAVA);
+const LUM = c => .2126 * c[0] + .7152 * c[1] + .0722 * c[2];   // linear-sRGB luminance of a drawn colour
 // crust surface temperature (K) dt script units after it formed (1 unit ≈ 3.4 min): ~600 °C after a few minutes,
 // ~260 °C after half an hour, ~170 °C after two hours — a t^-1/2 STAND-IN curve; Hon et al. 1994 measured values of
 // this order (their own fit is linear in log t)
@@ -38,13 +52,18 @@ float lakeHot(){ vec2 q = vW.xz - uC.xz; float r = length(q)/${CRATER.lake.toFix
 export const lavaLake = () => event({ name: 'Lava lake', t0: 0, t1: 60, bands: ['vis', 'ir', 'micro'], freq: ['lavaGlow', 'lavaThermal', 'crustThermal', 'lavaMicrowave'], tags: ['rare'],
   note: 'A pond of molten basalt at about 1150 °C in the crater ahead. Dark crust plates drift across it and split along glowing cracks; every so often the crust founders and the lake turns over in a sweep of fresh lava. In visible light only the cracks glow red-orange (Planck: a few hundred °C colder and the visible glow is tens to thousands of times fainter), while in infrared even the crust is bright — tens of times the ground around it — and in microwaves, where brightness simply follows temperature, the lake is several times brighter than the ground. Only a handful of volcanoes hold a lasting lava lake (Erebus, Erta Ale, Nyiragongo, Kīlauea 2008–18).',
   init() {
-    this.u = { uTime: S.TIME, uOver: { value: 0 }, uHot: { value: 1 }, uC: { value: LAKE_C() } };
+    this.u = { uTime: S.TIME, uOver: { value: 0 }, uHot: { value: 1 }, uC: { value: LAKE_C() }, uSOnI_: SURF_U.uSOnI_ };
     const m = new THREE.ShaderMaterial({ uniforms: this.u, vertexShader: LAKE_VS, fragmentShader: LAKE_GLSL + `
       void main(){ float h = lakeHot(); gl_FragColor = vec4(mix(vec3(.02, .014, .012), vec3(1.8, .5, .07), h), 1.); }` });
     // spectral eye: crust ~400–600 °C is already bright at 10 µm, cracks (molten) brighter still (Planck, irRel); microwave
     // ≈ 5× the ground's Tb wash (surface.js: x²·.12 of (1, .6, .1) ≈ .05 luminance at 260 K) by Rayleigh–Jeans
-    m.userData.eyeBands = `vec3 eyeTrans(){ return vec3(.05, 0., 0.); }
-      void eyeBands(out vec4 o1, out vec4 o3){ float h = lakeHot(); o1 = vec4(1.2 + 2.6*h, 0., 0., 1.); o3 = vec4(0., .22 + .04*h, 0., 1.); }`;
+    // near-IR: the molten fraction's own glow — its visible luminance (h × LUM(1.8, .5, .07) ≈ .75 h) × NIR_VIS
+    // (≈ 32, above); the crust (basalt, nirAlb ~.08) adds nothing visible next to it
+    m.userData.eyeBands = `uniform float uSOnI_;
+      vec3 eyeTrans(){ return vec3(.05, 0., 0.); }
+      void eyeBands(out vec4 o1, out vec4 o3){ float h = lakeHot(); o1 = vec4(1.2 + 2.6*h, 0., 0., 1.); o3 = vec4(0., .22 + .04*h, 0., 1.); }
+#define EYE_NIR
+      float eyeNIR(){ return uSOnI_*lakeHot()*${(LUM([1.8, .5, .07]) * NIR_VIS).toFixed(3)}; }`;
     const g = new THREE.CircleGeometry(CRATER.lake, 72); g.rotateX(-Math.PI / 2); g.translate(CRATER.x, LAKE_Y + .4, CRATER.z);
     S.scene.add(solid(new THREE.Mesh(g, m)));
     this.glow = new Em('vis', ORANGE); this.heat = new Em('ir');
@@ -143,14 +162,22 @@ export const gasPlume = () => event({ name: 'SO₂ gas plume', t0: 0, t1: 60, ba
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('aC', new THREE.Float32BufferAttribute(aC, 3)); g.setAttribute('aS', new THREE.Float32BufferAttribute(aS, 4)); g.setIndex(idx);
-    this.u = { uTime: S.TIME, uCol: { value: new THREE.Color() }, uGlow: { value: 0 }, uAsh: { value: 0 } };
+    this.u = { uTime: S.TIME, uCol: { value: new THREE.Color() }, uGlow: { value: 0 }, uAsh: { value: 0 }, uSOnI_: SURF_U.uSOnI_, uNirSky: SURF_U.uNirSky, uNirMoon: SURF_U.uNirMoon };
     const m = new THREE.ShaderMaterial({ uniforms: this.u, vertexShader: PLUME_VS, transparent: true, depthWrite: false, fragmentShader: COMMON + `uniform float uTime, uGlow, uAsh; uniform vec3 uCol; varying vec2 vQ; varying vec4 vS; ${PLUME_SHAPE}
       void main(){ float a = plumeA(), s = vS.y, low = exp(-s*5.)*smoothstep(.6, -1., vQ.y);
         vec3 c = mix(uCol, uCol*.45, uAsh) + uGlow*low*vec3(1., .32, .08);
         gl_FragColor = vec4(c, a*mix(.28*(1. - .6*s), .8*(1. - .4*s), uAsh)); }` });
     // spectral eye: SO₂ absorbs the UV skylight behind it (coverage, UV = 0); the warm wet base shows faintly in IR
-    m.userData.eyeBands = `void eyeBands(out vec4 o1, out vec4 o3){ float a = plumeA(), s = vS.y;
-      o1 = vec4(.25*exp(-s*4.), 0., 0., a*.85*exp(-s*1.6)); o3 = vec4(0.); }`;
+    // near-IR: the droplets scatter like a cloud (Mie, size ≫ λ: albedo .5 STAND-IN, as the seaside mist) the sky and
+    // the Moon (E/π, surface.js NEAR-IR), and the lava's own near-IR from below: the visible underglow's luminance
+    // (uGlow·low × LUM(1, .32, .08)) × NIR_VIS — scattered light keeps the lake's colour, the same band ratio
+    m.userData.eyeBands = `uniform float uSOnI_, uNirSky; uniform vec4 uNirMoon;
+      void eyeBands(out vec4 o1, out vec4 o3){ float a = plumeA(), s = vS.y;
+      o1 = vec4(.25*exp(-s*4.), 0., 0., a*.85*exp(-s*1.6)); o3 = vec4(0.); }
+#define EYE_NIR
+      float eyeNIR(){ float s = vS.y, low = exp(-s*5.)*smoothstep(.6, -1., vQ.y);
+        float aV = mix(.28*(1. - .6*s), .8*(1. - .4*s), uAsh), aE = .85*exp(-s*1.6);   // the veil's optical alpha / the eye's (thermal) coverage
+        return uSOnI_*(.5*(uNirSky + uNirMoon.w*max(uNirMoon.y, 0.)) + uGlow*low*${(LUM([1, .32, .08]) * NIR_VIS).toFixed(3)})*min(aV/aE, 1.); }`;
     this.mesh = new THREE.Mesh(g, m); this.mesh.frustumCulled = false; this.mesh.renderOrder = 4; S.scene.add(this.mesh);
   },
   update() {
@@ -224,15 +251,19 @@ export const monitoringStation = () => event({ name: 'Volcano monitoring station
     S.scene.add(spectralGroup(G, 'concrete', { weight: .02 }));
     this.top = mast; this.cam = cam; this.led = b.clone().add(P(.6, 1.3, .21));
     this.tele = new Em('radio'); this.wifi = new Em('micro'); this.ledE = new Em('vis', '#ff2020');
-    // the 5 GHz link goes back over the ridge to the observatory (east, behind you); drawn as a short beam
+    // the 5 GHz link goes back over the ridge to the observatory (east, behind you); drawn as a short beam in the old
+    // view only: clear air does not scatter a 6 cm beam toward you (render rule 6). The eye sees its panel antenna's
+    // pattern toward you instead (sources.js BEAM.dish: a ~30 cm panel at 5.5 GHz, θ3dB ≈ 70 λ/D ≈ 13°, boresight east
+    // +z, level), and the telemetry whip's vertical dipole (BEAM.dipole)
     this.beam = new Rib('micro', null, 12);
     this.sats = Array.from({ length: 7 }, () => ({ az: FOV_SKY.az0 + 6 + R() * 108, el: 15 + R() * 40 })); this.gnss = new EmField('micro', this.sats.length, '#ffd27a');
   },
   update() {
     const { t, T } = S, ph = (t % 3) / 3;
-    if (ph < .2) this.tele.set(this.cam.clone().add(P(0, 2, 0)), 9, Math.sin(ph / .2 * Math.PI) * .9);
-    this.wifi.set(this.cam, 2.2, .5 + .2 * Math.sin(T * 5));
-    this.beam.set(Array.from({ length: 12 }, (_, i) => this.cam.clone().add(P(0, i * .3, 4 + i * 6))), .6, 3, .35);
+    const whip = this.cam.clone().add(P(0, 2, 0)), dc = S.camera.position.clone().sub(this.cam).normalize();   // antenna → you
+    if (ph < .2) this.tele.set(whip, 9, Math.sin(ph / .2 * Math.PI) * .9, BEAM.dipole(Math.sin(toViewer(whip).el)));
+    this.wifi.set(this.cam, 2.2, .5 + .2 * Math.sin(T * 5), BEAM.dish(Math.acos(clamp(dc.z, -1, 1)), 13 * DEG));
+    this.beam.set(Array.from({ length: 12 }, (_, i) => this.cam.clone().add(P(0, i * .3, 4 + i * 6))), .6, 3, .35, 0, 0);
     this.ledE.set(this.led, .25, T % 2 < .15 ? 1 : 0);
     // each point drifts along its own track and wraps inside FOV_SKY (az 214–326, el 12–56), fading at the edges, as a
     // satellite setting out of the cone is replaced by another rising into it (as the ocean's gnss())

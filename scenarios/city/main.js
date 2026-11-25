@@ -26,7 +26,7 @@ run({
     observer({ name: 'You', note: 'Walking the sidewalk; your phone pings the network (microwave) every few seconds and sends short Bluetooth LE bursts (2.4 GHz, also microwave).' }),
     sky.airliner({ note: 'On approach: nav lights & contrail, hot engines (IR), Mode S/ADS-B transponder (microwave), VHF airband chatter (radio) and weather radar (microwave).' }),
     sky.venus(), sky.cmb(), sky.milkyWay({ note: 'Barely there through the city glow; the dust still glows in IR and Sgr A* in radio.' }),
-    sky.meteorShower(), sky.pulsar(), sky.comet(), sky.satellitePass(), sky.starlink(), sky.blackHoleBinary(), sky.moonrise(),
+    sky.meteorShower(), sky.pulsar(), sky.comet(), sky.satellitePass(), sky.starlink(), sky.microquasar(), sky.moonrise(),
     sky.airShowers(), sky.thunderstorm({ note: 'Beyond the suburbs: lightning, radio "sferics" and terrestrial gamma-ray flashes.' }),
     sky.fastRadioBurst(), sky.supernova(), sky.gammaRayBurst(), local.fireworks(), sky.moonHalo(),
     // Phase 4: the RF ecosystem + street life, appended last so their seeded init() draws stay after the layout
