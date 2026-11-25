@@ -168,8 +168,9 @@ function earth() {
 // O I 630 nm at ~250 km (uAirglow, set by the airglow event). Eye bands: the sunlit limb in near-UV (scattered
 // sunlight); in near-IR (EYE_NIR, the night-vision channel — not the thermal channel, M11/T3) the sunlit limb's
 // Rayleigh light at ~(480/850)⁴ ≈ .1 of the visible blue, the reddened twilight band about as bright as its visible red
-// (STAND-IN), and the OH Meinel layer at ~87 km (uAirglow), brighter in near-IR than the green line (Meinel 1950;
-// SPECTRUM.ohMeinel). Drawn edge-on from orbit: the user's choice not to draw the near-IR sky (NIR_SKY_SHOWN) is about
+// (STAND-IN), and the OH Meinel layer at ~87 km (uAirglow), brighter in near-IR than the green line (Meinel 1950):
+// what an intensifier tube sees of it is the 0.7–0.9 µm bands (SPECTRUM.ohAirglow, 850 nm); the 1.6 µm bands
+// (SPECTRUM.ohMeinel) are past a GaAs photocathode's cut-off and are listed by the event, not drawn. Drawn edge-on from orbit: the user's choice not to draw the near-IR sky (NIR_SKY_SHOWN) is about
 // the dome over a ground observer; this layer is the airglow event's own feature. Thermal: the thin air adds nothing.
 export const SHELL_U = { uSun: { value: new V3() }, uC: { value: C }, uAirglow: { value: 0 } };
 const SHELL_GLSL = `uniform vec3 uSun, uC; uniform float uAirglow; varying vec3 vW;

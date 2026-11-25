@@ -113,14 +113,16 @@ const XB_HPBW = .93 * DEG, SB_HPBW = 1.9 * DEG, XB_W = 2.4, SB_W = 2.1;
 // temperatures STAND-IN; the accommodation block a few K warmer (heated inside, 22 → 16 °C STAND-IN); the funnel casing
 // over the exhaust uptakes hot (PRESET.exhaust). Near-IR: dark hull paint nirAlb .1, white superstructure .75 (as the
 // deck gelcoat, [EL] white paints), rust-red hatch covers .35 (iron-oxide paints are bright beyond 0.7 µm) — STAND-IN.
+// The accommodation block is white in the visible too (0xe0ddd6, linear ≈ .74: bulk carriers' superstructures are
+// normally painted white), so the visible and near-IR pictures agree; hull and house at 18–26 °C are thermal290.
 const STEEL = (T0, Teq, tau, nir, gloss = .3) => ({ ...PRESET.engine, A: [T0, Teq, tau ? 1 / tau : 0, .9], C: [gloss, ...PRESET.engine.C.slice(1)], D: [.0005, nir, .04, .1] });
 const SHIP_HULL = STEEL(18, 18, 0, .1), SHIP_HOUSE = STEEL(22, 16, 30, .75), SHIP_HATCH = STEEL(26, 12, 20, .35, .1);
 export const SHIP = { on: 0, ais: new V3(), p: new V3() };
-export const cargoShip = () => event({ name: 'Cargo ship on the horizon', t0: 6, t1: 58, bands: ['vis', 'micro', 'radio', 'ir'], freq: ['navWhiteLED', 'navGreen', 'xbandRadar', 'sbandRadar', 'ais', 'thermal700'], tags: ['time-compressed'],
+export const cargoShip = () => event({ name: 'Cargo ship on the horizon', t0: 6, t1: 58, bands: ['vis', 'micro', 'radio', 'ir'], freq: ['navWhiteLED', 'navGreen', 'xbandRadar', 'sbandRadar', 'ais', 'thermal290', 'thermal700'], tags: ['time-compressed'],
   note: 'The only other vessel for hundreds of kilometres: a bulk carrier on the great-circle route. Two white masthead lights and a green sidelight (she shows you her starboard side), a few lit bridge windows, two rotating radars (9.4 GHz for detail, 3 GHz through rain) whose X-band beam paints your mast each time it sweeps past, AIS reports on VHF and a hot funnel. Her crossing is slowed down: a real bulk carrier would cross this arc in about 25 minutes.',
   init() {
     const box = (w, h, d, at, surf, col) => ({ g: new THREE.BoxGeometry(w, h, d), at, surf, col });
-    const parts = [box(230, 12, 36, [0, 4, 0], SHIP_HULL, 0x15100f), box(18, 22, 34, [-95, 21, 0], SHIP_HOUSE, 0x15100f),
+    const parts = [box(230, 12, 36, [0, 4, 0], SHIP_HULL, 0x15100f), box(18, 22, 34, [-95, 21, 0], SHIP_HOUSE, 0xe0ddd6),
       box(7, 8, 9, [-104, 34, 0], 'exhaust', 0x1a1210)];   // funnel casing
     for (let i = 0; i < 6; i++) parts.push(box(22, 4, 30, [-55 + i * 28, 11, 0], SHIP_HATCH, new THREE.Color().setHSL(.02 + R() * .05, .3, .1)));   // the same R() draws as before
     this.g = spectralParts(new THREE.Mesh(partsGeometry(parts), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .8 })), { weight: 0 });

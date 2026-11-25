@@ -76,7 +76,11 @@ export const GAL_N = new V3().crossVectors(GAL_C, dirAE(250, 80)).normalize();  
 // Sources and STAND-INs in the night sky hook's comment (createAtmosphere); the constants live here once and are
 // injected into GLSL (BAND_SKY_GLSL; the including shader declares uniform vec3 uGalN, uGalC).
 //   radio  T_b (K) at 100 MHz = scale·(cold + plane·exp(−g²/width)·(1 + core·c)·mottle) — Haslam 408 MHz × (408/100)^2.55
-//   micro  T_b (K) = CMB·e^(−τ) + air·(1 − e^(−τ)), τ = tau0 / sin el (el ≥ elMin)
+//   micro  T_b (K) = CMB·e^(−τ) + air·(1 − e^(−τ)), τ = tau0 / sin el (el ≥ elMin); with rain on the path (skyMicroWet)
+//          the rain's attenuation A (dB) = A_zenith / sin el turns it toward the rain's mean radiating temperature:
+//          T_b·10^(−A/10) + rainTm·(1 − 10^(−A/10)), rainTm 275 K (ITU-R P.618 §3.3 / P.1853: Tsky = Tm(1 − 10^(−A/10)),
+//          Tm ≈ 275 K). A_zenith is the night sky's uRainDB, 0 unless a scenario's rain sets it (the storm); the
+//          surfaces keep mirroring the dry sky (STAND-IN: under rain overhead their reflection is too cold)
 //   ir     T (°C) = mix(cold, warm, 1 − trans^(1/sin el)) — the 8–14 µm window, Idso 1981
 //   nir    radiance = the near-IR sky irradiance / π (surface.js nirLight, scene units) × a direction shape: uniform in
 //          twilight (STAND-IN: the real twilight sky brightens toward the Sun's azimuth), the van Rhijn factor of a thin
@@ -91,7 +95,7 @@ export const GAL_N = new V3().crossVectors(GAL_C, dirAE(250, 80)).normalize();  
 //          IR −28 °C (numerical integration, M11/T2)
 export const BAND_SKY = {
   radio: { scale: 36, cold: 17, plane: 230, width: .06, core: 2.5, mean: 2600 },
-  micro: { cmb: 2.725, air: 270, tau0: .05, elMin: .02, mean: 27 },
+  micro: { cmb: 2.725, air: 270, tau0: .05, elMin: .02, mean: 27, rainTm: 275 },
   ir: { cold: -60, warm: 10, trans: .7, elMin: .04, mean: -28 },
   nir: { shellK: (6371 / (6371 + 87)) ** 2, extK: .1, fill: 1.72, mean: 1.638 },
 };
@@ -103,6 +107,7 @@ float skyRadioM(vec3 d, float mottle){ float g = dot(d, uGalN), core = pow(max(d
   return ${gf(BR.scale)}*(${gf(BR.cold)} + ${gf(BR.plane)}*exp(-g*g/${gf(BR.width)})*(1. + ${gf(BR.core)}*core)*mottle); }
 float skyRadioK(vec3 d){ return skyRadioM(d, 1.); }
 float skyMicroK(vec3 d){ float t = ${gf(BM.tau0)}/max(d.y, ${gf(BM.elMin)}); return ${gf(BM.cmb)}*exp(-t) + ${gf(BM.air)}*(1. - exp(-t)); }
+float skyMicroWet(vec3 d, float dB){ float tr = pow(10., -.1*dB/max(d.y, ${gf(BM.elMin)})); return skyMicroK(d)*tr + ${gf(BM.rainTm)}*(1. - tr); }
 float skyIRC(vec3 d){ return mix(${gf(BI.cold)}, ${gf(BI.warm)}, 1. - pow(${gf(BI.trans)}, 1./max(d.y, ${gf(BI.elMin)}))); }
 float skyNIR(vec3 d, float L, float glow){ float y = clamp(d.y, 0., 1.), s2 = 1. - y*y, e = degrees(asin(y));
   float X = 1./(y + .50572*pow(e + 6.07995, -1.6364));                     // Kasten & Young 1989 airmass
@@ -141,11 +146,11 @@ export function createAtmosphere(opts = {}) {
   sky.material.fragmentShader = 'uniform float uFade;\n' + sky.material.fragmentShader.replace('gl_FragColor = vec4( retColor, 1.0 );', 'gl_FragColor = vec4( retColor * uFade, 1.0 );');
 
   const nightMat = new THREE.ShaderMaterial({
-    uniforms: { uTime: TIME, uStars: { value: 0 }, uMW: { value: 0 }, uCMB: { value: 0 }, uAir: { value: 0 }, uNoAir: { value: AIR ? 0 : 1 }, uGeo: { value: 1 }, uGlow: { value: new THREE.Color(0, 0, 0) }, uGalN: { value: GAL_N }, uGalC: { value: GAL_C },
+    uniforms: { uTime: TIME, uStars: { value: 0 }, uMW: { value: 0 }, uCMB: { value: 0 }, uAir: { value: 0 }, uNoAir: { value: AIR ? 0 : 1 }, uGeo: { value: 1 }, uRainDB: { value: 0 }, uGlow: { value: new THREE.Color(0, 0, 0) }, uGalN: { value: GAL_N }, uGalC: { value: GAL_C },
       uNirL: NIR_SKY.L, uNirGlow: NIR_SKY.glow, uNirOn: NIR_SKY.on },
     vertexShader: `varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
     fragmentShader: COMMON + `
-    varying vec3 vDir; uniform float uTime, uStars, uMW, uCMB, uAir, uNoAir, uGeo, uNirL, uNirGlow, uNirOn; uniform vec3 uGalN, uGalC, uGlow;
+    varying vec3 vDir; uniform float uTime, uStars, uMW, uCMB, uAir, uNoAir, uGeo, uRainDB, uNirL, uNirGlow, uNirOn; uniform vec3 uGalN, uGalC, uGlow;
     float h31(vec3 p){ p = fract(p*.3183099+.1); p *= 17.; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
     float n3(vec3 x){ vec3 i=floor(x), f=fract(x); f=f*f*(3.-2.*f);
       return mix(mix(mix(h31(i),h31(i+vec3(1,0,0)),f.x), mix(h31(i+vec3(0,1,0)),h31(i+vec3(1,1,0)),f.x),f.y),
@@ -195,6 +200,8 @@ export function createAtmosphere(opts = {}) {
   //   micro  T_b = 2.725 K·e^(−τ) + 270 K·(1 − e^(−τ)), τ = .05 / sin(el) at ~20 GHz, near the 22 GHz water line (ITU-R P.676) —
   //          the CMB (2.725 K, Fixsen 2009) behind the atmosphere — through the surfaces' microwave wash: a dark sky with
   //          a glowing horizon; the CMB itself is ~100× fainter than the 280 K ground and stays invisible. 'skyMicrowave'.
+  //          Rain overhead (uRainDB, the rain's zenith attenuation in dB, set by a scenario's rain event, else 0) warms
+  //          the whole sky toward ~275 K (skyMicroWet, BAND_SKY). 'rainMicro'.
   //   ir     8–14 µm window sky: zenith window transmittance ~.7 (effective emissivity ~.3 for moderate humidity,
   //          Idso 1981), e = 1 − .7^(1/sin el), T = mix(−60 °C, 10 °C, e) (as the seaside's skyT; air 10 °C STAND-IN):
   //          zenith ≈ −40 °C, warm only near the horizon. 'skyThermalIR'.
@@ -231,7 +238,7 @@ void eyeBands(out vec4 o1, out vec4 o3){
   vec3 d = normalize(vDir); float above = uNoAir > .5 ? 1. : smoothstep(-.03, .12, d.y), sel = max(d.y, .02);
   float g = dot(d, uGalN);
   float r = .006*skyRadioM(d, .8 + .4*fbm3(d*4.))/1000.;
-  float Tm = skyMicroK(d), xm = clamp((Tm - 120.)/180., 0., 1.);
+  float Tm = skyMicroWet(d, uRainDB), xm = clamp((Tm - 120.)/180., 0., 1.);
   float m = eyeL(vec3(1., .6, .1))*xm*xm*.12;
   float Ti = skyIRC(d), xi = clamp((Ti + 4.)/44., 0., 1.);
   float core = pow(max(dot(d, uGalC), 0.), 5.);

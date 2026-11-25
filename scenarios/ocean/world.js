@@ -49,7 +49,8 @@ function pose(T) {   // the swell (period ~9 s, λ ≈ 120 m): a gentle roll of 
 //   topsides dark grey gelcoat: nirAlb .1 — dark paints .05–.15 [EL], STAND-IN; glossy, h .0001, slope .03 STAND-IN
 //   engine   the varnished teak companionway: wood .35–.5 [EL] → .4; h .002, slope .1 as REFL.wood
 //   mast     clear-anodised aluminium: nirAlb .6 — bare aluminium ~.85 at 0.8 µm, the oxide layer and grime lower
-//            it, STAND-IN; R0opt .1 (the anodic oxide n ~1.65 over the metal), STAND-IN; h .0002, slope .05 STAND-IN
+//            it, STAND-IN; R0opt .1 — the anodic oxide's own surface (n ~1.65) gives ((n−1)/(n+1))² ≈ .06, the metal
+//            under the clear film adds to it; .1 between the two, STAND-IN; h .0002, slope .05 STAND-IN
 //   sea      PRESET.water's REFL row; its slope is the sea shader's own (SEA_SLOPE below)
 const GFRP = [.95, .9, .95];
 export const SURF = {

@@ -16,10 +16,20 @@ import { CRATER, LAKE_Y, SPOTS, heightAt, downhill } from './world.js';
 const C2 = 1.4388e-2, T_LAVA = 1423;
 const planckRel = (lam, T) => (Math.exp(C2 / (lam * T_LAVA)) - 1) / (Math.exp(C2 / (lam * T)) - 1);
 const visRel = T => planckRel(650e-9, T), irRel = T => planckRel(10e-6, T);   // 10 µm: what a thermal camera sees
-// near-IR (the night-vision channel, render rule 7): molten lava at 1423 K is far brighter at 0.8 µm (a GaAs tube's
-// band) than at 650 nm — B(0.8 µm)/B(0.65 µm) = (0.65/0.8)⁵·(e^(c2/0.65µm·T) − 1)/(e^(c2/0.8µm·T) − 1) ≈ 6.5 — while
-// a crust at ≤ 900 K gives < 1e-3 of the molten value there: only the cracks and fresh lava show
-const NIR_VIS = (650e-9 / 800e-9) ** 5 * (Math.exp(C2 / (650e-9 * T_LAVA)) - 1) / (Math.exp(C2 / (800e-9 * T_LAVA)) - 1);
+// near-IR (the night-vision channel, render rule 7): the channel is calibrated so that direct sunlight's near-IR /
+// visible = 1 (surface.js NIR_LIGHT twK), so a source's near-IR = its visible luminance × R_BAND(T), how much redder
+// than the Sun it is band for band: R_BAND = [∫B_T·S / ∫B_5800·S] / [∫B_T·V / ∫B_5800·V], S = a GaAs photocathode
+// counting photons flat over 0.6–0.9 µm (photon weight B·λ), V = CIE photopic V(λ) by its Gaussian approximation
+// 1.019·e^(−285.4 (λ/µm − 0.559)²) (an approximation, good to a few % of the integral). Molten basalt at 1150 °C
+// (1423 K; Kīlauea 1140–1170 °C, Helz & Thornber 1987, Bull. Volcanol. 49:651 — SPECTRUM.lavaGlow) gives ≈ 32
+// (1323 K ≈ 46, 1473 K ≈ 28); a crust at ≤ 900 K gives < 1e-3 of the molten value there: only the cracks and fresh
+// lava show
+const planckL = (lam, T) => lam ** -5 / (Math.exp(C2 / (lam * T)) - 1);
+const bandInt = (w, T, a, b, n = 300) => { let s = 0; const h = (b - a) / n; for (let i = 0; i < n; i++) { const l = a + (i + .5) * h; s += w(l) * planckL(l, T); } return s * h; };
+const S_GAAS = l => l, V_CIE = l => 1.019 * Math.exp(-285.4 * (l * 1e6 - .559) ** 2);
+const rBand = T => (bandInt(S_GAAS, T, .6e-6, .9e-6) / bandInt(S_GAAS, 5800, .6e-6, .9e-6)) / (bandInt(V_CIE, T, .38e-6, .78e-6) / bandInt(V_CIE, 5800, .38e-6, .78e-6));
+const NIR_VIS = rBand(T_LAVA);
+const LUM = c => .2126 * c[0] + .7152 * c[1] + .0722 * c[2];   // linear-sRGB luminance of a drawn colour
 // crust surface temperature (K) dt script units after it formed (1 unit ≈ 3.4 min): ~600 °C after a few minutes,
 // ~260 °C after half an hour, ~170 °C after two hours — a t^-1/2 STAND-IN curve; Hon et al. 1994 measured values of
 // this order (their own fit is linear in log t)
@@ -47,13 +57,13 @@ export const lavaLake = () => event({ name: 'Lava lake', t0: 0, t1: 60, bands: [
       void main(){ float h = lakeHot(); gl_FragColor = vec4(mix(vec3(.02, .014, .012), vec3(1.8, .5, .07), h), 1.); }` });
     // spectral eye: crust ~400–600 °C is already bright at 10 µm, cracks (molten) brighter still (Planck, irRel); microwave
     // ≈ 5× the ground's Tb wash (surface.js: x²·.12 of (1, .6, .1) ≈ .05 luminance at 260 K) by Rayleigh–Jeans
-    // near-IR: the molten fraction's own glow — its visible red channel (1.8·h) × NIR_VIS (Planck, above); the
-    // crust (basalt, nirAlb ~.08) adds nothing visible next to it
+    // near-IR: the molten fraction's own glow — its visible luminance (h × LUM(1.8, .5, .07) ≈ .75 h) × NIR_VIS
+    // (≈ 32, above); the crust (basalt, nirAlb ~.08) adds nothing visible next to it
     m.userData.eyeBands = `uniform float uSOnI_;
       vec3 eyeTrans(){ return vec3(.05, 0., 0.); }
       void eyeBands(out vec4 o1, out vec4 o3){ float h = lakeHot(); o1 = vec4(1.2 + 2.6*h, 0., 0., 1.); o3 = vec4(0., .22 + .04*h, 0., 1.); }
 #define EYE_NIR
-      float eyeNIR(){ return uSOnI_*1.8*lakeHot()*${NIR_VIS.toFixed(3)}; }`;
+      float eyeNIR(){ return uSOnI_*lakeHot()*${(LUM([1.8, .5, .07]) * NIR_VIS).toFixed(3)}; }`;
     const g = new THREE.CircleGeometry(CRATER.lake, 72); g.rotateX(-Math.PI / 2); g.translate(CRATER.x, LAKE_Y + .4, CRATER.z);
     S.scene.add(solid(new THREE.Mesh(g, m)));
     this.glow = new Em('vis', ORANGE); this.heat = new Em('ir');
@@ -159,15 +169,15 @@ export const gasPlume = () => event({ name: 'SO₂ gas plume', t0: 0, t1: 60, ba
         gl_FragColor = vec4(c, a*mix(.28*(1. - .6*s), .8*(1. - .4*s), uAsh)); }` });
     // spectral eye: SO₂ absorbs the UV skylight behind it (coverage, UV = 0); the warm wet base shows faintly in IR
     // near-IR: the droplets scatter like a cloud (Mie, size ≫ λ: albedo .5 STAND-IN, as the seaside mist) the sky and
-    // the Moon (E/π, surface.js NEAR-IR), and the lava's own near-IR from below: the visible underglow's red channel
-    // (uGlow·low) × NIR_VIS, the same Planck ratio as the lake that lights it
+    // the Moon (E/π, surface.js NEAR-IR), and the lava's own near-IR from below: the visible underglow's luminance
+    // (uGlow·low × LUM(1, .32, .08)) × NIR_VIS — scattered light keeps the lake's colour, the same band ratio
     m.userData.eyeBands = `uniform float uSOnI_, uNirSky; uniform vec4 uNirMoon;
       void eyeBands(out vec4 o1, out vec4 o3){ float a = plumeA(), s = vS.y;
       o1 = vec4(.25*exp(-s*4.), 0., 0., a*.85*exp(-s*1.6)); o3 = vec4(0.); }
 #define EYE_NIR
       float eyeNIR(){ float s = vS.y, low = exp(-s*5.)*smoothstep(.6, -1., vQ.y);
         float aV = mix(.28*(1. - .6*s), .8*(1. - .4*s), uAsh), aE = .85*exp(-s*1.6);   // the veil's optical alpha / the eye's (thermal) coverage
-        return uSOnI_*(.5*(uNirSky + uNirMoon.w*max(uNirMoon.y, 0.)) + uGlow*low*${NIR_VIS.toFixed(3)})*min(aV/aE, 1.); }`;
+        return uSOnI_*(.5*(uNirSky + uNirMoon.w*max(uNirMoon.y, 0.)) + uGlow*low*${(LUM([1, .32, .08]) * NIR_VIS).toFixed(3)})*min(aV/aE, 1.); }`;
     this.mesh = new THREE.Mesh(g, m); this.mesh.frustumCulled = false; this.mesh.renderOrder = 4; S.scene.add(this.mesh);
   },
   update() {

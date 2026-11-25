@@ -181,10 +181,10 @@ export const whistlers = () => event({ name: 'Whistlers', t0: 32, t1: 60, bands:
   where() { return this.p; } });
 
 // ---------------------------------------------------------------- weather radar
-// The eye (sources.js BEAM.sweep): the WSR-88D's 8.5 m dish at 2.8 GHz has a 0.95° beam (NOAA ROC, WSR-88D
-// specifications; ≈ 70 λ/D = 0.88°, Skolnik), drawn turning once every 8 s: a short flash once per turn as it passes
+// The eye (sources.js BEAM.sweep): the WSR-88D's 8.53 m dish at 2.85 GHz has a 0.925° beam (NOAA ROC, NEXRAD
+// Technical Information; ≈ 70 λ/D = 0.86°, Skolnik), drawn turning once every 8 s: a short flash once per turn as it passes
 // you, −30 dB sidelobes in between. The old view keeps its broad stylised lobe; the meters keep the old intensity.
-const NEX_HPBW = .95 * DEG, NEX_W = 2 * Math.PI / 8;
+const NEX_HPBW = .925 * DEG, NEX_W = 2 * Math.PI / 8;
 export const radar = () => event({ name: 'Weather radar (NEXRAD)', t0: 0, t1: 60, bands: ['micro'], freq: ['nexrad'], tags: ['stylised'],
   note: 'A WSR-88D Doppler radar under its dome 2 km to the south-west sweeps 10-cm (2.8 GHz) pulses around the horizon. Each time the beam passes you it flashes; where it crosses the rain the drops scatter it back to the radar (and a little toward you), which is how forecasters see the storm\'s hook and hail core. The sweep is drawn turning once every 8 s (a real one takes ~10–20 s per turn at low tilt; not compressed with the storm); the beam is drawn only where rain scatters it.',
   init() { this.d = SPOTS.radar; this.lobe = new Em('micro'); this.side = new Em('micro'); this.beam = new Rib('micro', null, 12); },
@@ -205,17 +205,23 @@ export const rain = () => event({ name: 'Rain shafts', t0: 3, t1: 50, bands: ['v
   init() {
     this.c = Array.from({ length: 12 }, () => { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: softTex(), transparent: true, depthWrite: false, fog: false })); S.scene.add(visOnly(s));
       return { s, ox: R() * 3400, x: STORM.coreX + (R() - .5) * 3400, w: 700 + R() * 600 }; });
-    this.mw = new EmField('micro', 12); this.sky = new Em('micro');
+    this.mw = this.c.map(() => new Rib('micro', null, 3)); this.sky = new Em('micro');
   },
   update() { const { t, camera } = S, I = env(t, this.t0, this.t1, 3), [lit] = kf(LIT, t), f = STORM.flash; this.p = null;
     this.c.forEach((o, i) => { const z = STORM.frontZ(t) - o.ox, vis = I * (1 - sm(-400, -80, z)) * sm(-12000, -9000, z);
       o.s.visible = S.on.vis && vis > .01; if (vis <= .01) return;
       o.s.position.set(o.x, 750, z); o.s.scale.set(o.w, 1700, 1); o.s.material.opacity = vis * .5;
       const b = .75 + f * 2.2; o.s.material.color.setRGB(lit[0] * b, lit[1] * b, lit[2] * b * 1.1);
-      this.mw.set(i, o.s.position, o.w * .9, vis * .25); if (!this.p) this.p = o.s.position; });
-    // the warm sky overhead: one big glow in the old view; the eye's sources are compact (render rule 6), and a whole
-    // sky turning warm is no point source — metered, not seen (the rain shafts above carry the rain's emission)
-    const over = rainHere(t); if (over > .01) this.sky.set(camera.position.clone().add(new V3(0, 700, -500)), 1800, over * .35, 0);
+      // the shaft's microwave emission: a column from the cloud base (~1.6 km) to the ground, as wide as the curtain
+      this.mw[i].set([0, .5, 1].map(k => new V3(o.x, 1600 - 1700 * k, z)), o.w * .9, o.w * .9, vis * .5); if (!this.p) this.p = o.s.position; });
+    // the warm sky overhead: rain on every line of sight warms the whole microwave sky toward the rain's ~275 K
+    // (ITU-R P.618: Tsky = Tm(1 − 10^(−A/10))), drawn by the band sky (atmosphere.js skyMicroWet) from the rain's zenith
+    // attenuation: heavy convective rain, ~50 mm/h at the core, attenuates ~5.7 dB/km at 20 GHz (ITU-R P.838-3:
+    // k .0916, α 1.057, horizontal) through a ~4 km rain height (ITU-R P.839: 0 °C isotherm + .36 km, mid-latitude
+    // summer) → ~23 dB, which saturates (T ≈ Tm); 10 mm/h at the edges gives ~4 dB, ~170 K. The rain rate across the
+    // core is STAND-IN (rainHere 0…1 × 23 dB). The old view keeps its one big glow; in the eye that glow is metered only
+    const over = rainHere(t); if (ENV.nightMat) ENV.nightMat.uniforms.uRainDB.value = 23 * over;
+    if (over > .01) this.sky.set(camera.position.clone().add(new V3(0, 700, -500)), 1800, over * .35, 0);
     S.act.vis += .25 * I * (1 - sm(10, 18, t)); },
   where() { return this.p; } });
 

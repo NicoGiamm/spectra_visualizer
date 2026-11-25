@@ -46,9 +46,11 @@ const slopeAt = (x, z) => { const e = 2, hx = heightAt(x + e, z) - heightAt(x - 
 // Reflection data D = [h (m), nirAlb, R0opt, slope (rad)] (M11/T2, as surface.js REFL; keys from its header):
 //   snow  nirAlb .9 — fresh fine-grained snow at ~0.8 µm (Wiscombe & Warren 1980, J. Atmos. Sci. 37:2712); h .01, slope .1,
 //         R0opt .02 (ice n 1.31) as REFL.snow
-//   ice   nirAlb .05 — clear new ice over dark water: the Fresnel reflection (~.02) plus a little scattering from bubbles
-//         and cracks, far below snow (bare thin ice .05–.1 in the near-IR: Grenfell & Perovich 1981, J. Geophys. Res.
-//         86:7447) — STAND-IN in that range; R0opt .02 (ice n 1.31); h .001, slope .03 (a smooth sheet) STAND-IN
+//   ice   nirAlb .03 — the diffuse part only (the Fresnel reflection is R0opt's, not counted twice): clear new ice
+//         over dark water scatters little from its bubbles and cracks, and the near-IR it lets through is absorbed by
+//         the ice and the water below. Thin-ice spectral albedos fall toward the open-water value beyond 0.7 µm
+//         (Grenfell & Perovich 1984, J. Geophys. Res. 89:3573; Perovich 1996, CRREL Monograph 96-1) — the figure is
+//         not read off those papers: STAND-IN; R0opt .02 (ice n 1.31); h .001, slope .03 (a smooth sheet) STAND-IN
 //   rock  nirAlb .3 — schist / granite .25–.35 [EL]; h, slope as REFL.rock
 //   cabin nirAlb .5 — red-painted weathered wood: iron-oxide red paint and wood are bright beyond 0.7 µm (wood .35–.5
 //         [EL]) — STAND-IN; as REFL.wood otherwise
@@ -58,7 +60,7 @@ const GROUND = [.05, 0, 0], CANOPY = [.9, .25, .95], WOOD = [.95, .6, .88];   //
 const P = (T0, Teq, tau, eIR, eMW, uvAlb, gamma, rRadio, gloss = 0, tr = GROUND, D) => ({ A: [T0, Teq, tau ? 1 / tau : 0, eIR], B: [eMW, uvAlb, gamma, rRadio], C: [gloss, ...tr], D });
 export const SURF = {
   snow: P(-4, -12, 8, .99, .8, .85, .1, .3, .2, GROUND, [.01, .9, .02, .1]),
-  ice: P(-1, -4, 25, .97, .7, .1, .05, .5, 1, GROUND, [.001, .05, .02, .03]),
+  ice: P(-1, -4, 25, .97, .7, .1, .05, .5, 1, GROUND, [.001, .03, .02, .03]),
   cabin: P(-1, -8, 12, .9, .9, .05, .1, .3, 0, WOOD, [.003, .5, .04, .1]),
   rock: P(-6, -14, 40, .9, .88, .12, 1, .5, 0, GROUND, [.05, .3, .05, .35]),
   birch: P(-10, -18, 25, .97, .93, .03, .25, .3, 0, CANOPY, [1, .35, .04, 1]),
