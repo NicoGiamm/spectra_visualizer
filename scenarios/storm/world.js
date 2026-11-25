@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { V3, clamp, lerp, sm, kf, R, noise2, fbm2 } from 'spectra/core/util.js';
 import { S } from 'spectra/core/state.js';
-import { spectral, spectralGroup, PRESET, mixSurf } from 'spectra/render/surface.js';
+import { spectral, spectralGroup, PRESET, mixSurf, collectSurfD } from 'spectra/render/surface.js';
 import { solid } from 'spectra/render/instrument.js';
 import { ENV } from 'spectra/world/atmosphere.js';
 import { heightfield } from 'spectra/world/heightfield.js';
@@ -60,13 +60,15 @@ function terrain() {
   const C = { grass: [.06, .07, .022], dry: [.15, .12, .05], road: [.13, .11, .09] };
   const mix = (a, b, k) => a.map((v, i) => lerp(v, b[i], k));
   const roadK = (x, z) => (1 - sm(2.2, 3.4, Math.abs(x - ROAD_X))) * (z < 300 ? 1 : 0);
+  const surfAt = collectSurfD((x, y, z) => {   // tallgrass prairie, gravel road
+    const L = (a, b, k) => mixSurf([[a, 1 - k], [b, k]]);
+    return L(L(PRESET.meadow, PRESET.dirt, .25 * sm(.35, .65, fbm2(x * .01, z * .01, 3))), PRESET.dirt, roadK(x, z));
+  });
   const g = heightfield({ heightAt, colorAt(x, y, z) {
     const n = fbm2(x * .01, z * .01, 3);
     return mix(mix(C.grass, C.dry, sm(.35, .65, n)), C.road, roadK(x, z));
-  }, surfAt(x, y, z) {   // tallgrass prairie, gravel road
-    const L = (a, b, k) => mixSurf([[a, 1 - k], [b, k]]);
-    return L(L(PRESET.meadow, PRESET.dirt, .25 * sm(.35, .65, fbm2(x * .01, z * .01, 3))), PRESET.dirt, roadK(x, z));
-  } });
+  }, surfAt });
+  surfAt.attach(g);                  // per-vertex reflection data (aSurfD: PRESET.meadow / .dirt's REFL rows)
   S.scene.add(spectral(new THREE.Mesh(g, terrainMat), 'attr', { lines: 'topo', mean: g.userData.surfMean, weight: 1.2,
     uniforms: STORM_U, extraDecl: TERRAIN_DECL, instrExtra: 'c += stormTerrain(W, N);', visExtra: 'gl_FragColor.rgb += uOverlay*stormTerrain(W, N);' }));
 }

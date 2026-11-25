@@ -7,7 +7,7 @@ import { V3, sm, env, clamp, hash2, R, DEG } from 'spectra/core/util.js';
 import { S } from 'spectra/core/state.js';
 import { event } from 'spectra/core/events.js';
 import { dirAE, D } from 'spectra/core/geom.js';
-import { Em, Rib } from 'spectra/render/sources.js';
+import { Em, Rib, BEAM } from 'spectra/render/sources.js';
 import { ENV } from 'spectra/world/atmosphere.js';
 import { N, RE, LIMB_A, T_SET, T_RISE, MIN_PER_UNIT, CROSS, EARTH_U, SHELL_U, sunDir, sunState, limbP, facing, sunlit, onEarth, drift } from './world.js';
 
@@ -141,10 +141,17 @@ export const limbGamma = () => event({ name: 'Gamma-ray limb', t0: 0, t1: 60, ba
 // and the sweeping beams of S-band radars (airports on land, ships at sea).
 export const radioLeak = () => event({ name: 'Radio from the ground', t0: 0, t1: 60, bands: ['radio', 'micro'], freq: ['fm', 'tvUHF', 'airportASR', 'sbandRadar'], tags: ['common', 'stylised'],
   note: 'Above about 10 MHz radio passes through the ionosphere, so every FM and TV transmitter below shines up into space too: the inhabited land glows in radio, day and night, with the speckle of coherent transmitters. AM and shortwave below the ionosphere\'s cut-off are reflected back down and stay hidden. Here and there an S-band radar sweeps its beam round — an airport\'s surveillance radar, a ship\'s navigation radar at sea — a microwave flash every turn, every ~2–5 s real (drawn slowed, under two a second of playback: real turns would strobe ~10–20 a second on this clock).',
+  // The eye (sources.js BEAM.sweep): an S-band surveillance radar's 1.4° fan (ASR-9 / ASR-11 class, ≈ 70 λ/D for a ~5 m
+  // reflector at 2.8 GHz), turning at the drawn rate; vertically a cosecant-squared beam (Skolnik, Introduction to Radar
+  // Systems, 3rd ed., ch. 9), full up to ~2° and falling as (sin 2° / sin el)² above it, el the station's elevation
+  // seen from the radar (facing() = its sine): only the radars near the limb point their beam at you, those below you
+  // send only their sidelobes up. Meters: the old intensity.
   init() { this.rad = Array.from({ length: 7 }, () => ({ ph: R(), sw: R(), e: new Em('micro') })); this.p = null; },
   update() { EARTH_U.uRadio.value = S.on.radio ? 1 : 0; S.act.radio += 1.2; const { T } = S; this.p = null;
     this.rad.forEach((r, i) => { const x = S.t / CROSS + r.ph, g = Math.floor(x), p = drift(x - g, (hash2(g, i + 40) - .5) * .6, .5); if (facing(p) < .05) return;
-      const sw = (T * 1.7 + r.sw) % 1; r.e.set(p, 4, (.25 + 1.1 * Math.exp(-sw * 12)) * (i % 3 ? 1 : .7)); if (!this.p) this.p = p; }); },
+      const sw = (T * 1.7 + r.sw) % 1, k = i % 3 ? 1 : .7, I = (.25 + 1.1 * Math.exp(-sw * 12)) * k;
+      const vert = Math.min(1, (Math.sin(2 * DEG) / Math.max(facing(p), Math.sin(2 * DEG))) ** 2);
+      r.e.set(p, 4, I, 1.35 * k * Math.max(1e-3, BEAM.sweep(2 * Math.PI * sw, 1.4 * DEG, 2 * Math.PI * 1.7) * vert) / I); if (!this.p) this.p = p; }); },
   where() { return this.p || BELOW(); } });
 
 // The stars with no air: they don't twinkle and the sky is black right down to the limb; the UV sky opens up.
