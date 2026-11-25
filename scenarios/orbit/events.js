@@ -62,7 +62,8 @@ export { SHELL_U };
 // Night-side cities: the land's lights (drawn by the Earth's surface, uCity), sodium orange and LED white.
 export const cities = () => event({ name: 'Night-side cities', t0: T_SET - 2, t1: T_RISE + 7, bands: ['vis', 'ir'], freq: ['na589', 'na819', 'ledWhite'], tags: ['common'],
   note: 'Once the ground under you is dark, the inhabited land lights up in strings and clusters: the orange of sodium street lamps, more and more the bluish white of LEDs. The brightest lights shine through thin cloud. In near-IR the sodium lamps stay bright (their 819 nm lines) while the LEDs nearly vanish.',
-  update() { const I = env(S.t, this.t0, this.t1, 2); EARTH_U.uCity.value = S.on.vis ? I : 0; S.act.vis += I * dark() * .8; },
+  update() { const I = env(S.t, this.t0, this.t1, 2); EARTH_U.uCity.value = S.on.vis ? I : 0; EARTH_U.uCityN.value = S.on.ir ? I : 0;   // each band its own switch
+    S.act.vis += I * dark() * .8; S.act.ir += I * dark() * .5; },   // near-IR: sodium's 819 nm lines ≈ its visible (Elvidge 2010), LEDs ~5 %
   where: () => onEarth(dirAE(262, -12)) });
 
 // Thunderstorms seen from above: cloud tops lit from inside. Each cell streams through the view with the ground

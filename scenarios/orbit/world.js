@@ -98,8 +98,8 @@ export function onEarth(dir, h = 0) {
 //          2010, Sensors 10:3961, lamp spectral library) — STAND-IN ratios read off those spectra
 // Night-side city lights are part of the surface (uCity, set by the cities event), on the same land mask.
 // Opaque in every band (eyeTrans 0): nothing crosses the planet.
-export const EARTH_U = { uSun: { value: new V3() }, uRot: { value: 0 }, uC: { value: C }, uCity: { value: 0 }, uRadio: { value: 0 }, uGalN: { value: GAL_N }, uGalC: { value: GAL_C } };
-const EARTH_GLSL = COMMON + `uniform vec3 uSun, uC, uGalN, uGalC; uniform float uRot, uCity, uRadio; varying vec3 vW;
+export const EARTH_U = { uSun: { value: new V3() }, uRot: { value: 0 }, uC: { value: C }, uCity: { value: 0 }, uCityN: { value: 0 }, uRadio: { value: 0 }, uGalN: { value: GAL_N }, uGalC: { value: GAL_C } };
+const EARTH_GLSL = COMMON + `uniform vec3 uSun, uC, uGalN, uGalC; uniform float uRot, uCity, uCityN, uRadio; varying vec3 vW;
 float eh3(vec3 p){ p = fract(p*.3183099 + .1); p *= 17.; return fract(p.x*p.y*p.z*(p.x + p.y + p.z)); }
 float en3(vec3 x){ vec3 i = floor(x), f = fract(x); f = f*f*(3. - 2.*f);
   return mix(mix(mix(eh3(i), eh3(i + vec3(1,0,0)), f.x), mix(eh3(i + vec3(0,1,0)), eh3(i + vec3(1,1,0)), f.x), f.y),
@@ -151,7 +151,7 @@ float eyeNIR(){ vec3 n, q; float land, cloud, mu; earthAt(n, q, land, cloud, mu)
   L = mix(L, .1*.4*lit, rim*.6);                                                           // the visible rim's (.25,.45,1) ≈ .4 luminance × .1
   float tw = towns(q, land), spark = smoothstep(.55, .95, en3(q*1500.))*smoothstep(.35, .8, en3(q*260. + 5.));
   float na = step(.7, en3(q*60.));                                                          // as the visible: 0 sodium, 1 LED
-  L += mix(.62, .05*.86, na)*tw*spark*(1. - smoothstep(-.1, .04, mu))*(1. - .7*cloud)*uCity*4.;   // sodium (1,.55,.2) ≈ .62 luminance × 1; LED ≈ .86 × .05
+  L += mix(.62, .05*.86, na)*tw*spark*(1. - smoothstep(-.1, .04, mu))*(1. - .7*cloud)*uCityN*4.;   // (uCityN: the IR band's own switch) sodium (1,.55,.2) ≈ .62 luminance × 1; LED ≈ .86 × .05
   return L; }`;
 function earth() {
   const m = new THREE.ShaderMaterial({ uniforms: EARTH_U, fragmentShader: EARTH_GLSL + EARTH_FS,
