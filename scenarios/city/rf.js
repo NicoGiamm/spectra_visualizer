@@ -187,7 +187,7 @@ export const haze = () => event({ name: 'Street-canyon RF haze', t0: 0, t1: 60, 
 
 // ---------------------------------------------------------------- 4.4 true radio
 
-export const tram = () => event({ name: 'Tram: pantograph arcing', t0: 11, t1: 58, bands: ['radio', 'vis', 'uv'], freq: ['arcRF', 'arcLight', 'arcUV'], note: 'The cross-street tram drags its pantograph along the contact wire and now and then it loses contact for an instant: a spark — broadband radio crackle, a blue-white flash (nitrogen and copper lines) and the copper UV line at 324.7 nm. On a dry summer wire the sparks are intermittent, bunched where the pantograph crosses wire joints and section insulators; near-continuous arcing only happens on an iced or worn wire.',
+export const tram = () => event({ name: 'Tram: pantograph arcing', t0: 11, t1: 58, bands: ['radio', 'vis', 'uv', 'ir'], freq: ['arcRF', 'arcLight', 'arcUV', 'batteryWarm'], note: 'The cross-street tram drags its pantograph along the contact wire and now and then it loses contact for an instant: a spark — broadband radio crackle, a blue-white flash (nitrogen and copper lines) and the copper UV line at 324.7 nm. On a dry summer wire the sparks are intermittent, bunched where the pantograph crosses wire joints and section insulators; near-continuous arcing only happens on an iced or worn wire.',
   init() {
     // by parts (M11/T4): painted steel body, bogies with warm traction motors (the engine row, STAND-IN for a motor
     // housing after a run), the pantograph frame; the lit windows and the cab windscreens are a glass draw (cold in IR)

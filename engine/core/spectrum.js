@@ -260,8 +260,9 @@ export const SPECTRUM = {
   // Kieffer & Stone 2005, Astron. J. 129:2887) — redder than sunlight, so the Moon is a strong near-IR illuminator
   moonNIR:         { name: 'moonlight in the near-IR (lunar reflectance rising to the red)', lam: 850e-9 },
   // OH Meinel bands: vibration–rotation airglow of OH at ~87 km, 0.6–2.5 µm (Meinel 1950, ApJ 111:555); in the
-  // 0.7–0.9 µm range of a GaAs photocathode it outshines starlight several times (Vatsia 1972, Atmospheric Optical
-  // Environment, US Army ECOM) — what lights a moonless night for night-vision goggles
+  // 0.6–0.9 µm range of a Gen III GaAs photocathode it makes the night sky ~3–4× brighter than sunlight's I/V ratio
+  // would (Benn & Ellison 1998, La Palma night-sky brightness: V 21.9, I 20.0 mag/arcsec²; Vatsia 1972, Atmospheric
+  // Optical Environment, US Army ECOM) — what lights a moonless night for night-vision goggles
   ohAirglow:       { name: 'OH Meinel-band airglow (night-sky near-IR)', lam: 850e-9 },
 
 };

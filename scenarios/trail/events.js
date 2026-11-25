@@ -210,7 +210,7 @@ export const valleyFog = () => event({ name: 'Valley fog', t0: 30, t1: 60, bands
     // Near-IR (night vision, M11/T6): fog droplets (~10 µm) scatter 0.8 µm as they scatter light (Mie, size ≫ λ, no
     // absorption: King et al. 1992, IEEE TGRS 30:2, the 0.86 µm cloud channel), so a fog bank glows under the Moon
     // and sky as in visible light and hides the ground behind it — albedo .6 STAND-IN for a bank of optical depth ~10,
-    // in the surfaces' units (engine/render/surface.js surfNIR: white Lambertian = the irradiance on a level top)
+    // in the surfaces' units (engine/render/surface.js surfNIR: white Lambertian = E/π on a level top, M11/T6)
     vis.userData.eyeBands = `uniform float uNirSky, uSOnI_; uniform vec4 uNirMoon;
 #define EYE_NIR
 float eyeNIR(){ return uSOnI_*.6*(uNirSky + uNirMoon.w*max(uNirMoon.y, 0.)); }   // coverage: o1.a, as the thermal layer
@@ -348,8 +348,8 @@ export const cellMast = () => event({ name: 'Cell mast on the ridge', t0: 0, t1:
     this.top = top.clone().add(new V3(0, -2.2, 0)); this.e = new Em('micro');
   },
   // the eye sees the three sector panels' beams (sources.js BEAM.sectors: 3GPP panel pattern, 65° wide, 4° downtilt,
-  // boresights along the drawn panels at k·120°): bright where you stand in a sector's main lobe, ~10 dB down between
-  // two sectors. The load flicker f is the old view's; the eye shows the steady pilot/reference-signal power.
+  // boresights along the drawn panels at k·120°): bright where you stand in a sector's main lobe, ~7 dB down between
+  // two sectors (each 60° off its boresight: −10.2 dB, the two together −7 dB). The load flicker f is the old view's; the eye shows the steady pilot/reference-signal power.
   update() { const { T } = S, f = .75 + .25 * Math.sin(T * 3.1) * Math.sin(T * 1.3), v = toViewer(this.top);
     this.e.set(this.top, 28, .55 * f, BEAM.sectors(v.az, -v.el, [0, 2.094, -2.094]) / f); TRAIL_U.uMTx.value[0].set(this.top.x, this.top.y, this.top.z, .9); S.act.micro += .2; },
   where() { return this.top; } });

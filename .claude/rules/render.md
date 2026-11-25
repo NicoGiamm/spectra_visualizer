@@ -60,8 +60,11 @@ shared uniform `uPhys` (sources.js `PHYS`, 1 while `S.eye`; shaders.js header).
    `stylised` / `time-compressed`.
 7. **Infrared is a fused goggle (M11/T3):** output 1's IR = thermal 8–14 µm, output 2's IR slot = **near-IR**
    (0.7–1.4 µm, an image intensifier). Sources split by the event's spectral position in IR (smoothstep 3 → 1 µm; the
-   position is the mean of the event's IR processes, sources.js `specPos`). Surfaces add near-IR by reflection only
-   (`surfNIR`: nirAlb × (sky hemisphere + Moon + near-IR lamps)); a custom surface defines `#define EYE_NIR` with
+   position is the mean of the event's IR processes, sources.js `specPos`; a source that draws one named process sets
+   `em.proc = '<key>'` — the Moon's thermal disc does, its event also lists the near-IR keys). Surfaces add near-IR by
+   reflection only (`surfNIR`: nirAlb × (sky hemisphere + Moon + near-IR lamps)); the sky and Moon uniforms carry E/π
+   (three.js r160 physical lights: Lambertian = albedo·E/π) and are scaled from the real lux by ONE factor
+   (surface.js `NIR_LIGHT`), lamps keep the units of the visible lamp term they copy (albedo·P/d², no π); a custom surface defines `#define EYE_NIR` with
    `float eyeNIR()` in its hook (the sea, the valley fog, the night sky — without it it is black in near-IR). Lamps
    that light the ground in near-IR register `addTx('nir', () => ({ p, power }))` (power at 1 m in scene light units:
    the city's sodium lamps, the 850 nm camera rings). The near-IR sky (`skyNIR`, airglow + twilight) lights the ground but is **not drawn** (`NIR_SKY_SHOWN = 0`, user decision M11: drawn, it washed the night into a pale haze) — and every other
@@ -72,7 +75,7 @@ shared uniform `uPhys` (sources.js `PHYS`, 1 while `S.eye`; shaders.js header).
    `tau = 0` means no cooling) and **`D = [h, nirAlb, R0opt, slope]`** (M11/T2: sub-facet rms height in m, near-IR
    albedo, normal-incidence optical Fresnel reflectance, rms unresolved slope in rad — the `REFL` table; `DEF_D` when
    absent; `'attr'` surfaces need a per-vertex `aSurfD`, `collectSurfD`). **Reflection (eye only):** every band
-   reflects its illuminators by Kirchhoff (e = 1 − R): radio R0 = `B.w`, microwave 1 − eMW, thermal 1 − eIR, UV
+   reflects its illuminators by Kirchhoff (e = 1 − R): radio R0 = `B.w`, microwave 1 − eMW − Tmicro (e + R + T = 1 for a pane), thermal 1 − eIR, UV
    `D.z`, Schlick angle law, Beckmann specular fraction from `h`/λ, transmitter mirror images flux-conserving with
    width 2·`slope` (surface.js header REFLECTION). Add or tune a preset there rather than per-mesh literals. **Every value cites a source
    by the keys in the header above `PRESET`** (`[Sal]`, `[EL]`, `[MOD]`, `[UMF]`, `[FG]`, `[WHO]`, `[UN]`, `[RP112]`,

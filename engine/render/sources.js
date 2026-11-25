@@ -22,7 +22,9 @@ const gain = band => (S.eye ? 1 : GAIN[band]);
 // (S.act) and the old view keep the event's intensity, so a beam turned away still counts as activity in its band.
 const seen = see => (S.eye ? see : 1);
 // spectral position of a source inside its band (0 long-wave … 1 short-wave, spectrum.js bandPos): the mean over the
-// current event's processes in that band, .5 when it declares none; the eye shifts the band hue with it (uSpec)
+// current event's processes in that band, .5 when it declares none; the eye shifts the band hue with it (uSpec).
+// A source that draws ONE of its event's processes names it (`em.proc = 'lunarThermal'`, M11/T6): its position is that
+// process's, so an event listing thermal and near-IR processes keeps its thermal glow thermal
 const ORIGIN = { ground: 0, high: 1, space: 2 };   // uOrigin: the eye attenuates only ground-origin light by distance
 const POS = new Map();
 // per frame: Σ I and Σ I·position of the sources set in each band (the eye's diffraction blur picks the band's
@@ -90,7 +92,7 @@ export class Em {
     S.act[this.band] += I; LOD.total.em++;
     if (size * pxPerUnit(pos) < LOD.minPx) { LOD.skipped.em++; this.m.visible = false; return this; }
     const Is = I * seen(see); if (!(Is > 0)) { this.m.visible = false; return this; }   // beam turned away: metered, not seen
-    const u = this.m.material.uniforms; this.m.position.copy(pos); u.uSize.value = size; u.uI.value = Is * gain(this.band); u.uOrigin.value = ORIGIN[this.origin]; u.uSpec.value = specPos(this.band); specAdd(this.band, Is, u.uSpec.value);
+    const u = this.m.material.uniforms; this.m.position.copy(pos); u.uSize.value = size; u.uI.value = Is * gain(this.band); u.uOrigin.value = ORIGIN[this.origin]; u.uSpec.value = this.proc ? bandPos(SPECTRUM[this.proc]) : specPos(this.band); specAdd(this.band, Is, u.uSpec.value);
     this.m.visible = S.on[this.band]; return this;
   }
 }
@@ -208,10 +210,10 @@ export const BEAM = {
   array(el, N, d = 1, tilt = -.75 * DEG) { const psi = 2 * Math.PI * d * (Math.sin(el) - Math.sin(tilt)), s = Math.sin(psi / 2);
     const af = Math.abs(s) < 1e-6 ? 1 : (Math.sin(N * psi / 2) / (N * s)) ** 2;
     return Math.max(dB(-20), af * BEAM.dipole(Math.sin(el))); },
-  // cell-site sector panel, the 3GPP model (TR 36.814 Table A.2.1.1-2; same form in TR 38.901 Table 7.3-1):
-  // A_H = −min(12 (φ/φ3dB)², 30), A_V = −min(12 ((θ − θtilt)/θ3dB)², 30), A = −min(−(A_H + A_V), 30) dB, φ off the
-  // boresight azimuth, θ the depression of the line of sight below the horizon; φ3dB = 65° (the usual macro panel;
-  // 3GPP's default is 70°), θ3dB = 10°, a few degrees of downtilt, 30 dB front-to-back.
+  // cell-site sector panel, the 3GPP model: A_H = −min(12 (φ/φ3dB)², 30), A_V = −min(12 ((θ − θtilt)/θ3dB)², 30),
+  // A = −min(−(A_H + A_V), 30) dB, φ off the boresight azimuth, θ the depression of the line of sight below the horizon.
+  // φ3dB = 65° and the 30 dB caps (front-to-back, side-lobe level): 3GPP TR 38.901 Table 7.3-1; θ3dB = 10°: TR 36.814
+  // Table A.2.1.1-2 (38.901 uses 65° vertically); a few degrees of downtilt (STAND-IN, 4°).
   sector(phi, dep, tilt = 4 * DEG, hH = 65 * DEG, hV = 10 * DEG) {
     const aH = Math.min(12 * (wrap(phi) / hH) ** 2, 30), aV = Math.min(12 * ((dep - tilt) / hV) ** 2, 30);
     return dB(-Math.min(aH + aV, 30)); },

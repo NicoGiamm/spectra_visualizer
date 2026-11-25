@@ -48,7 +48,7 @@ export const GAL_N = new V3().crossVectors(GAL_C, dirAE(250, 80)).normalize();  
 //   radio  T_b (K) at 100 MHz = scale·(cold + plane·exp(−g²/width)·(1 + core·c)·mottle) — Haslam 408 MHz × (408/100)^2.55
 //   micro  T_b (K) = CMB·e^(−τ) + air·(1 − e^(−τ)), τ = tau0 / sin el (el ≥ elMin)
 //   ir     T (°C) = mix(cold, warm, 1 − trans^(1/sin el)) — the 8–14 µm window, Idso 1981
-//   nir    radiance = the near-IR sky irradiance (surface.js nirLight, scene units) × a direction shape: uniform in
+//   nir    radiance = the near-IR sky irradiance / π (surface.js nirLight, scene units) × a direction shape: uniform in
 //          twilight (STAND-IN: the real twilight sky brightens toward the Sun's azimuth), the van Rhijn factor of a thin
 //          emitting shell for the OH airglow (h 87 km, R 6371 km: zenith 1 → horizon 6.1; Meinel 1950, Roach & Gordon
 //          1973 The Light of the Night Sky §4), seen through the extinction T = 10^(−0.4·k·X), k 0.1 mag per airmass near
@@ -56,7 +56,7 @@ export const GAL_N = new V3().crossVectors(GAL_C, dirAE(250, 80)).normalize();  
 //          line of sight replaced by light scattered in from the rest of the sky (single-scattering fill, STAND-IN: the
 //          sky's mean 1.72): V·T + (1 − T)·1.72 — the observed airglow brightening that peaks ~5–10° above the horizon
 //          (×2 the mean) and eases off at it — normalised by its cos-weighted hemisphere mean (1.638, numerical) so a white
-//          Lambertian surface under it reads the irradiance (the uniform-sky convention of surface.js)
+//          Lambertian surface under it reads E/π, as under a three.js hemisphere light (the uniform-sky convention of surface.js)
 //   means  the cos-weighted hemisphere means of the same formulas, for diffuse reflection: radio ≈ 2600 K, microwave 27 K,
 //          IR −28 °C (numerical integration, M11/T2)
 export const BAND_SKY = {
@@ -177,8 +177,9 @@ export function createAtmosphere(opts = {}) {
   //          Ackermann 2012) → ~6e-6 per frame per sr through the pupil: L ≈ 2.3e-9 toward the inner Galaxy. 'gammaDiffuse'.
   //          Both are honestly near-black: a human-sized eye almost never catches one.
   //   nir    (the night-vision channel of IR, EYE_NIR) the twilight sky, then the OH Meinel airglow brightening toward
-  //          the horizon (van Rhijn), at the near-IR sky irradiance of surface.js nirLight (Brown 1952 twilight; Vatsia
-  //          1972 airglow ×5 the visible night sky) — skyNIR in BAND_SKY. 'ohAirglow'.
+  //          the horizon (van Rhijn), at the near-IR sky irradiance of surface.js nirLight (Brown 1952 twilight ×
+  //          .4 near-IR/visible; airglow ×3.5 the visible night sky in 0.6–0.9 µm, Benn & Ellison 1998) — skyNIR in
+  //          BAND_SKY; the uniform is E/π (a uniform sky's radiance). Not drawn (NIR_SKY_SHOWN). 'ohAirglow'.
   // The formulas and constants are BAND_SKY / BAND_SKY_GLSL above, shared with the surfaces' reflections.
   // X-ray / gamma come from space: absorbed in Ground mode. The UV airglow amplitude is a STAND-IN (faint).
   const pos = (lam, E) => bandPos(E ? { E } : { lam });

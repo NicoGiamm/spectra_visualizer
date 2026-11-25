@@ -129,14 +129,20 @@ all that's left of the landscape with Visible off. Each band shows:
 | Gamma | emission in proportion to activity (the eye turns it into single photon hits; the old view draws a speckle): granite sparkles, the sea is almost silent |
 | X-ray | nothing: the ground is dark in X-rays |
 
-In the spectral eye every surface also **reflects** each band's light (Kirchhoff, e = 1 − R): radio from
+In the spectral eye every surface also **reflects** each band's light (Kirchhoff, e + R + T = 1; T is the
+transmission of a thin pane or a crown, `C.yzw`): radio from
 transmitters and the synchrotron sky (sea, wet ground and metal are radio mirrors), microwave from transmitters and the
 cold sky (metal and calm water read cold), thermal IR the cold sky at grazing angles, UV the skylight; whether a
 surface mirrors or scatters a band follows its roughness against the wavelength (Beckmann), with Schlick's Fresnel
 law for the angle. In near-IR the sky itself is drawn dark (`NIR_SKY_SHOWN = 0`, a stylised choice: the real airglow sky is bright in night-vision goggles but washed the combined view out), and the surfaces are seen only by reflection: `nirAlb` × the twilight / airglow sky, the
 Moon and the near-IR lamps a scene registers (`addTx('nir', …)`: the city's sodium lamps and 850 nm camera
-illuminators); the sea mirrors the bright near-IR sky and the Moon's glitter path, fog glows. The formulas and every
-reflectivity's source are in the header of `engine/render/surface.js`.
+illuminators); the sea shows the Moon's glitter path, fog glows. The real near-IR sky and Moon (Brown 1952 twilight
+× a near-IR/visible ratio of .4, the OH airglow ×3.5 the visible night sky, the Moon in linear light) reach the scene
+through one shared scale factor, so their ratio is the real one, and carry three.js's physical 1/π (a Lambertian
+surface reads albedo·E/π, as in visible light). The Moon's glint on the sea, in near-IR and in visible light, is one
+flux-conserving lobe whose width is what the sea shader's own waves leave of Cox & Munk's measured slope
+(`scenarios/seaside/world.js` `SEA_WAVES`). The formulas and every reflectivity's source are in the header of
+`engine/render/surface.js`.
 
 Animals, people and vehicles are **built from parts** (`partsGeometry`, drawn with `spectralParts` in one draw call,
 instanced or not): each part keeps its own preset, so a thermal camera sees warm faces, hands, eyes, udders and

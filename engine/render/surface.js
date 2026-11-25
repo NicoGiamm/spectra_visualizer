@@ -28,7 +28,8 @@
 // REFLECTION (M11/T2, spectral eye only — gated by eyeSmooth, the old view keeps the terms above). Every band has
 // its illuminators and every surface reflects them as well as emitting (Kirchhoff: e = 1 − R):
 //   reflectivity  radio R0 = B.w (Fresnel at 100 MHz from ITU-R permittivities, cited per preset); microwave
-//          R0 = 1 − eMW; thermal IR R = 1 − eIR (both Kirchhoff, from the cited emissivities); UV diffuse = uvAlb and
+//          R0 = 1 − eMW − Tmicro (Kirchhoff with the slab's transmission C.z: e + R + T = 1; 0 for opaque ground,
+//          clamped at 0 where a volume's eMW and T come from different frequencies); thermal IR R = 1 − eIR (both Kirchhoff, from the cited emissivities); UV diffuse = uvAlb and
 //          specular R0opt (D.z); angle dependence by Schlick 1994 (Comput. Graph. Forum 13:233), R(θ) = R0 + (1 − R0)
 //          (1 − cos θ)^5, the unpolarised Fresnel average — every surface is a near-mirror at grazing incidence.
 //   specular vs diffuse  Rayleigh criterion: a surface is smooth when h < λ / (8 cos θ). The coherent (specular)
@@ -58,14 +59,15 @@
 // light it reflects. Lambertian, L = nirAlb (D.y) × E, with
 //   E = E_sky·(1 + N.y)/2 + E_moon·max(N·M, 0) + Σ P_lamp·max(N·L, 0)/d²   (sky: the cos-weighted hemisphere; Moon: a
 //       directional source; near-IR lamps registered with addTx('nir', …))
-// in the units of the scene's own lights (the visible hemisphere and moon lights of engine/world/atmosphere.js, read
-// from ENV each frame), so surfaces and sources stay on the one intensity scale the eye assumes (bands.js LREF): the
-// near-IR sky is the visible sky light × its near-IR / visible ratio, the Moon the moon light × 1.4 (NIR_LIGHT). The
-// real illuminance (NIR_LIGHT: the twilight sky after Brown 1952, the night-sky floor of starlight + OH airglow, the
-// waxing Moon in linear light) is computed alongside: its ratio to the scene's (uNirPhot) is what the tube's photon
-// count and threshold use (compose.js), so the grain follows the real darkness. Moonlit grass (.45) and sand (.45)
-// glow, water (.02) and asphalt (.12) stay black — leaves are ~9× brighter than in the red (~.05: the red edge,
-// SPECTRUM.nirReflect). Not modelled: shadows (no shadow maps), the Moon's glint on water; lamps light the ground only
+// in the units of the scene's own lights, so surfaces and sources stay on the one intensity scale the eye assumes
+// (bands.js LREF): the real near-IR sky and Moon (NIR_LIGHT: the twilight sky after Brown 1952 × its near-IR / visible
+// ratio, the night-sky floor of starlight + OH airglow, the waxing Moon in linear light) are scaled by ONE factor, the
+// scene's visible sky light / the real visible sky, and carry three.js's physical 1/π (E_sky, E_moon are E/π: a
+// MeshStandardMaterial's diffuse is albedo·E/π) — see NIR_LIGHT. The real-to-scene ratio (uNirPhot) is what the tube's
+// photon count and threshold use (compose.js), so the grain follows the real darkness. Moonlit grass (.45) and sand
+// (.45) glow, water (.02) and asphalt (.12) stay black — leaves are ~9× brighter than in the red (~.05: the red edge,
+// SPECTRUM.nirReflect). The Moon's glint on water is the seaside sea's own hook (scenarios/seaside/world.js eyeNIR, a
+// flux-conserving lobe of the Cox & Munk slope). Not modelled: shadows (no shadow maps); lamps light the ground only
 // where a scenario registers them with addTx('nir', …) (as sources they show in the near-IR regardless).
 import * as THREE from 'three';
 import { V3, sm } from '../core/util.js';
@@ -89,39 +91,53 @@ export const SURF_U = {
   uNirPhot: { value: 1 },   // real near-IR irradiance (NIR.lux0 units) per scene-light unit: the tube's photon count (compose.js)
 };
 
-// Near-IR illumination (M11/T3). The real illuminance in units of NIR.lux0 (the sunset field = 1): illuminances in lx,
-// then × a near-IR / visible ratio for each light (a night-vision photocathode counts 0.6–0.9 µm photons, not lux):
+// Near-IR illumination (M11/T3, units fixed M11/T6). The real illuminance in units of NIR.lux0 (the sunset field = 1):
+// illuminances in lx, then × a near-IR / visible ratio for each light (a Gen III GaAs photocathode counts 0.6–0.9 µm
+// photons, not lux):
 //   twilight  horizontal illuminance vs solar elevation, log10 lx: +5° 3.6, 0° 2.6, −6° 0.53 (3.4 lx, end of civil
 //             twilight), −12° −2.1 (8e-3 lx, nautical), −18° −3.2 (6e-4 lx, astronomical: starlight + airglow)
 //             (Brown 1952, Natural Illumination Charts, US Navy BuShips 374-1; the same values in Bond & Henderson
-//             1963); near-IR/visible 1 (sunlight's own spectrum, the reference)
-//   night     the floor below −18°: the 6e-4 lx night sky × 5 in the near-IR — the OH Meinel airglow outshines the
-//             starlight at 0.7–0.9 µm several times (Vatsia 1972; SPECTRUM.ohAirglow); the ×5 is a STAND-IN in that range
+//             1963); near-IR/visible twK: 1 with the Sun up (+5°, direct sunlight's own spectrum, the reference) → .4 from
+//             the horizon down: twilight skylight is Rayleigh-blue ((550/850)^4 ≈ .18) plus Chappuis-ozone blue
+//             (Spitschan et al. 2016, Sci. Rep. 6:26756, twilight spectral irradiance) — .4 is a STAND-IN in .2–.5,
+//             linear between +5° and 0°
+//   night     the floor below −18°: the 6e-4 lx night sky × nightK 3.5 in the 0.6–0.9 µm (Gen III) band — the OH Meinel
+//             airglow outshines the starlight there: the dark-sky V 21.9 vs I 20.0 mag/arcsec² (Benn & Ellison 1998,
+//             La Palma night-sky brightness) is ~2.9× sunlight's I/V ratio, a GaAs tube cutting off at ~0.9 µm sees ~3–4
+//             (Vatsia 1972; SPECTRUM.ohAirglow); 3.5 is a STAND-IN within 3–4
 //   Moon      0.27 lx from a full Moon at the zenith (Allen's Astrophysical Quantities, 4th ed. 2000, §12) × the phase
 //             MOON_ILLUM (Krisciunas & Schaefer 1991, as atmosphere.js) × the extinction 10^(−0.4·k·X), k = 0.1 mag
 //             per airmass at ~0.85 µm (I band; site values 0.05–0.1) with the Kasten & Young 1989 airmass, × the last
 //             1.5° of setting; near-IR/visible 1.4 — lunar reflectance 0.17 at 900 nm vs 0.12 at 550 nm (ROLO:
 //             Kieffer & Stone 2005, AJ 129:2887; SPECTRUM.moonNIR)
-// What the surfaces get is the scene's own light in the near-IR: the hemisphere light × (real near-IR sky / real visible
-// sky: 1 in twilight, nightK under the airglow) and the moon light × moonK; uNirPhot = real / scene (horizontal).
-export const NIR_LIGHT = { tw: [[5, 3.6], [0, 2.6], [-6, .53], [-12, -2.1], [-18, -3.2]], nightK: 5, moonLx: .27, moonK: 1.4, extK: .1 };
+// Scene units (M11/T6). The real sky and Moon are brought to the scene's light scale with ONE factor, k = the scene's
+// visible sky light (the hemisphere light's luminance × intensity, atmosphere.js) / the real visible sky (Brown 1952):
+// E_sky = sky·k, E_moon = moon·k (irradiance on a surface facing the Moon) — so their ratio is the real one (moon on a
+// level surface / sky at t 30/35/40/45/50: 1.8/1.7/1.3/.86/.46; the old separate rescaling of two stylised visible lights
+// gave .21–.04 from t 40, the Moon 6–9× too weak). three.js r160 lights are physical: a MeshStandardMaterial's diffuse
+// radiance is albedo·E/π, so the uniforms carry E/π (uNirSky, uNirMoon.w) — a near-IR Lambertian surface (surfNIR) and a
+// mirror of the near-IR sky (skyNIR, a uniform sky's radiance E/π) sit on the visible surfaces' scale. Near-IR lamps
+// (addTx('nir')) keep their own units, those of the visible lamp terms they copy (city world.js streetLight: albedo·P/d²,
+// no π). uNirPhot = real / scene for a white Lambertian surface (real E/lux0 per scene radiance): the tube's photon count.
+export const NIR_LIGHT = { tw: [[5, 3.6], [0, 2.6], [-6, .53], [-12, -2.1], [-18, -3.2]], twK: [5, 1, 0, .4], nightK: 3.5, moonLx: .27, moonK: 1.4, extK: .1 };
 const D2R = Math.PI / 180;
 function nirLight() {
-  const el = sunEl(), tw = NIR_LIGHT.tw;
+  const el = sunEl(), tw = NIR_LIGHT.tw, [e1, k1, e0, k0] = NIR_LIGHT.twK;
   let lg = tw.at(-1)[1];
   for (let i = 0; i < tw.length - 1; i++) if (el >= tw[i + 1][0]) { const [e0, l0] = tw[i], [e1, l1] = tw[i + 1]; lg = el >= e0 ? l0 : l1 + (l0 - l1) * (el - e1) / (e0 - e1); break; }
-  const visSky = Math.max(10 ** lg, 10 ** tw.at(-1)[1]), sky = Math.max(10 ** lg, 10 ** tw.at(-1)[1] * NIR_LIGHT.nightK);   // airglow floor below −18°
+  const twK = k0 + (k1 - k0) * Math.min(1, Math.max(0, (el - e0) / (e1 - e0)));
+  const floor = 10 ** tw.at(-1)[1], visSky = Math.max(10 ** lg, floor), sky = Math.max(10 ** lg * twK, floor * NIR_LIGHT.nightK);   // airglow floor below −18°
   const m = moonDir(), mel = Math.asin(Math.min(1, m.y)) / D2R, h = Math.max(mel, 0);
   const X = 1 / (Math.sin(h * D2R) + .50572 * (h + 6.07995) ** -1.6364);
   const moon = NIR_LIGHT.moonLx * MOON_ILLUM * 10 ** (-.4 * NIR_LIGHT.extK * X) * NIR_LIGHT.moonK * sm(0, 1.5, mel);
-  // the scene's lights (atmosphere.js, updated just before this), as luminance
-  const lum = c => .2126 * c.r + .7152 * c.g + .0722 * c.b, hemi = ENV.hemi, ml = ENV.moonLight;
-  const sSky = hemi ? lum(hemi.color) * hemi.intensity * sky / visSky : sky / NIR.lux0;
-  const sMoon = ml ? lum(ml.color) * ml.intensity * NIR_LIGHT.moonK : moon / NIR.lux0;
+  // one factor from real lx to the scene's light (atmosphere.js hemisphere light, updated just before this), then /π
+  const lum = c => .2126 * c.r + .7152 * c.g + .0722 * c.b, hemi = ENV.hemi;
+  const k = (hemi ? lum(hemi.color) * hemi.intensity / visSky : 1 / NIR.lux0) / Math.PI;
+  const sSky = sky * k, sMoon = moon * k;
   SURF_U.uNirSky.value = sSky; SURF_U.uNirMoon.value.set(m.x, m.y, m.z, sMoon);
-  SURF_U.uNirGlow.value = 10 ** tw.at(-1)[1] * NIR_LIGHT.nightK / sky;   // the OH airglow's share of the near-IR sky (skyNIR's shape)
+  SURF_U.uNirGlow.value = floor * NIR_LIGHT.nightK / sky;   // the OH airglow's share of the near-IR sky (skyNIR's shape)
   const up = Math.max(m.y, 0), real = (sky + moon * up) / NIR.lux0, scene = sSky + sMoon * up;
-  SURF_U.uNirPhot.value = scene > 1e-9 ? real / scene : 1;
+  SURF_U.uNirPhot.value = scene > 1e-12 ? real / scene : 1;
 }
 
 // ---------------------------------------------------------------- presets (documented reference values)
@@ -163,8 +179,9 @@ function nirLight() {
 //          absorbs: Hale & Querry 1973, Appl. Opt. 12:555); skin .5 (Anderson & Parrish 1981, J. Invest. Dermatol. 77:13)
 //   R0opt  Fresnel at normal incidence, ((n − 1)/(n + 1))²: water n 1.34–1.35 at 365 nm (Hale & Querry) → .02, ice
 //          n 1.33 → .02, silicates / bitumen / paint binders / skin n 1.4–1.6 → .03–.05
-//   slope  rms unresolved slope: STAND-INS (sea residual .1 below the Cox & Munk 1954 total of ~.13 rad at 3 m/s wind,
-//          J. Opt. Soc. Am. 44:838, because the shader draws the long waves); terrain .15–.35, flat paving .05
+//   slope  rms unresolved slope per axis: the sea's is the residual of the Cox & Munk 1954 total (J. Opt. Soc. Am.
+//          44:838: σ² = .003 + .00512·U, .0092 per axis at 3 m/s) below the waves its shader draws — computed from the wave
+//          table in scenarios/seaside/world.js (SEA_WAVES: 0 near, .06 far); STAND-INS: terrain .15–.35, flat paving .05
 // Transmission [Tradio, Tmicro, Tgamma] of what a surface stands for (C.yzw), for light from behind it:
 //   ground (terrain, water, paving): radio .05 — knife-edge diffraction over a ridge costs ~13 dB at VHF (ITU-R P.526),
 //     the "bending round hills"; microwave 0 — diffraction loss grows ~10 dB per frequency decade (~25 dB at 1–3 GHz);
@@ -176,8 +193,9 @@ function nirLight() {
 //     order of magnitude); microwave .002 — ≥ 25–30 dB at 2–5 GHz across a building; gamma 0
 //   wood (boardwalks, huts: a few cm): radio .95, microwave .6 — ~2 dB through 3–5 cm of wood at 2.4 GHz (ITU-R P.2040
 //     dry wood ε'≈2, loss tangent ~.05); gamma .88 — 2.5 g/cm² at μ/ρ .052
-//   body (an animal or a person: ~30 cm of tissue ≈ water): radio .5 — STAND-IN (the body absorbs/scatters VHF but is
-//     smaller than its wavelength); microwave .01 — ~20 dB through a torso at 2.4 GHz (ITU-R P.2040 tissue ε″; body-loss
+//   body (an animal or a person: ~30 cm of tissue ≈ water): radio .2 — Kirchhoff bounds it by 1 − R = .25 (rRadio .75,
+//     the tissue interface), and the body absorbs strongly near its whole-body resonance (~70 MHz for a standing adult,
+//     Gandhi 1980, IEEE Trans. Biomed. Eng. 27:39) — STAND-IN below that bound (was .5: R + T > 1, M11/T6 audit); microwave .01 — ~20 dB through a torso at 2.4 GHz (ITU-R P.2040 tissue ε″; body-loss
 //     measurements ~15–30 dB); gamma .2 — 30 cm of water at μ/ρ .058 cm²/g (1.46 MeV)
 //   glass (a 4–6 mm pane): radio .95 — far thinner than 3 m; microwave .6 — ~2 dB through float glass at 2–5 GHz
 //     (ITU-R P.2040-3 Table 3 glass, ε' 6.3, σ ~.004·f^1.3); gamma .92 — 1.5 g/cm² at μ/ρ .052
@@ -185,7 +203,7 @@ function nirLight() {
 //     are their own parts; gamma .5 — STAND-IN (two 1 mm steel skins ≈ 1.6 g/cm² plus the contents)
 //   tyre (rubber with steel belts): radio .5, microwave .05 — STAND-IN (the steel belts shield, carbon black absorbs);
 //     gamma .7 — ~7 g/cm² of rubber at μ/ρ .052
-const TRANS = { ground: [.05, 0, 0], canopy: [.9, .25, .95], facade: [.1, .002, 0], wood: [.95, .6, .88], body: [.5, .01, .2],
+const TRANS = { ground: [.05, 0, 0], canopy: [.9, .25, .95], facade: [.1, .002, 0], wood: [.95, .6, .88], body: [.2, .01, .2],
   glass: [.95, .6, .92], metal: [0, 0, .5], tyre: [.5, .05, .7] };
 // D for a surface without reflection data (a custom {A, B, C}): ordinary rough dry ground — STAND-IN
 export const DEF_D = [.02, .3, .04, .2];
@@ -268,9 +286,11 @@ export const PRESET = {
   // 27 → 20 °C STAND-IN; eIR .9 — STAND-IN for textiles (cotton, wool, synthetics ~0.85–0.95); uvAlb .05 STAND-IN
   coat:      P(27, 20, 30, .9, .6, .05, .02, .75, 0, TRANS.body),
   // window glass: thin, radiates to the sky, cools fast — 22 → 9 °C STAND-IN; eIR .84 [EN673]; gloss 1: at grazing
-  // angles it mirrors the cold sky (the reflection model); eMW .8 (Kirchhoff from the P.2040 glass R ≈ .19 — a thin
-  // pane also transmits, C.z); uvAlb .04 (Fresnel, n 1.52); gamma .02 STAND-IN; rRadio .19 [P2040 glass]
-  glass:     P(22, 9, 12, .84, .8, .04, .02, .19, 1, TRANS.glass),
+  // angles it mirrors the cold sky (the reflection model); eMW .2 — thin-slab Kirchhoff e = 1 − R − T with the P.2040
+  // glass R ≈ .19 and the pane's transmission T .6 (C.z, TRANS.glass) (was .8: e + R + T > 1, M11/T6 audit); uvAlb .04
+  // (Fresnel, n 1.52); gamma .02 STAND-IN; rRadio .19 [P2040 glass] (the half-space interface value: a 5 mm pane is
+  // ≪ 3 m, its slab reflectance far lower — kept, see TRANS.glass)
+  glass:     P(22, 9, 12, .84, .2, .04, .02, .19, 1, TRANS.glass),
   // a running tyre: rolling hysteresis keeps the tread at ~40–60 °C in normal driving — 45 °C STAND-IN, tau 0 (the
   // vehicle never stops); eIR .94 — STAND-IN (carbon-black rubber, handbook values 0.86–0.95); eMW .9 STAND-IN (lossy
   // rubber); uvAlb .03 STAND-IN (carbon black); gamma .02 STAND-IN; rRadio .3 — STAND-IN (rubber ε' ~3 → .07, the
@@ -443,8 +463,10 @@ vec3 radioRefl(vec3 W, vec3 N, vec3 V, float T, float R0, float h, float slope){
   float tx = R*S*txImage(uTxR, W, N, Rf, 700., slope) + R0*(1. - S)*txField(uTxR, W, N, 700., 0.);
   return SURF_RADC*(6e-6*Tb/dot(SURF_RADC, SURF_LUMW) + tx*1.1*surfSpk);   // only the coherent part speckles
 }
-// microwave brightness temperature (K) with the mirrored sky (R0 = 1 − eMW), and the transmitters' reflection
-float microTb(vec3 N, vec3 V, float T, float eMW, float h){
+// microwave brightness temperature (K) with the mirrored sky (R0 = 1 − eMW − Tmicro), and the transmitters' reflection.
+// The (1 − R) part is the surface's own emission plus what it transmits, taken at its own temperature (STAND-IN for the
+// ~ambient scene behind a pane; the penetration pass carries only sources)
+float microTb(vec3 N, vec3 V, float T, float eMW, float h){   // eMW here = eMW + Tmicro (1 − R0)
   float c = clamp(dot(-V, N), 0., 1.), S = cohK(h, c, .015), R0 = 1. - eMW, R = mix(R0, fresnelS(R0, c), S), Tg = T + 273.;
   vec3 Rf = reflect(V, N);
   float Tsp = mix(Tg, skyMicroK(Rf), upK(Rf)), Tdif = mix(Tg, SKY_MICRO_MEAN, .5 + .5*N.y);
@@ -456,8 +478,8 @@ float microTx(vec3 W, vec3 N, vec3 V, float eMW, float h, float slope){
 }
 // the 8–14 µm sky temperature (°C) a surface reflects: the mirror direction for its glossy part, the cos-weighted
 // hemisphere (sky mean −28 °C, the ground below at the surface's own T) for the rest
-// near-IR radiance (the night-vision channel, M11/T3; header: NEAR-IR): nirAlb × (sky hemisphere + Moon)
-// plus near-IR lamps registered with addTx('nir', …): irradiance P at 1 m, 1/d² (d ≥ 1 m), Lambert
+// near-IR radiance (the night-vision channel, M11/T3; header: NEAR-IR): nirAlb × (sky hemisphere + Moon, both already E/π)
+// plus near-IR lamps registered with addTx('nir', …): P at 1 m, 1/d² (d ≥ 1 m), Lambert (lamp-term units, no π)
 uniform float uNirSky, uNirGlow; uniform vec4 uNirMoon; uniform vec4 uTxN[${MAX_TX}];
 float surfNIR(vec3 W, vec3 N, float alb){
   float E = uNirSky*(.5 + .5*N.y) + uNirMoon.w*max(dot(N, uNirMoon.xyz), 0.);
@@ -485,7 +507,7 @@ vec3 surfBands(vec3 W, vec3 N, float inVis){   // inVis = 1 for the faint overla
     col += uSOnI*thermal(x)*(.04 + .5*x*x);
   }
   if(uSOnM > 0.){                                                     // MICROWAVE
-    float Tb = reflOn ? microTb(N, V, T, B.x, D.x) : B.x*(T + 273.) + (1. - B.x)*50., x = clamp((Tb - 120.)/180., 0., 1.);
+    float Tb = reflOn ? microTb(N, V, T, min(B.x + C.z, 1.), D.x) : B.x*(T + 273.) + (1. - B.x)*50., x = clamp((Tb - 120.)/180., 0., 1.);
     // crackle only up close, in cells of ~0.2° (like the emitter crackle): power-of-two world cells so they don't swim
     float cs = exp2(floor(log2(max(dist*.0035, .03)))); vec3 gc = mod(floor(W/cs), 512.);
     vec2 g = gc.xz + gc.y*17.31; float sp = mix(step(.96 - .06*x, h21(g + floor(uSurfTime*10.)))*near, 0., eyeSmooth);   // eye: none — the sparks are decoration, the emission is the Tb wash
@@ -495,7 +517,7 @@ vec3 surfBands(vec3 W, vec3 N, float inVis){   // inVis = 1 for the faint overla
     // the sparks halve; ray-hit flashes (and the Em/Rib/EmField emitters, drawn elsewhere) stay at full brightness.
     // The faint visible-light overlay keeps its old mean tint (tx unsaturated, no IR toning).
     float wash = mix((1. - .85*uSOnI)*(x*x*.12 + txs*.22), x*x*.12 + tx*.35, inVis);
-    if(reflOn) wash = x*x*.12 + microTx(W, N, V, B.x, D.x, D.w)*.35;   // eye: the transmitters reflected (diffuse + mirror image)
+    if(reflOn) wash = x*x*.12 + microTx(W, N, V, min(B.x + C.z, 1.), D.x, D.w)*.35;   // eye: the transmitters reflected (diffuse + mirror image)
     col += uSOnM*(vec3(1.,.6,.1)*wash + (1. - .5*uSOnI)*c*sp*(x*.3 + txs*.9)) + uSOnM*vec3(1.,.93,.75)*hit*1.4;
   }
   if(uSOnR > 0.){                                                     // RADIO
@@ -615,8 +637,8 @@ export function spectralGroup(group, props, opts = {}) {
 export const surfaceUniforms = props => ({ ...SURF_U, uSurfA: { value: toVec4(props.A) }, uSurfB: { value: toVec4(props.B) }, uSurfC: { value: toVec4(props.C) }, uSurfD: { value: toVec4(surfD(props)) } });
 
 // ---------------------------------------------------------------- transmitters
-// near-IR lamps (M11/T3): fn() -> { p, power } with power = the lamp's near-IR irradiance at 1 m in the scene's light
-// units (as the hemisphere / moon lights, NIR_LIGHT), e.g. a high-pressure sodium street lamp (819 nm doublet + near-IR continuum) or an 850 / 940 nm
+// near-IR lamps (M11/T3): fn() -> { p, power } with power such that a surface of near-IR albedo a reads a·power/d²
+// (the units of the scenes' own visible lamp terms, e.g. city world.js streetLight — no 1/π; NIR_LIGHT), e.g. a high-pressure sodium street lamp (819 nm doublet + near-IR continuum) or an 850 / 940 nm
 // camera illuminator; the MAX_TX brightest as seen from the camera (power / (1 + d²/(20 m)²)) light the surfaces
 const TX = { radio: [], micro: [], nir: [] };
 // fn() -> { p: Vector3, power, meter? } or null; strongest MAX_TX per band are uploaded each frame (meter: the meters' power

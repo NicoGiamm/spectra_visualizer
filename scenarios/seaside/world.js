@@ -54,13 +54,28 @@ export function heightAt(x, z) {
 //     sand [EL], STAND-IN; h .05 (the grass layer), slope .3 as the engine's meadow
 //   granite rRadio .16 [Dan]; D as the engine's rock
 //   sea rRadio .91 [P527] sea water (ε' 70, σ 5 S/m); h .005 — capillary / short gravity waves below the shader's own
-//     waves, STAND-IN; slope .1 residual below Cox & Munk's ~.13 rad (surface.js header); nirAlb / R0opt as water
+//     waves, STAND-IN; slope = the residual of Cox & Munk's total below the shader's own waves (SEA_WAVES, far field:
+//     the long waves only); nirAlb / R0opt as water
+// The sea's waves (M11/T6, one table, drawn by the sea shader's seaGeo): [kx, kz (rad/m), ω (rad/s), a (m)], each a
+// gradient a·k·cos(k·p + ωt); long waves out to 2.5 km (seaFd), short ones within 400 m (seaFd2) with a value-noise
+// ripple of rms gradient noise/√12 per axis (n2 taken as uniform on 0..1, STAND-IN). Their mean-square slope per axis
+// is Σ a²|k|²/4 (a sinusoid's (a|k|)²/2, split over two axes): long .0056, short + ripple .0043.
+// Cox & Munk 1954 (J. Opt. Soc. Am. 44:838): the clean sea's total mean-square slope σ² = .003 + .00512·U (U wind
+// speed, m/s, at 12.5 m), at 3 m/s (a light breeze, STAND-IN) .0184 → .0092 per axis. What the mesh's waves don't draw
+// is the residual √(.0092 − σ_waves²) per axis: 0 within ~30 m (the shader's waves already carry it all), .06 far out —
+// the width of the glitter lobes (near-IR and visible Moon glint, transmitter images) is 2 × that, ≥ .03 rad.
+const SEA_WAVES = { long: [[.06, .10, .9, .9], [-.09, .07, 1.1, .7], [.13, -.05, 1.3, .5]],
+  short: [[.55, .8, 2.6, .09], [-.9, .45, 3.1, .07], [.3, -1.1, 3.4, .05]], noise: .06, wind: 3 };
+const msSlope = ws => ws.reduce((a, [kx, kz, , amp]) => a + amp * amp * (kx * kx + kz * kz) / 4, 0);
+const CM_AXIS = (.003 + .00512 * SEA_WAVES.wind) / 2, WAVE_L = msSlope(SEA_WAVES.long), WAVE_S = msSlope(SEA_WAVES.short) + SEA_WAVES.noise ** 2 / 12;
+const gfl = x => (Number.isInteger(x) ? x.toFixed(1) : String(x));
+const waveSum = ws => ws.map(([kx, kz, w, a]) => `wave(p, vec2(${gfl(kx)}, ${gfl(kz)}), ${gfl(w)}, ${gfl(a)})`).join(' + ');
 export const SURF = {
   wetSand: { A: [23, 16, 1 / 30, .96], B: [.6, .1, .55, .8], C: [.5, .05, 0, 0], D: PRESET.wetSand.D },
   sand:    { A: [35, 8, 1 / 22, .92], B: [.9, .24, .7, .07], C: [0, .05, 0, 0], D: PRESET.sand.D },   // 35 °C at sunset, crosses the sea's 18 °C near t=22
   dune:    { A: [27, 7, 1 / 10, .97], B: [.92, .05, .45, .07], C: [0, .05, 0, 0], D: [.05, .4, .04, .3] },   // marram grass on the dunes
   granite: { A: [31, 14, 1 / 45, .9], B: [.88, .12, 1, .16], C: [0, .05, 0, 0], D: PRESET.rock.D },
-  sea:     { ...PRESET.water, B: [PRESET.water.B[0], PRESET.water.B[1], PRESET.water.B[2], .91], D: [.005, .02, .02, .1] },
+  sea:     { ...PRESET.water, B: [PRESET.water.B[0], PRESET.water.B[1], PRESET.water.B[2], .91], D: [.005, .02, .02, Math.sqrt(Math.max(CM_AXIS - WAVE_L, 0))] },
 };
 
 export const sandMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .97, metalness: 0 });
@@ -165,6 +180,11 @@ uniform float uSunI, uMoonI, uBio, uMist, uAirT, uUVglit; uniform vec3 uHor, uSk
 // Lloyd's-mirror response at sin(elevation) s, 200 MHz in .x and 100 MHz in .y, normalised to 0..1 (0 below the horizon)
 vec2 lloyd(float s){ return s > 0. ? .5 - .5*cos(uLloyd*s) : vec2(0.); }
 vec2 wave(vec2 p, vec2 k, float w, float a){ float ph = dot(k,p) + w*uSurfTime; return a*k*cos(ph); }   // gradient of a*sin
+float seaFd(float d){ return 1. - smoothstep(150., 2500., d); }   // the long waves fade out with distance
+float seaFd2(float d){ return 1. - smoothstep(30., 400., d); }    // the short waves and the ripple
+// the residual rms slope per axis that the drawn waves leave of Cox & Munk's total (SEA_WAVES above)
+float seaSlope(float d){ float a = seaFd(d), b = seaFd2(d);
+  return sqrt(max(${CM_AXIS.toFixed(6)} - a*a*${WAVE_L.toFixed(6)} - b*b*${WAVE_S.toFixed(6)}, 0.)); }
 float skyT(float y){ float e = 1. - pow(.7, 1./max(y, .04)); return mix(-60., uAirT, e); }                // 8–14 µm sky brightness temp: zenith window transmittance ~.7 (ε ≈ .3, Idso 1981)
 vec3 seaBands(vec3 W, vec3 N, vec3 V, vec3 Rf, float dist, float foam, float inVis){
   vec3 col = vec3(0.); float cosv = clamp(dot(-V, N), 0., 1.), gz = pow(1. - cosv, 5.);
@@ -236,12 +256,12 @@ function seaMaterial(instr) {
     // the sea's geometry at this pixel: waves, reflection, surf (shared by main and the spectral eye's hook)
     void seaGeo(out vec3 W, out float dist, out vec3 V, out vec3 N, out vec3 Rf, out vec2 p, out float fd, out float crest, out float wash, out float foam){
       W = vSurfW; vec3 toP = W - cameraPosition; dist = length(toP); V = toP/dist;
-      fd = 1. - smoothstep(150., 2500., dist); float fd2 = 1. - smoothstep(30., 400., dist);
+      fd = seaFd(dist); float fd2 = seaFd2(dist);
       p = W.xz; vec2 g = vec2(0.);
-      g += wave(p, vec2(.06,.10), .9, .9) + wave(p, vec2(-.09,.07), 1.1, .7) + wave(p, vec2(.13,-.05), 1.3, .5);
+      g += ${waveSum(SEA_WAVES.long)};
       g *= fd;
-      g += fd2*(wave(p, vec2(.55,.8), 2.6, .09) + wave(p, vec2(-.9,.45), 3.1, .07) + wave(p, vec2(.3,-1.1), 3.4, .05)
-             + .06*vec2(n2(p*1.3+uSurfTime*.6)-.5, n2(p*1.3-uSurfTime*.5+7.)-.5));
+      g += fd2*(${waveSum(SEA_WAVES.short)}
+             + ${gfl(SEA_WAVES.noise)}*vec2(n2(p*1.3+uSurfTime*.6)-.5, n2(p*1.3-uSurfTime*.5+7.)-.5));
       N = normalize(vec3(-g.x, 1., -g.y)); Rf = reflect(V, N);
       Rf.y = abs(Rf.y);
       // surf: breaking lines rolling in toward the beach, and the wash at the edge
@@ -262,8 +282,12 @@ function seaMaterial(instr) {
       vec3 skyc = mix(uHor, uSky, smoothstep(0., .35, Rf.y));
       vec3 col = mix(uDeep, skyc, fres);
       float s = max(dot(Rf, uSunDir), 0.), m = max(dot(Rf, uMoonDir), 0.);
-      col += vec3(1., .5, .28)*uSunI*(pow(s, 900.)*14. + pow(s, 60.)*.35);              // sun glitter path
-      col += vec3(.75,.82,1.)*uMoonI*(pow(m, 1200.)*6. + pow(m, 90.)*.12);              // moon glitter path
+      col += vec3(1., .5, .28)*uSunI*(pow(s, 900.)*14. + pow(s, 60.)*.35);              // sun glitter path (stylised: the setting Sun's own look)
+      // moon glitter path (M11/T6): the same water as the near-IR glint (SEA_EYE eyeNIR) — Fresnel × the Moon's
+      // irradiance spread flux-conserving over the residual-slope lobe, L = F·E·exp(−(1 − R·M)/s²)/(2π s²), E the scene's
+      // moon light (atmosphere.js moonLight: colour 0x9fb4ff, intensity moonlit()·.5)
+      float sg = max(2.*seaSlope(dist), .03);
+      col += vec3(.62,.71,1.)*.5*uMoonI*fres*exp(-(1. - m)/(sg*sg))/(6.2832*sg*sg);
       col = mix(col, uSky*1.6 + uHor*.6, foam*.55);
       float bio = (crest*smoothstep(.45, .8, n2(p*.35 + uSurfTime*.2)) + wash*.12*n2(p*2. + uSurfTime))*fd;   // patchy, only where waves break
       col += vec3(.1,.55,1.)*uBio*bio*(.6 + .4*n2(p*3. + uSurfTime*2.))*1.2;            // bioluminescent surf
@@ -293,8 +317,9 @@ void eyeBands(out vec4 o1, out vec4 o3){
 // near-IR (the night-vision channel, M11/T6; units and sky as engine/render/surface.js surfNIR / atmosphere.js skyNIR):
 // water absorbs the near-IR within centimetres, so the sea is a dark mirror — Fresnel (R0opt .02, Hale & Querry 1973;
 // → 1 at grazing) of the near-IR sky in the mirror direction, plus the Moon's glitter path: the Moon's irradiance
-// spread over a lobe of width s = 2 × the sub-facet slope (D.w; the shader's own waves already tilt Rf), flux-
-// conserving, L = F·E·exp(−(1 − R·M)/s²)/(2 s²) in the surfaces' units (white Lambertian = E); below the mirror the
+// spread over a lobe of width s = 2 × the residual slope (seaSlope: Cox & Munk's total less the shader's own waves,
+// which already tilt Rf), flux-conserving, L = F·E·exp(−(1 − R·M)/s²)/(2π s²) — the uniforms carry E/π, so the code
+// divides by 2 s² (surfaces' units, surface.js NEAR-IR: white Lambertian = E/π); below the mirror the
 // water body's own albedo .02 (D.y). Foam and the swash: whitecap reflectance falls ~40–50 % from the visible to
 // 0.85 µm (Frouin, Schwindling & Deschamps 1996, JGR 101:14361) → .3 STAND-IN. Sea mist: droplets scatter the
 // near-IR as they scatter light (Mie, size ≫ λ) — albedo .5 STAND-IN, lit by sky and Moon.
@@ -302,8 +327,8 @@ void eyeBands(out vec4 o1, out vec4 o3){
 float eyeNIR(){
   vec3 W, V, N, Rf; vec2 p; float dist, fd, crest, wash, foam;
   seaGeo(W, dist, V, N, Rf, p, fd, crest, wash, foam);
-  vec3 M = uNirMoon.xyz; float cosv = clamp(dot(-V, N), 0., 1.), F = fresnelS(uSurfD.z, cosv), s = max(2.*uSurfD.w, .03);
-  float Eh = uNirSky + uNirMoon.w*max(M.y, 0.);                                   // irradiance on a level surface
+  vec3 M = uNirMoon.xyz; float cosv = clamp(dot(-V, N), 0., 1.), F = fresnelS(uSurfD.z, cosv), s = max(2.*seaSlope(dist), .03);
+  float Eh = uNirSky + uNirMoon.w*max(M.y, 0.);                                   // irradiance on a level surface (/π)
   float glint = uNirMoon.w*step(0., M.y)*exp(-(1. - dot(Rf, M))/(s*s))/(2.*s*s);
   float L = mix(F*(NIR_SKY_SHOWN*skyNIR(Rf, uNirSky, uNirGlow) + glint) + (1. - F)*uSurfD.y*Eh, .3*Eh, foam);
   L = mix(L, .5*Eh, uMist*(1. - exp(-dist/700.)));

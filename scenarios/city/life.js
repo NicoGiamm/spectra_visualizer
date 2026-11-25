@@ -107,7 +107,7 @@ export const radar = () => event({ name: 'Airport radar (S-band)', t0: 8, t1: 60
     this.fan.set(pts, .7, 2.6, .5 * near, 0, 0); },
   where() { return this.c; } });
 
-export const police = () => event({ name: 'Police car: LEDs & TETRA', t0: 30, t1: 40, bands: ['vis', 'micro'], freq: ['ledBlue', 'tetra'], note: 'A cruiser runs down the avenue: the light bar flashes its left and right blue LED heads in turn (amber is only a rear traffic advisor on European cars), and its TETRA radio (the European emergency-services net, ~390 MHz = 77 cm, microwave in this band table) chirps in short bursts.',
+export const police = () => event({ name: 'Police car: LEDs & TETRA', t0: 30, t1: 40, bands: ['vis', 'micro', 'ir'], freq: ['ledBlue', 'tetra', 'thermal310'], note: 'A cruiser runs down the avenue: the light bar flashes its left and right blue LED heads in turn (amber is only a rear traffic advisor on European cars), and its TETRA radio (the European emergency-services net, ~390 MHz = 77 cm, microwave in this band table) chirps in short bursts.',
   init() {
     // by parts (M11/T4, street.js carGeo): hot bonnet, tyres and tailpipe, cold glass cabin, cooling paint — one draw
     this.body = spectralParts(new THREE.Mesh(carGeo(0x101418, true), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .45, metalness: .45 })), { weight: 0 });
